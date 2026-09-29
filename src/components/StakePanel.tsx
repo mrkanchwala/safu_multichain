@@ -100,7 +100,7 @@ export function StakePanel() {
       const usdc6 = BigInt(Math.round(Number(stakeAmount) * 1e6));
       setProgress(`Burning ${stakeAmount} USDC on ${kind === "evm" ? POOL.evm.label : POOL.solana.label}...`);
       const burn = kind === "evm"
-        ? await evmBurnToAdapter(client, usdc6, "stake")
+        ? await evmBurnToAdapter(client, usdc6, "stake", setProgress)
         : await solanaBurnToAdapter(client, usdc6, "stake");
       const account = await finishOnStellar("stake", kind, burn, setProgress, signal);
       return `Staked from your safu-account ${account.slice(0, 6)}...`;

@@ -62,7 +62,7 @@ export function BackPanel() {
     try {
       setProgress(`Burning ${amount} USDC on ${kind === "evm" ? POOL.evm.label : POOL.solana.label}...`);
       const usdc6 = BigInt(Math.round(Number(amount) * 1e6));
-      const burn = kind === "evm" ? await evmBurnToAdapter(client, usdc6, "back") : await solanaBurnToAdapter(client, usdc6, "back");
+      const burn = kind === "evm" ? await evmBurnToAdapter(client, usdc6, "back", setProgress) : await solanaBurnToAdapter(client, usdc6, "back");
       const account = await finishOnStellar("back", kind, burn, setProgress, signal);
       return `Backing added from your safu-account ${account.slice(0, 6)}...`;
     } finally {

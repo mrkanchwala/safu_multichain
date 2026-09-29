@@ -82,7 +82,8 @@ export async function safuAccountFor(kind: "evm" | "solana", owner: string, mode
 // --- EVM burn (Ethereum -> Stellar) -----------------------------------------------------------------
 
 const ERC20 = parseAbi(["function approve(address spender, uint256 amount) returns (bool)",
-  "function balanceOf(address owner) view returns (uint256)"]);
+  "function balanceOf(address owner) view returns (uint256)",
+  "function allowance(address owner, address spender) view returns (uint256)"]);
 const MESSENGER = parseAbi([
   "function depositForBurn(uint256 amount, uint32 destinationDomain, bytes32 mintRecipient, address burnToken, bytes32 destinationCaller, uint256 maxFee, uint32 minFinalityThreshold)",
 ]);
@@ -92,19 +93,52 @@ export async function evmUsdcBalance(owner: string): Promise<bigint> {
   return evmClient.readContract({ address: EVM_USDC, abi: ERC20, functionName: "balanceOf", args: [owner as `0x${string}`] });
 }
 
+// Mobile browsers pause timers while the user is in their wallet app, so a plain receipt poll can
+// sit for minutes. Poll every 4s AND the moment the page is visible again (2026-09-29 mainnet stall).
+function nextPoll(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const done = () => {
+      clearTimeout(t);
+      document.removeEventListener("visibilitychange", onVis);
+      resolve();
+    };
+    const onVis = () => { if (document.visibilityState === "visible") done(); };
+    const t = setTimeout(done, ms);
+    document.addEventListener("visibilitychange", onVis);
+  });
+}
+
+async function waitReceipt(hash: `0x${string}`) {
+  const deadline = Date.now() + 300_000;
+  while (Date.now() < deadline) {
+    const r = await evmClient.getTransactionReceipt({ hash }).catch(() => null);
+    if (r) return r;
+    await nextPoll(4000);
+  }
+  throw new Error("Your Ethereum transaction is taking too long. Check your wallet, then try again.");
+}
+
 async function evmSend(client: AppClient, to: string, data: `0x${string}`): Promise<`0x${string}`> {
   const hash = (await client.evmRequest("eth_sendTransaction", [{ from: client.address, to, data }])) as `0x${string}`;
-  const receipt = await evmClient.waitForTransactionReceipt({ hash, timeout: 300_000 });
+  const receipt = await waitReceipt(hash);
   if (receipt.status !== "success") throw new Error("Your Ethereum transaction failed. Check you have enough ETH for the fee, then try again.");
   return hash;
 }
 
 /** approve + depositForBurn to the adapter (mintRecipient AND destinationCaller = the adapter, so
  *  only our adapter can finish it). `usdc6` has 6 decimals, Ethereum USDC's own scale. */
-export async function evmBurnToAdapter(client: AppClient, usdc6: bigint, mode: Mode): Promise<string> {
+export async function evmBurnToAdapter(client: AppClient, usdc6: bigint, mode: Mode,
+  onStep: (msg: string) => void = () => {}): Promise<string> {
   const adapter32 = ("0x" + hex(StrKey.decodeContract(adapterFor(mode)))) as `0x${string}`;
-  await evmSend(client, EVM_USDC, encodeFunctionData({
-    abi: ERC20, functionName: "approve", args: [EVM_TOKEN_MESSENGER_V2, usdc6] }));
+  // Skip the approval when one already covers this amount (e.g. a retry after an interrupted stake).
+  const allowance = await evmClient.readContract({ address: EVM_USDC as `0x${string}`, abi: ERC20,
+    functionName: "allowance", args: [client.address as `0x${string}`, EVM_TOKEN_MESSENGER_V2 as `0x${string}`] });
+  if (allowance < usdc6) {
+    onStep("Step 1 of 2: approve USDC in your wallet, then come back to this page.");
+    await evmSend(client, EVM_USDC, encodeFunctionData({
+      abi: ERC20, functionName: "approve", args: [EVM_TOKEN_MESSENGER_V2, usdc6] }));
+  }
+  onStep(`Step ${allowance < usdc6 ? "2 of 2" : "1 of 1"}: confirm the transfer in your wallet, then come back to this page.`);
   return evmSend(client, EVM_TOKEN_MESSENGER_V2, encodeFunctionData({
     abi: MESSENGER, functionName: "depositForBurn",
     args: [usdc6, CCTP_DOMAIN.stellar, adapter32, EVM_USDC, adapter32, usdc6 / 1000n, CCTP_FINALITY_FAST],
