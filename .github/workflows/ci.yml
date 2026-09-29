@@ -48,6 +48,8 @@ jobs:
 
       - name: tsc -b && vite build
         run: npm run build
+        env:
+          SAFU_POOL_NETWORK: testnet
 
       - name: oxlint
         run: npm run lint
