@@ -36,15 +36,19 @@ const SOL_OWNER_SEED: u8 = 0x22;
 const MAX_CONTEXTS: usize = 8;
 
 /// Every owner-facing function on the account (all allowed).
-const ACCOUNT_FNS: [&str; 9] = [
+const ACCOUNT_FNS: [&str; 11] = [
     "send_home", "withdraw_home", "exit_home", "claim_home", "stake_held",
     "back_held", "request_back_withdrawal", "cancel_back_withdrawal", "complete_back_withdrawal_home",
+    // r3 (2026-09-29)
+    "claim_yield_home", "claim_backer_yield_home",
 ];
 /// Pool functions: the first two are allowed directly, the rest must not be.
-const POOL_FNS: [&str; 11] = [
+const POOL_FNS: [&str; 13] = [
     "approve_claim", "revoke_approval",
     "withdraw", "set_beneficiary", "emergency_exit", "claim_stream", "stake",
     "back", "request_backer_withdrawal", "cancel_backer_withdrawal", "complete_backer_withdrawal",
+    // r3: yield goes home only through the account's own *_home functions.
+    "claim_yield", "claim_backer_yield",
 ];
 const POOL_ALLOWED: usize = 2;
 const TOKEN_FNS: [&str; 4] = ["transfer", "approve", "burn", "transfer_from"];

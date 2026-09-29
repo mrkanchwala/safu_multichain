@@ -82,6 +82,11 @@ enum Action {
     RequestBackWithdrawal { amount: i64 },
     CancelBackWithdrawal,
     CompleteBackWithdrawalHome,
+    /// r3 (2026-09-29). No vault in this harness, so these always find no
+    /// yield: they fuzz the auth and "a failed action moves nothing" paths.
+    /// The paying path is covered by `flows.rs::yield_home`.
+    ClaimYieldHome,
+    ClaimBackerYieldHome,
 }
 
 /// Hook data on a burn.
@@ -358,6 +363,8 @@ fuzz_target!(|ops: std::vec::Vec<Op>| {
                     }
                     Action::CancelBackWithdrawal => ("cancel_back_withdrawal", Vec::<Val>::new(&env), false),
                     Action::CompleteBackWithdrawalHome => ("complete_back_withdrawal_home", none(), true),
+                    Action::ClaimYieldHome => ("claim_yield_home", none(), true),
+                    Action::ClaimBackerYieldHome => ("claim_backer_yield_home", none(), true),
                 };
                 next_auth += 1;
                 env.set_auths(&[owner_auth(&env, &account, signer, next_auth, &account, name, args)]);
@@ -374,6 +381,8 @@ fuzz_target!(|ops: std::vec::Vec<Op>| {
                     }
                     Action::CancelBackWithdrawal => ok(acct.try_cancel_back_withdrawal()).map(|_| 0),
                     Action::CompleteBackWithdrawalHome => ok(acct.try_complete_back_withdrawal_home()),
+                    Action::ClaimYieldHome => ok(acct.try_claim_yield_home()),
+                    Action::ClaimBackerYieldHome => ok(acct.try_claim_backer_yield_home()),
                 };
                 let after = snapshot(&accounts);
                 match res {
