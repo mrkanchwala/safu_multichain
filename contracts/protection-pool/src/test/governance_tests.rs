@@ -36,6 +36,9 @@ fn one_role_alone_can_never_pass_a_change() {
 fn two_roles_pass_a_change_only_after_seven_days() {
     let env = new_env();
     let s = setup(&env);
+    // r3: before any money a Vault change applies at once (instant setup);
+    // the 7-day wait is the rule from the first stake on.
+    staked_wallet(&env, &s);
     let change = vault_change(&env);
     s.client.propose_change(&s.admin, &change);
     s.client.approve_change(&s.guardian, &change);

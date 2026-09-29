@@ -60,7 +60,8 @@ fn run(env: &Env, claims: usize) -> (Setup<'_>, Outcome) {
     advance_days(env, 365);
     mock.set_rate_bps(&(BPS_DENOMINATOR + VAULT_APY_BPS));
     s.token_admin.mint(&vault_id, &bps_of(deployed, VAULT_APY_BPS));
-    let realised_yield = s.client.extract_yield(&s.client.get_total_deployed_shares(), &0);
+    // r3: `harvest` replaces the admin `extract_yield` (growth only).
+    let realised_yield = s.client.harvest();
     let protocol_buffer = s.client.get_yield_balance(); // left in the pool
 
     // Claims: 5x the stake, Tier C, paid in full.
@@ -117,12 +118,28 @@ fn solvency_no_claims_everyone_repaid_with_yield() {
         "[0 claims] realised yield ${} | protocol buffer ${} | withdrew in full {}/{} | stuck {}",
         o.realised_yield / USD, o.protocol_buffer / USD, o.full, STAKERS, o.stuck.len()
     );
-    assert_eq!(o.realised_yield, bps_of(bps_of(CAP, MAX_DEPLOY_BPS), VAULT_APY_BPS));
-    assert_eq!(o.protocol_buffer, o.realised_yield - bps_of(o.realised_yield, STAKER_SHARE_BPS));
+    // r3: harvest floors the shares it redeems, so it can land a stroop or
+    // two under the full growth (the safe direction).
+    let full_yield = bps_of(bps_of(CAP, MAX_DEPLOY_BPS), VAULT_APY_BPS);
+    assert!(o.realised_yield > 0 && full_yield - o.realised_yield <= 2);
+    let protocol_half = o.realised_yield - bps_of(o.realised_yield, STAKER_SHARE_BPS);
+    assert!(o.protocol_buffer >= protocol_half && o.protocol_buffer - protocol_half <= 1);
     assert_eq!(o.full, STAKERS);
     assert!(o.stuck.is_empty());
-    // what is left is exactly the protocol's share, withdrawable in full
-    assert_eq!(s.client.get_liquid_balance(), o.protocol_buffer);
+    // What is left is the protocol's share plus per-stake rounding dust
+    // still set aside for stakers (floor per record, favours the pool).
+    let (staker_dust, _) = s.client.get_yield_reserved();
+    assert!(staker_dust <= STAKERS as i128);
+    // The set-aside is cash, so it is always physically there.
+    assert!(s.client.get_liquid_balance() >= staker_dust);
+    // Each in-path redemption floors the book value it removes, so after a
+    // harvest (share:asset no longer 1:1) the book can sit up to one stroop
+    // per redemption above the shares' real value. The protocol's own share
+    // absorbs that; nobody else's money does. Measured 2026-09-29: 5 stroops
+    // over 1,000 withdrawals.
+    let held = s.client.get_liquid_balance() + s.client.get_total_deployed_asset();
+    let owed = s.client.get_yield_balance() + staker_dust;
+    assert!(owed - held <= STAKERS as i128, "owed {} held {}", owed, held);
 }
 
 #[test]

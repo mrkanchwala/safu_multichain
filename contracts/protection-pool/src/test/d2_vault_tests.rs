@@ -637,12 +637,13 @@ fn redeem_bounds_are_enforced() {
 }
 
 #[test]
-fn extract_yield_sends_only_the_excess_above_principal() {
-    // Rewritten 2026-09-18 for the yield split (design decision): extract_yield
-    // no longer auto-transfers to treasury at all, it splits the realised
-    // excess 50/50 into YieldIndex (stakers) and ProtocolYieldBalance
-    // (protocol, withdrawable later). Only withdraw_yield ever moves tokens
-    // to treasury.
+fn harvest_credits_only_the_growth_above_book_value() {
+    // Rewritten 2026-09-18 for the yield split (design decision): nothing
+    // auto-transfers to treasury, the realised excess splits into YieldIndex
+    // (stakers) and ProtocolYieldBalance (protocol, withdrawable later).
+    // Only withdraw_yield ever moves tokens to treasury.
+    // r3 (2026-09-29): `harvest` replaces the admin `extract_yield`. It
+    // redeems only the growth; principal stays deployed at book value.
     let env = new_env();
     let s = setup(&env);
     // v1: these assertions cover the PROTOCOL's yield path, which only runs
@@ -664,17 +665,24 @@ fn extract_yield_sends_only_the_excess_above_principal() {
 
     let shares = s.client.get_total_deployed_shares();
     let token = TokenClient::new(&env, &s.token_id);
-    let yield_amount = s.client.extract_yield(&shares, &0);
+    let yield_amount = s.client.harvest();
 
-    assert_eq!(yield_amount, deployed / 10);
-    assert_eq!(s.client.get_total_extracted_yield(), deployed / 10);
-    // Principal came home and stayed; only the excess left.
-    assert_eq!(s.client.get_total_deployed_asset(), 0);
+    // Shares redeemed are floored (never more than the growth is worth), so
+    // the credit can come in a couple of stroops under the full 10%.
+    assert!(yield_amount > 0 && deployed / 10 - yield_amount <= 2, "yield {}", yield_amount);
+    assert_eq!(s.client.get_total_extracted_yield(), yield_amount);
+    // Principal stays deployed at book value; only growth shares left.
+    assert_eq!(s.client.get_total_deployed_asset(), deployed);
+    assert!(s.client.get_total_deployed_shares() < shares);
 
-    // Nothing reaches treasury at extract_yield time, gain or no gain.
+    // Nothing reaches treasury at harvest time, gain or no gain.
     assert_eq!(token.balance(&treasury), 0);
-    // Protocol's half sits in the pool, exactly split.
-    let protocol_share = yield_amount - bps_of(yield_amount, 5_000);
+    // Staker half is set aside (index-exact, dust to the protocol); the
+    // protocol keeps the rest in the pool.
+    let (staker_reserved, backer_reserved) = s.client.get_yield_reserved();
+    assert_eq!(backer_reserved, 0);
+    assert!(bps_of(yield_amount, 5_000) - staker_reserved <= 1);
+    let protocol_share = yield_amount - staker_reserved;
     assert_eq!(s.client.get_yield_balance(), protocol_share);
     // Staker's half compounded into the index rather than transferring.
     assert!(s.client.get_yield_index() > YIELD_INDEX_PRECISION);
@@ -705,9 +713,11 @@ fn a_venue_loss_yields_zero_rather_than_panicking() {
     mock.set_rate_bps(&9_000);
 
     let shares = s.client.get_total_deployed_shares();
-    let yield_amount = s.client.extract_yield(&shares, &0);
+    let yield_amount = s.client.harvest();
 
     assert_eq!(yield_amount, 0);
+    // r3: a harvest on a loss redeems nothing (no growth to take).
+    assert_eq!(s.client.get_total_deployed_shares(), shares);
     let token = TokenClient::new(&env, &s.token_id);
     assert_eq!(token.balance(&treasury), 0);
     assert_eq!(s.client.get_total_extracted_yield(), 0);
@@ -739,19 +749,22 @@ fn min_xlm_out_floor_is_enforced_on_redemption() {
 // -----------------------------------------------------------------------
 
 #[test]
-fn withdraw_yield_requires_a_treasury_extract_yield_does_not() {
-    // Renamed + rewritten 2026-09-18: extract_yield no longer touches
-    // treasury at all (it only credits internal storage), so it must succeed
+fn withdraw_yield_requires_a_treasury_harvest_does_not() {
+    // Renamed + rewritten 2026-09-18: crediting yield never touches
+    // treasury (it only credits internal storage), so it must succeed
     // with none set. withdraw_yield is the only function that transfers, so
     // it is the only one that still needs a treasury configured.
+    // r3: the crediting call is now the permissionless `harvest`.
     let env = new_env();
     let s = setup(&env);
     staked_wallet(&env, &s);
-    with_vault(&env, &s, 5_000);
+    let (vault_id, mock) = with_vault(&env, &s, 5_000);
     s.client.deploy_to_vault(&(MID_STAKE / 4), &0);
-    let shares = s.client.get_total_deployed_shares();
+    mock.set_rate_bps(&11_000);
+    s.token_admin.mint(&vault_id, &MID_STAKE);
 
-    assert!(s.client.try_extract_yield(&shares, &0).is_ok());
+    assert!(s.client.try_harvest().is_ok());
+    assert!(s.client.get_total_extracted_yield() > 0, "test is vacuous without a real harvest");
     assert_eq!(
         s.client.try_withdraw_yield(&1),
         Err(Ok(PoolError::TreasuryNotSet))
@@ -796,14 +809,15 @@ fn withdraw_yield_enforces_v8s_double_gate() {
         Err(Ok(PoolError::ExceedsYieldBalance))
     );
 
-    // Generate REAL yield via extract_yield instead.
+    // Generate REAL yield via a harvest instead.
     let deployed = MID_STAKE * 8 / 10;
     s.client.deploy_to_vault(&deployed, &0);
     mock.set_rate_bps(&11_000);
     s.token_admin.mint(&vault_id, &deployed);
-    let shares = s.client.get_total_deployed_shares();
-    let yield_amount = s.client.extract_yield(&shares, &0);
-    let protocol_share = yield_amount - (yield_amount * 5_000 / 10_000);
+    let yield_amount = s.client.harvest();
+    let (staker_reserved, _) = s.client.get_yield_reserved();
+    let protocol_share = yield_amount - staker_reserved;
+    assert!(protocol_share >= yield_amount - (yield_amount * 5_000 / 10_000));
     assert_eq!(s.client.get_yield_balance(), protocol_share);
 
     s.client.withdraw_yield(&protocol_share);

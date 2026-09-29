@@ -180,9 +180,10 @@ fn withdraw_yield_allows_exactly_the_liquid_balance_and_accumulates_it() {
     s.client.deploy_to_vault(&deployed, &0);
     mock.set_rate_bps(&(BPS_DENOMINATOR + VAULT_MOVE_BPS));
     s.token_admin.mint(&vault_id, &deployed);
-    let shares = s.client.get_total_deployed_shares();
-    let yield_amount = s.client.extract_yield(&shares, &0);
-    let surplus = yield_amount - bps_of(yield_amount, 5_000); // protocol's half
+    // r3: `harvest` (permissionless) replaces the admin `extract_yield`.
+    let yield_amount = s.client.harvest();
+    let (staker_reserved, _) = s.client.get_yield_reserved();
+    let surplus = yield_amount - staker_reserved; // protocol's half (+ index dust)
 
     assert_eq!(s.client.get_yield_balance(), surplus);
     let liquid_before = s.client.get_liquid_balance();
@@ -402,7 +403,7 @@ fn deploying_exactly_the_liquid_balance_is_refused_by_the_ceiling_not_the_liquid
 /// Compares event deltas between a par extraction and a gaining one, which
 /// differ by exactly that transfer.
 #[test]
-fn extract_yield_never_transfers_to_treasury_gain_or_no_gain() {
+fn harvest_never_transfers_to_treasury_gain_or_no_gain() {
     // Renamed + rewritten 2026-09-18: since the yield split, extract_yield
     // NEVER calls the token contract itself, gain or no gain, it only
     // credits YieldIndex/ProtocolYieldBalance. The old event-count assertion
@@ -422,17 +423,16 @@ fn extract_yield_never_transfers_to_treasury_gain_or_no_gain() {
     s.client.deploy_to_vault(&deployed, &0);
     let token = TokenClient::new(&env, &s.token_id);
 
-    let tranche = deployed / 2;
-
-    // Par: principal comes home, no yield realised.
+    // Par: no growth, so nothing is redeemed and no yield realised.
+    // r3: `harvest` replaces the admin `extract_yield`.
     mock.set_rate_bps(&BPS_DENOMINATOR);
-    assert_eq!(s.client.extract_yield(&tranche, &0), 0);
+    assert_eq!(s.client.harvest(), 0);
     assert_eq!(token.balance(&treasury), 0);
 
     // Gain: real yield is realised and split, but still nothing transfers.
     mock.set_rate_bps(&(BPS_DENOMINATOR + VAULT_MOVE_BPS));
-    s.token_admin.mint(&vault_id, &tranche);
-    let gained = s.client.extract_yield(&tranche, &0);
+    s.token_admin.mint(&vault_id, &deployed);
+    let gained = s.client.harvest();
     assert!(gained > 0, "test is vacuous without a real gain");
     assert_eq!(
         token.balance(&treasury),

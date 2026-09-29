@@ -40,3 +40,6 @@ mod t2_mutation_gap_tests;
 /// `total_staked` shortfall reconciliation. Split out for the same reason
 /// as `d2_vault_tests`: new mechanic, not existing pool mechanics.
 mod t3_flags_tests;
+/// r3 (2026-09-29): staker and backer yield taken any time, set-aside
+/// yield, instant setup before the first money.
+mod yield_tests;

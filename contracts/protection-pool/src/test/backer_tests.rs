@@ -496,21 +496,27 @@ fn claim_snapshot_includes_backer_capacity() {
 }
 
 #[test]
-fn yield_on_backer_money_goes_to_the_protocol() {
+fn yield_on_matured_backer_money_goes_to_backers() {
+    // r3 (2026-09-29): was `yield_on_backer_money_goes_to_the_protocol`.
+    // Backers now earn on matured money (BackerYieldBps default 100%).
     let env = new_env();
     let s = setup(&env);
     let (staker, _) = staked_wallet(&env, &s);
-    matured_backer(&env, &s, MID_STAKE); // capacity split 50/50
+    let backer = matured_backer(&env, &s, MID_STAKE); // capacity split 50/50
     let (vault_id, mock) = with_vault(&env, &s, 8_000);
     let deployed = (2 * MID_STAKE) * 8_000 / 10_000;
-    let shares = s.client.deploy_to_vault(&deployed, &0);
+    s.client.deploy_to_vault(&deployed, &0);
     mock.set_rate_bps(&11_000); // +10%
     s.token_admin.mint(&vault_id, &deployed); // real tokens to pay above par
-    let y = s.client.extract_yield(&shares, &0);
-    assert_eq!(y, deployed / 10);
+    let y = s.client.harvest();
+    assert!(y > 0 && deployed / 10 - y <= 2);
 
-    // Staker capital earned half the yield; the StakerYieldBps default is 100%.
-    let staker_share = y / 2;
-    assert_eq!(s.client.get_yield_balance(), y - staker_share);
-    assert_eq!(s.client.get_withdrawable_amount(&staker), MID_STAKE + staker_share);
+    // Each side's capital earned half; both defaults are 100%, so the
+    // protocol keeps only index rounding dust.
+    let (staker_reserved, backer_reserved) = s.client.get_yield_reserved();
+    assert!(y / 2 - staker_reserved <= 1 && y / 2 - backer_reserved <= 1);
+    assert_eq!(s.client.get_yield_balance(), y - staker_reserved - backer_reserved);
+    assert!(s.client.get_yield_balance() <= 2);
+    assert_eq!(s.client.get_withdrawable_amount(&staker), MID_STAKE + staker_reserved);
+    assert_eq!(s.client.get_backer_yield_owed(&backer), backer_reserved);
 }
