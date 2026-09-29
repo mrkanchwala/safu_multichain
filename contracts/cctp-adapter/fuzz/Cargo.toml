@@ -1,0 +1,39 @@
+[package]
+name = "cctp-adapter-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[workspace]
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+soroban-sdk = { version = "27.0.0", features = ["testutils"] }
+# Same exact pins as the contract crates' dev-dependencies.
+ed25519-dalek = "=2.2.0"
+k256 = { version = "=0.13.4", features = ["ecdsa"] }
+
+# Clients only: every SAFU contract runs as its release WASM (built first with
+# `stellar contract build`), as in the flow tests, so metered cost is real.
+[dependencies.cctp-adapter]
+path = ".."
+
+[dependencies.safu-account]
+path = "../../safu-account"
+
+[dependencies.cctp-common]
+path = "../../cctp-common"
+
+[dependencies.protection-pool]
+path = "../../protection-pool"
+
+[[bin]]
+name = "fuzz_cctp_flows"
+path = "fuzz_targets/fuzz_cctp_flows.rs"
+test = false
+doc = false
+bench = false

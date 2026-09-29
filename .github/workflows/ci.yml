@@ -1,0 +1,53 @@
+name: CI
+
+# Contracts + frontend only. backend/ imports a private sibling repo (SAFU3.0,
+# proprietary scanner/oracle code) that is deliberately excluded from this
+# public repo -- it isn't available to CI runners, and public-repo Action logs
+# are visible to anyone, so backend tests stay local-only (README "Running
+# the tests"). Do not add a SAFU3.0 checkout step here.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  contracts:
+    name: Soroban contract tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pinned to match contracts/rust-toolchain.toml -- do not float to @stable.
+      - uses: dtolnay/rust-toolchain@1.96.0
+        with:
+          targets: wasm32v1-none
+
+      - name: cargo test -p protection-pool
+        working-directory: contracts
+        run: cargo test -p protection-pool
+
+  frontend:
+    name: Frontend build + lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Several deps (@solana/kit, @stellar/js-xdr, @stellar/stellar-sdk)
+          # declare engines >=22 -- do not drop this back to 20.
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - name: vitest
+        run: npm run test
+
+      - name: tsc -b && vite build
+        run: npm run build
+
+      - name: oxlint
+        run: npm run lint

@@ -1,0 +1,37 @@
+# Standalone project, deliberately NOT a member of the protection-pool workspace: LayerZero's
+# Stellar crates need soroban-sdk =25.1.1 + Rust 1.90.0, protection-pool is on soroban-sdk 27.
+# Lockfile pins soroban-spec* / soroban-sdk-macros to 25.1.1 (25.3.x needs rustc 1.91).
+[workspace]
+
+[package]
+name = "registry-oapp"
+version = "0.0.1"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { version = "=25.1.1", features = ["hazmat-address", "hazmat-crypto"] }
+utils = { path = "../vendor/common-utils" }
+common-macros = { path = "../vendor/common-utils-macros" }
+endpoint-v2 = { path = "../vendor/endpoint-v2", default-features = false, features = ["library"] }
+oapp = { path = "../vendor/oapp" }
+oapp-macros = { path = "../vendor/oapp-macros" }
+
+[dev-dependencies]
+soroban-sdk = { version = "=25.1.1", features = ["hazmat-address", "hazmat-crypto", "testutils"] }
+utils = { path = "../vendor/common-utils", features = ["testutils"] }
+endpoint-v2 = { path = "../vendor/endpoint-v2", default-features = false, features = ["testutils"] }
+
+[profile.release]
+opt-level = "z"
+overflow-checks = true
+debug = 0
+strip = "symbols"
+debug-assertions = false
+panic = "abort"
+codegen-units = 1
+lto = true

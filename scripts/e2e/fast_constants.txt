@@ -1,0 +1,27 @@
+# Duration constants replaced in the D-fast build (P5 testnet e2e).
+# Format: <path under contracts/> | <exact production line, trimmed> | <fast line, trimmed>
+# build_fast.sh fails if any production line is missing or not unique, and its diff guard fails
+# if the fast tree differs from contracts/ in any line not listed here.
+# Testnet ledgers close ~5 s: 12 ledgers = 1 min, 60 = 5 min.
+# Unchanged on purpose: LEDGERS_PER_DAY / SECONDS_PER_DAY (daily caps, points, day boundaries),
+# MAX_APPROVAL_WINDOW_SECONDS, REVOCATION_TTL_LEDGERS (its const-assert must keep holding),
+# storage TTL bumps.
+
+protection-pool/src/types.rs | pub const CLAIM_WINDOW_SECONDS: u64 = 30 * SECONDS_PER_DAY; | pub const CLAIM_WINDOW_SECONDS: u64 = 600;
+protection-pool/src/types.rs | pub const TIME_GATE_LEDGERS: u32 = 90 * LEDGERS_PER_DAY; | pub const TIME_GATE_LEDGERS: u32 = 60;
+protection-pool/src/types.rs | pub const COOLDOWN_LEDGERS: u32 = 7 * LEDGERS_PER_DAY; | pub const COOLDOWN_LEDGERS: u32 = 12;
+protection-pool/src/types.rs | pub const VESTING_LEDGERS: u32 = 45 * LEDGERS_PER_DAY; | pub const VESTING_LEDGERS: u32 = 60;
+protection-pool/src/types.rs | pub const PENALTY_LOCK_LEDGERS: u32 = 365 * LEDGERS_PER_DAY; | pub const PENALTY_LOCK_LEDGERS: u32 = 60;
+protection-pool/src/types.rs | pub const APPROVE_WINDOW_LEDGERS: u32 = 100 * LEDGERS_PER_DAY; | pub const APPROVE_WINDOW_LEDGERS: u32 = 60;
+protection-pool/src/types.rs | pub const COLLECTION_INACTIVITY_LEDGERS: u32 = 100 * LEDGERS_PER_DAY; | pub const COLLECTION_INACTIVITY_LEDGERS: u32 = 60;
+protection-pool/src/types.rs | pub const BACKER_MATURITY_SECONDS: u64 = 7 * SECONDS_PER_DAY; | pub const BACKER_MATURITY_SECONDS: u64 = 120;
+protection-pool/src/settings.rs | pub const SETTINGS_TIMELOCK_SECONDS: u64 = 7 * SECONDS_PER_DAY; | pub const SETTINGS_TIMELOCK_SECONDS: u64 = 120;
+protection-pool/src/settings.rs | const COOLDOWN_MIN: i128 = 7 * LEDGERS_PER_DAY as i128; | const COOLDOWN_MIN: i128 = 12;
+protection-pool/src/settings.rs | const COOLDOWN_MAX: i128 = 30 * LEDGERS_PER_DAY as i128; | const COOLDOWN_MAX: i128 = 120;
+protection-pool/src/settings.rs | const VESTING_MIN: i128 = 30 * LEDGERS_PER_DAY as i128; | const VESTING_MIN: i128 = 60;
+protection-pool/src/settings.rs | const VESTING_MAX: i128 = 90 * LEDGERS_PER_DAY as i128; | const VESTING_MAX: i128 = 600;
+protection-pool/src/settings.rs | const BACKER_NOTICE_MAX: i128 = 90 * SECONDS_PER_DAY as i128; | const BACKER_NOTICE_MAX: i128 = 120;
+protection-pool/src/settings.rs | SettingKey::BackerNoticeSeconds => 30 * SECONDS_PER_DAY as i128, | SettingKey::BackerNoticeSeconds => 120,
+protection-pool/src/governance.rs | pub const GOV_DELAY_SECONDS: u64 = 7 * SECONDS_PER_DAY; | pub const GOV_DELAY_SECONDS: u64 = 120;
+protection-pool/src/governance.rs | pub const RECOVERY_DELAY_SECONDS: u64 = 90 * SECONDS_PER_DAY; | pub const RECOVERY_DELAY_SECONDS: u64 = 300;
+protection-pool/src/admin.rs | pub const PAUSE_MAX_SECONDS: u64 = 30 * crate::types::SECONDS_PER_DAY; | pub const PAUSE_MAX_SECONDS: u64 = 300;

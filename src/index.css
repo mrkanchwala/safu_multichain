@@ -1,0 +1,1205 @@
+:root {
+  --brand-primary: #ff3b3b;
+  --brand-primary-dim: #c72b22;
+  --brand-success: #28c940;
+  --brand-warn: #ffcc00;
+  --bg: #0a0a0a;
+  --bg-panel: #121212;
+  --bg-panel-alt: #171717;
+  --border: #232323;
+  --text: #f4f4f2;
+  /* #9a9a9a -> #c4c4c0, 2026-09-25 (founder: grey was hard to read). Now
+     11.3 / 10.7 / 10.2:1 on bg / panel / panel-alt; white stays 18:1. */
+  --text-muted: #c4c4c0;
+  --font-display: "Fraunces", serif;
+  --font-body: "Manrope", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  line-height: 1.55;
+}
+
+.wrap {
+  /* Widened 1000px -> 1200px, 2026-09-20 -- on a normal 1440-1920px laptop
+     screen the old width left a large, unbalanced dead margin on both
+     sides and read as content stuck to the left half of the page. */
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.devnet-badge {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
+  background: var(--brand-warn);
+  color: #000;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  z-index: 99;
+}
+
+header {
+  padding: 20px 0;
+  border-bottom: 1px solid var(--border);
+}
+header .wrap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  text-decoration: none;
+  flex-shrink: 0;
+}
+.logo img {
+  height: 26px;
+  width: auto;
+}
+.logo .name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 16px;
+}
+.logo .fam {
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.site-nav {
+  display: flex;
+  gap: 22px;
+}
+.site-nav a,
+.nav-dropdown a {
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.site-nav a {
+  padding: 6px 0;
+  border-bottom: 2px solid transparent;
+}
+.site-nav a:hover,
+.nav-dropdown a:hover {
+  color: var(--text);
+}
+.site-nav a.active {
+  color: var(--text);
+  border-bottom-color: var(--brand-primary);
+}
+.nav-menu {
+  display: none;
+  position: relative;
+}
+.nav-menu .secondary-action {
+  padding: 8px 12px;
+}
+.nav-dropdown {
+  right: auto;
+  left: 0;
+}
+.nav-dropdown a {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 6px;
+}
+.nav-dropdown a:hover {
+  background: var(--bg-panel-alt);
+}
+.social {
+  display: flex;
+  align-items: center;
+}
+header .social {
+  border-left: 1px solid var(--border);
+  padding-left: 10px;
+}
+.social a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  color: var(--text-muted);
+}
+.social a:hover {
+  color: var(--text);
+}
+.social svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+/* The full nav needs ~1180px next to the logo, icons and wallet button. */
+@media (max-width: 1180px) {
+  .site-nav {
+    display: none;
+  }
+  .nav-menu {
+    display: block;
+  }
+}
+@media (max-width: 560px) {
+  .logo .name,
+  .logo .fam {
+    display: none;
+  }
+  .header-right {
+    gap: 8px;
+  }
+  header .social {
+    padding-left: 4px;
+  }
+}
+
+.connect-btn {
+  white-space: nowrap;
+  background: var(--brand-primary);
+  color: #0a0a0a;
+  font-weight: 700;
+  font-size: 14px;
+  padding: 10px 18px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+}
+.connect-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.wallet-menu {
+  position: relative;
+}
+/* Connect dropdown, two steps (2026-09-25): chain → wallets. Same panel, border, radius and
+   muted-label treatment as the side stats; network tags use the site's mono face. */
+.wallet-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 6px;
+  width: 264px;
+  z-index: 50;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+.wallet-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  text-align: left;
+}
+.wallet-back {
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.wallet-back:hover {
+  background: var(--bg-panel-alt);
+}
+.wallet-back .wallet-net {
+  margin-left: auto;
+}
+.wallet-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 10px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.wallet-row:hover,
+.wallet-row:focus-visible {
+  background: var(--bg-panel-alt);
+  outline: none;
+}
+.wallet-row-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel-alt);
+  color: var(--text-muted);
+}
+.wallet-row-icon svg,
+.wallet-row-icon img {
+  width: 17px;
+  height: 17px;
+}
+.wallet-row-icon img {
+  border-radius: 4px;
+}
+.wallet-row:hover .wallet-row-icon {
+  color: var(--text);
+}
+.wallet-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.wallet-row-sub {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+.wallet-net {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  min-width: 64px;
+  text-align: center;
+}
+.wallet-chevron {
+  color: var(--text-muted);
+  font-size: 18px;
+  line-height: 1;
+}
+.wallet-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 6px 6px;
+}
+.wallet-empty {
+  padding: 8px 12px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+.wallet-error {
+  margin: 6px 6px 2px;
+  padding: 10px 12px 4px;
+  border-top: 1px solid var(--border);
+  color: var(--brand-primary);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+@media (max-width: 560px) {
+  .wallet-dropdown {
+    width: min(264px, calc(100vw - 32px));
+  }
+}
+
+.hero {
+  padding: 56px 0 32px;
+}
+.hero h1 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(32px, 4.6vw, 46px);
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  /* 640px -> 820px, 2026-09-20, matching the wider .wrap -- the old cap
+     made the hero read as a narrow column stuck to the left of a much
+     wider page rather than using the space it now has. */
+  max-width: 820px;
+}
+.hero h1 em {
+  color: var(--brand-primary);
+  font-style: normal;
+}
+.hero p {
+  margin-top: 14px;
+  color: var(--text-muted);
+  font-size: 16px;
+  /* 520px -> 640px, same reasoning as h1 above -- still a real readability
+     cap (roughly 70-80 characters per line), just not needlessly narrow. */
+  max-width: 640px;
+}
+
+.hero-links {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+.hero-links a {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.hero-links a span {
+  color: var(--brand-primary);
+  margin-left: 4px;
+}
+.hero-links a:hover span {
+  margin-left: 8px;
+}
+
+.dapp {
+  padding: 8px 0 40px;
+}
+.dapp-shell {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+}
+.tab {
+  padding: 14px 20px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  background: none;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  font-family: inherit;
+}
+.tab.active {
+  color: var(--text);
+  border-bottom-color: var(--brand-primary);
+}
+.panel {
+  padding: 24px;
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 28px;
+}
+.panel-note {
+  font-size: 12px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+  margin-top: 4px;
+  line-height: 1.5;
+}
+@media (max-width: 720px) {
+  .panel {
+    grid-template-columns: 1fr;
+  }
+}
+.field-group {
+  margin-bottom: 16px;
+}
+.field-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.field-label span:last-child {
+  font-family: var(--font-mono);
+}
+.field-input {
+  display: flex;
+  align-items: center;
+  background: var(--bg-panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+.field-input input {
+  background: none;
+  border: none;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 18px;
+  width: 100%;
+  outline: none;
+}
+.field-input input::placeholder {
+  color: var(--text-muted);
+}
+.field-input input:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+.field-input .unit {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.field-input .max {
+  color: var(--brand-primary);
+  font-size: 11px;
+  font-weight: 700;
+  margin-left: 10px;
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+.health-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0 18px;
+}
+.health-bar {
+  flex: 1;
+  height: 5px;
+  background: var(--bg-panel-alt);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.health-bar i {
+  display: block;
+  height: 100%;
+  background: var(--brand-success);
+}
+.health-bar i.warn {
+  background: var(--brand-warn);
+}
+.health-bar i.danger {
+  background: var(--brand-primary);
+}
+.health-label {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--brand-success);
+  white-space: nowrap;
+}
+.primary-action {
+  width: 100%;
+  background: var(--brand-primary);
+  color: #0a0a0a;
+  font-weight: 700;
+  font-size: 15px;
+  padding: 14px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.primary-action:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.secondary-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 10px;
+}
+.secondary-action {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 13px;
+  padding: 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.secondary-action:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.side-stat {
+  background: var(--bg-panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 15px;
+  margin-bottom: 12px;
+}
+.side-stat .k {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.side-stat .v {
+  font-family: var(--font-mono);
+  font-size: 19px;
+  margin-top: 4px;
+}
+.side-stat .v.good {
+  color: var(--brand-success);
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 700;
+}
+.tx-status {
+  font-size: 12.5px;
+  margin-top: 10px;
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+.tx-status a {
+  color: var(--brand-primary);
+}
+.tx-status.error {
+  color: var(--brand-primary);
+  word-break: normal;
+}
+.tx-status-hint {
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+.tx-status-details {
+  margin-top: 6px;
+  color: var(--text-muted);
+}
+.tx-status-details summary {
+  cursor: pointer;
+}
+.tx-status-details div {
+  margin-top: 4px;
+  word-break: break-all;
+  opacity: 0.7;
+}
+
+section.numbers {
+  padding: 44px 0;
+  border-top: 1px solid var(--border);
+}
+section.numbers h2,
+section.coverage h2,
+section.example h2,
+section.about h2 {
+  font-family: var(--font-display);
+  font-size: 23px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+section.numbers .sub,
+section.coverage .sub,
+section.example .sub,
+section.about .sub {
+  color: var(--text-muted);
+  font-size: 13.5px;
+  margin-bottom: 20px;
+}
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+@media (max-width: 720px) {
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+.stat-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+}
+.stat-card .v {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  color: var(--brand-primary);
+}
+.stat-card .k {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+section.coverage {
+  padding: 44px 0;
+  border-top: 1px solid var(--border);
+}
+.cov-groups {
+  display: grid;
+  /* 2 columns, not 3 -- the "Wrongful liquidation" card was removed
+     2026-09-20 when it was pulled from frontend marketing copy, but this
+     grid was left at its old 3-column count, leaving a dead empty column
+     next to the 2 real cards. */
+  grid-template-columns: 1fr 1fr;
+  /* stretch, not start (2026-09-20 fix) -- "start" let each card size to
+     its own content, so a longer-wrapping line in one card made the two
+     boxes visibly different heights side by side. Grid's default is
+     stretch; this had been overridden away from it. */
+  align-items: stretch;
+  gap: 16px;
+}
+@media (max-width: 820px) {
+  .cov-groups {
+    grid-template-columns: 1fr;
+  }
+}
+.cov-group {
+  border-radius: 10px;
+  padding: 18px;
+  border: 1px solid var(--border);
+}
+.cov-group.prevented {
+  background: rgba(40, 201, 64, 0.06);
+}
+.cov-group.paid {
+  background: rgba(255, 59, 59, 0.06);
+}
+.cov-group.not-covered {
+  background: var(--bg-panel);
+}
+.cov-group h3 {
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.cov-group.prevented h3 {
+  color: var(--brand-success);
+}
+.cov-group.paid h3 {
+  color: var(--brand-primary);
+}
+.cov-group.not-covered h3 {
+  color: var(--text-muted);
+}
+.cov-group .note {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+.cov-group ul {
+  list-style: none;
+}
+.cov-group li {
+  font-size: 13.5px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+.cov-group li:first-of-type {
+  border-top: none;
+}
+
+section.about {
+  padding: 44px 0;
+  border-top: 1px solid var(--border);
+}
+section.about {
+  scroll-margin-top: 12px;
+}
+.about-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: 40px;
+}
+@media (max-width: 820px) {
+  .about-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+}
+.about-body p {
+  color: var(--text-muted);
+  font-size: 15.5px;
+  line-height: 1.7;
+  max-width: 680px;
+  margin-bottom: 18px;
+}
+.about-body p:last-child {
+  margin-bottom: 0;
+}
+.about-body b {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.inline-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-top: 14px;
+}
+.details-layout .inline-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: 13px;
+  text-decoration: none;
+  border-bottom: 1px solid var(--border);
+}
+
+section.example {
+  padding: 44px 0;
+  border-top: 1px solid var(--border);
+}
+.example-box {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 22px;
+  font-size: 14.5px;
+}
+.example-box .step {
+  display: flex;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.example-box .step:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+.example-box .step .n {
+  font-family: var(--font-mono);
+  color: var(--brand-primary);
+  font-weight: 700;
+  min-width: 20px;
+}
+
+footer {
+  border-top: 1px solid var(--border);
+  padding: 32px 0 48px;
+  margin-top: auto;
+}
+footer .wrap {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+footer p {
+  max-width: 340px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.footer-brand .social {
+  margin: 10px 0 0 -8px;
+}
+.footer-cols {
+  display: flex;
+  gap: 56px;
+  flex-wrap: wrap;
+}
+.footer-cols h4 {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+.footer-cols a {
+  display: block;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 13px;
+  padding: 4px 0;
+}
+.footer-cols a:hover {
+  color: var(--brand-primary);
+}
+@media (max-width: 560px) {
+  .footer-cols {
+    gap: 32px;
+  }
+}
+
+body {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: calc(36px + env(safe-area-inset-bottom, 0px));
+}
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100svh;
+}
+
+.details-link {
+  display: block;
+  text-align: center;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-top: 20px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  background: none;
+  cursor: pointer;
+  width: 100%;
+}
+.details-link:hover {
+  border-color: var(--brand-primary);
+}
+
+.details-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  /* Widened 1040px -> 1240px, 2026-09-20, matching .wrap's widen -- same
+     unbalanced-left-margin problem on a normal-width screen. */
+  max-width: 1240px;
+  margin: 0 auto;
+  width: 100%;
+}
+@media (max-width: 720px) {
+  /* minmax(0, 1fr): a plain 1fr track grows to fit the chip row's full width
+     and pushes the page wider than the phone. */
+  .details-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .details-layout aside,
+  .details-layout main {
+    min-width: 0;
+  }
+}
+/* Line the explainer pages up with the header's 1200px column. */
+@media (min-width: 721px) {
+  .details-layout {
+    max-width: 1200px;
+    padding: 0 24px;
+  }
+}
+.details-layout aside {
+  border-right: 1px solid var(--border);
+  padding: 28px 20px;
+  position: sticky;
+  top: 0;
+  align-self: start;
+}
+@media (min-width: 721px) {
+  .details-layout aside {
+    padding-left: 0;
+  }
+}
+@media (max-width: 720px) {
+  .details-layout aside {
+    position: static;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+}
+.details-layout aside .back {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 28px;
+  text-decoration: none;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+.details-layout aside .back img {
+  height: 16px;
+}
+.details-layout aside nav button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 0;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13.5px;
+}
+.details-layout aside nav button b {
+  color: var(--brand-primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  margin-right: 8px;
+}
+.details-layout aside nav button:hover,
+.details-layout aside .cross-link:hover {
+  color: var(--text);
+}
+.details-layout aside .cross-link {
+  display: block;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12.5px;
+  text-decoration: none;
+}
+@media (max-width: 720px) {
+  .details-layout aside {
+    padding: 16px 16px 12px;
+  }
+  .details-layout aside .back {
+    margin-bottom: 12px;
+  }
+  /* 15 whitepaper sections as a vertical list would push the text a full
+     screen down on a phone, so the list becomes one scrolling row of chips. */
+  .details-layout aside nav {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+  .details-layout aside nav button {
+    width: auto;
+    flex-shrink: 0;
+    white-space: nowrap;
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    font-size: 12.5px;
+  }
+  .details-layout aside .cross-link {
+    margin-top: 10px;
+    padding-top: 10px;
+  }
+  .details-layout main {
+    padding: 28px 16px 80px;
+  }
+}
+.details-layout main {
+  padding: 36px 28px 80px;
+}
+.details-layout .slide {
+  padding-bottom: 52px;
+  margin-bottom: 44px;
+  border-bottom: 1px solid var(--border);
+}
+.details-layout .slide:last-child {
+  border-bottom: none;
+}
+.details-layout .tag {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--brand-primary);
+  margin-bottom: 8px;
+}
+.details-layout h2 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 26px;
+  margin-bottom: 14px;
+}
+.details-layout p {
+  color: var(--text-muted);
+  font-size: 14.5px;
+  margin-bottom: 12px;
+  max-width: 600px;
+}
+.details-layout p b {
+  color: var(--text);
+  font-weight: 600;
+}
+.table-scroll {
+  overflow-x: auto;
+  max-width: 680px;
+}
+.slide {
+  scroll-margin-top: 12px;
+}
+.wp-head {
+  margin-bottom: 40px;
+}
+.wp-head .tag {
+  margin-bottom: 6px;
+}
+.wp-head h1 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(30px, 4vw, 40px);
+  line-height: 1.1;
+}
+.wp-meta {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  margin-top: 8px;
+}
+.details-layout .wp p {
+  max-width: 680px;
+  font-size: 15px;
+}
+.faq-item {
+  max-width: 680px;
+  padding: 16px 0;
+  border-top: 1px solid var(--border);
+}
+.faq-item:first-of-type {
+  border-top: none;
+  padding-top: 4px;
+}
+.faq-item h3 {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.details-layout .faq-item p {
+  font-size: 15px;
+  margin-bottom: 0;
+  max-width: none;
+}
+.details-layout .faq-item a {
+  color: var(--text);
+}
+.callout {
+  list-style: none;
+  max-width: 680px;
+  background: var(--bg-panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 16px;
+}
+.callout li {
+  color: var(--text-muted);
+  font-size: 14.5px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.callout li:first-child {
+  border-top: none;
+}
+.mini-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  margin-top: 14px;
+}
+.mini-table th {
+  text-align: left;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  padding: 0 12px 8px;
+}
+.mini-table td {
+  padding: 11px 12px;
+  border-top: 1px solid var(--border);
+}
+.step-list {
+  margin-top: 14px;
+}
+.step-list .step {
+  display: flex;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+}
+.step-list .step:first-child {
+  border-top: none;
+}
+.step-list .n {
+  font-family: var(--font-mono);
+  color: var(--brand-primary);
+  font-weight: 700;
+  min-width: 20px;
+}
+.pill-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+.pill {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 8px 14px;
+  font-size: 12.5px;
+}
+.pill .v {
+  font-family: var(--font-mono);
+  color: var(--brand-primary);
+  margin-right: 6px;
+}
+
+/* Toggle + disclosure styles, shared by the Stake, Claims and claim-filing panels. */
+.ramp-toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.ramp-toggle-btn {
+  flex: 1;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel-alt);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+.ramp-toggle-btn.active {
+  color: var(--text);
+  border-color: var(--brand-primary);
+}
+.ramp-disclosure {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--bg-panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-top: 10px;
+  line-height: 1.5;
+}
+.sub-line {
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1.65;
+  margin-top: 14px;
+  max-width: 680px;
+}
+.cta-link {
+  display: inline-block;
+  margin-top: 8px;
+  background: var(--brand-primary);
+  color: #0a0a0a;
+  font-weight: 700;
+  font-size: 14px;
+  padding: 12px 22px;
+  border-radius: 8px;
+  text-decoration: none;
+}
+.details-layout .faq-group > p {
+  max-width: 680px;
+  font-size: 15px;
+}
+.table-scroll + .table-scroll {
+  margin-top: 22px;
+}

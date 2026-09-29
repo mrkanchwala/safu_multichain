@@ -1,0 +1,23 @@
+[package]
+name = "cctp-adapter"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+soroban-sdk = { workspace = true }
+cctp-common = { path = "../cctp-common" }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+# Tests run the REAL pool and Circle's REAL CCTP contracts (testdata/circle,
+# fetched from Stellar testnet), not mocks.
+protection-pool = { path = "../protection-pool", features = ["testutils"] }
+safu-account = { path = "../safu-account" }
+ed25519-dalek = "=2.2.0"
+# Same version soroban-env-host already resolves, so one copy in the graph.
+k256 = { version = "=0.13.4", features = ["ecdsa"] }

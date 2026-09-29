@@ -1,0 +1,18 @@
+[package]
+name = "cctp-common"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+publish = false
+
+# Plain library, not a contract: the CCTP constants, message layout and owner
+# derivation that the adapter, the per-user account and their tests all share.
+# One definition here, every consumer downstream.
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+soroban-sdk = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }

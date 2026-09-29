@@ -1,0 +1,45 @@
+[package]
+name = "protection-pool-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[workspace]
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+soroban-sdk = { version = "27.0.0", features = ["testutils"] }
+# T2/D1: targets must produce a VALID oracle signature per submit_claim,
+# see the `testutils` module doc in the contract's lib.rs for why fuzzing the
+# signature bytes themselves would poison the run. Same exact pin as the
+# contract crate (soroban-env-host 27.0.0 only compiles against 2.x).
+ed25519-dalek = "=2.2.0"
+
+[dependencies.protection-pool]
+path = ".."
+features = ["testutils"]
+
+[[bin]]
+name = "fuzz_solvency"
+path = "fuzz_targets/fuzz_solvency.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_override"
+path = "fuzz_targets/fuzz_override.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_backers"
+path = "fuzz_targets/fuzz_backers.rs"
+test = false
+doc = false
+bench = false

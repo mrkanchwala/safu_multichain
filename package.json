@@ -1,0 +1,40 @@
+{
+  "name": "safu-multichain",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint src",
+    "preview": "vite preview",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@creit.tech/stellar-wallets-kit": "^2.6.0",
+    "@reown/appkit": "1.8.21",
+    "@solana/kit": "^8.3.0",
+    "@stellar/stellar-sdk": "^17.0.0",
+    "@wallet-standard/app": "^1.1.1",
+    "@walletconnect/sign-client": "2.23.0",
+    "@walletconnect/types": "2.23.9",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "viem": "^2.56.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "oxlint": "^1.81.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0",
+    "vite-plugin-node-polyfills": "^0.28.0",
+    "vitest": "^5.0.1"
+  },
+  "overrides": {
+    "uuid": "^11.1.1",
+    "stream-json": "^3.5.0"
+  }
+}

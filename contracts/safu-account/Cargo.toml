@@ -1,0 +1,18 @@
+[package]
+name = "safu-account"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+soroban-sdk = { workspace = true }
+cctp-common = { path = "../cctp-common" }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+ed25519-dalek = "=2.2.0"
+k256 = { version = "=0.13.4", features = ["ecdsa"] }

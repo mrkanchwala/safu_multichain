@@ -1,0 +1,39 @@
+# Secrets -- never commit. This repo goes public for submission.
+.env
+.env.*
+backend/.oracle_identity.json
+backend/.covered_wallets.json
+backend/.registry_outbox.json
+backend/.ownership_challenges.json
+backend/.relay_deposits.json
+
+# Build artifacts
+node_modules/
+dist/
+contracts/target/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.cache/
+test_snapshots/
+
+# OS
+.DS_Store
+
+# Build outputs and program keypairs from the LayerZero work (2026-09-19). NEVER commit a keypair.
+**/target/
+contracts-evm/cache/
+contracts-evm/out/
+contracts-evm/lib/
+*-keypair.json
+
+# Third-party LayerZero Stellar crates, vendored for building registry-oapp. Licence must be checked
+# before any redistribution (see contracts-layerzero/VENDORED.md), so they are not part of this repo yet.
+contracts-layerzero/vendor/
+
+# e2e runtime state: holds a throwaway testnet dev-oracle secret, never commit (C1 commit gate 2026-09-29)
+deploy/out/e2e-backend/
+
+# e2e run logs (2026-09-29)
+deploy/out/

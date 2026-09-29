@@ -1,0 +1,42 @@
+{
+ "network": "testnet",
+ "stellar": {
+  "label": "Stellar (testnet)", "short": "Testnet",
+  "passphrase": "Test SDF Network ; September 2015",
+  "soroban_rpc": "https://soroban-testnet.stellar.org",
+  "horizon": "https://horizon-testnet.stellar.org",
+  "usdc_issuer": "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+  "usdc_sac": "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
+  "explorer_tx": "https://stellar.expert/explorer/testnet/tx/{tx}"
+ },
+ "evm": {
+  "chain_key": "sepolia", "label": "Ethereum (Sepolia)", "short": "Sepolia",
+  "chain_id": 11155111,
+  "public_rpc": "https://ethereum-sepolia-rpc.publicnode.com",
+  "usdc": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+  "token_messenger_v2": "0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA",
+  "message_transmitter_v2": "0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275",
+  "explorer_tx": "https://sepolia.etherscan.io/tx/{tx}"
+ },
+ "solana": {
+  "label": "Solana (devnet)", "short": "Devnet",
+  "cluster": "devnet", "wallet_chain": "solana:devnet",
+  "public_rpc": "https://api.devnet.solana.com",
+  "usdc_mint": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+  "message_transmitter_v2": "CCTPV2Sm4AdWt5296sk4P66VBZ7bEhcARwFaaS9YPbeC",
+  "token_messenger_minter_v2": "CCTPV2vPZJS2u2BBsUoscuikbYjnpFmbFsvVuJdgUMQe",
+  "explorer_tx": "https://explorer.solana.com/tx/{tx}?cluster=devnet"
+ },
+ "cctp": {
+  "iris_url": "https://iris-api-sandbox.circle.com/v2/messages",
+  "domains": {"evm": 0, "solana": 5, "stellar": 27}
+ },
+ "pool": {"cap_usdc": 10000},
+ "contracts": {
+  "pool": "CBMEPYO3F6BHP4GFJO2V65FGLN6QL47S4V2ZPJWII7V224J6PXFBVIME",
+  "registry": "CABT5HBKKGUXDVKN7RSQTS6HO3M45YQQ4EV7QALK3WS5FRDBL24545GZ",
+  "stake_adapter": "CBQQXNODWC3ZJMNUQLAEYI365DRGDKT3XS2JFB4SSR5TNLGKNSRCVE5B",
+  "back_adapter": "CAU2HU324ECP33FWE6M77AZNBR5Z26ZZ3XY6IHDEJ3D7V6WJV7OKZXQZ",
+  "deploy_record": "deploy/out/testnet-20260924T132033Z.json"
+ }
+}

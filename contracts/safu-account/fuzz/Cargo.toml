@@ -1,0 +1,32 @@
+[package]
+name = "safu-account-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[workspace]
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+soroban-sdk = { version = "27.0.0", features = ["testutils"] }
+# Same exact pins as the contract crates' dev-dependencies (one copy of each in
+# the graph; see protection-pool/Cargo.toml for why ed25519-dalek is exact).
+ed25519-dalek = "=2.2.0"
+k256 = { version = "=0.13.4", features = ["ecdsa"] }
+
+[dependencies.safu-account]
+path = ".."
+
+[dependencies.cctp-common]
+path = "../../cctp-common"
+
+[[bin]]
+name = "fuzz_check_auth"
+path = "fuzz_targets/fuzz_check_auth.rs"
+test = false
+doc = false
+bench = false

@@ -1,0 +1,26 @@
+[package]
+name = "protection-pool"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+soroban-sdk = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+# D1 (T2): tests sign real oracle approvals rather than stubbing the check.
+# Pinned exact deliberately: soroban-env-host 27.0.0's own testutils only
+# compiles against the 2.x API while its Cargo.toml permits 3.0.0, so an
+# unpinned resolve reintroduces the packaging bug that blocked `cargo test`
+# (TESTING.md; the `cargo update -p ed25519-dalek@3.0.0 --precise 2.2.0`
+# workaround). Matching the version the SDK already pulls keeps one copy in
+# the graph rather than two incompatible ones.
+ed25519-dalek = "=2.2.0"
+
+[features]
+testutils = ["soroban-sdk/testutils"]

@@ -1,0 +1,19 @@
+[package]
+name = "covered-registry"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+soroban-sdk = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+# Tests run the REAL pool, so "coverage = active stake" is checked against
+# the contract that ships, not a mock.
+protection-pool = { path = "../protection-pool" }
+ed25519-dalek = "=2.2.0"
