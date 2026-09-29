@@ -165,8 +165,11 @@ echo "written: $OUT"
 # The ONE place the backend, frontend build and nginx read contract ids from. Written only after a
 # clean read-back, and only if that file's passphrase is this network's (never cross-write).
 if [ $fail = 0 ]; then
-  POOL_FILE=$ROOT/config/pool.$NETWORK.json
-  python3 - "$POOL_FILE" "$OUT" "$PASSPHRASE" "$POOL_CAP" <<'PY'
+  # By passphrase, not by CLI alias: a mainnet alias such as safu-mainnet still writes pool.mainnet.json
+  # (2026-09-29: the alias name produced pool.safu-mainnet.json, which does not exist).
+  if [ "$IS_MAINNET" = 1 ]; then POOL_NET=mainnet; else POOL_NET=testnet; fi
+  POOL_FILE=$ROOT/config/pool.$POOL_NET.json
+  python3 - "$POOL_FILE" "$OUT" "$PASSPHRASE" "$POOL_CAP" <<'PY' || fail=1
 import json, sys
 pool_file, out, passphrase, cap = sys.argv[1:]
 cfg, dep = json.load(open(pool_file)), json.load(open(out))
@@ -179,7 +182,7 @@ json.dump(cfg, open(pool_file, "w"), indent=1)
 open(pool_file, "a").write("\n")
 print(f"pool file updated: {pool_file} (commit it; rebuild the frontend; restart the backend)")
 PY
-  [ $? = 0 ] || { echo "POOL FILE NOT UPDATED: backend and frontend still point at the old contracts" >&2; fail=1; }
+  [ $fail = 0 ] || echo "POOL FILE NOT UPDATED: backend and frontend still point at the old contracts" >&2
 fi
 echo "POOL IS LOCKED. Next: set vault, treasury and deploy ceiling (two roles, applies at once),"
 echo "then unlock: stellar contract invoke --id $POOL ${S[*]} -- unpause"
