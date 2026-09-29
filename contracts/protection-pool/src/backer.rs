@@ -126,6 +126,9 @@ pub fn back(env: &Env, backer: &Address, amount: i128) -> Result<(), PoolError> 
         return Err(PoolError::AmountNotPositive);
     }
 
+    // r3 (code review B2): growth so far goes to money already counted,
+    // before any matured money joins `total_backed` below. Best effort.
+    crate::vault::harvest(env);
     let mut record = storage::get_backer(env, backer).unwrap_or_else(|| empty_record(env));
     let matured = settle_maturity(env, &mut record);
 
@@ -158,6 +161,8 @@ pub fn mature_backing(env: &Env, backer: &Address) -> Result<i128, PoolError> {
     if record.pending_amount <= 0 {
         return Err(PoolError::NoPendingBacking);
     }
+    // r3 (code review B2): growth so far goes to money already counted.
+    crate::vault::harvest(env);
     let moved = settle_maturity(env, &mut record);
     if moved == 0 {
         return Err(PoolError::BackingNotMature);

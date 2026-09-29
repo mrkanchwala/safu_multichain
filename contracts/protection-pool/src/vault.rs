@@ -1068,6 +1068,19 @@ pub(crate) fn forfeit_staker_yield(env: &Env, record: &mut crate::types::StakeRe
     }
 }
 
+/// What the pool holds (cash + deployed book value) above everything it owes:
+/// stakes, counted and pending backing, set-aside yield, and the unpaid part
+/// of open claims. The most `withdraw_yield` may ever send (code review W2).
+pub(crate) fn protocol_surplus(env: &Env) -> i128 {
+    let held = liquid_balance(env) + storage::get_total_deployed_asset(env);
+    let owed = storage::get_total_staked(env)
+        + storage::get_total_backed(env)
+        + storage::get_total_backed_pending(env)
+        + storage::get_yield_reserved(env)
+        + storage::get_total_allocated(env);
+    (held - owed).max(0)
+}
+
 /// V8 `withdrawYield` (`:860`), send the protocol's own realised yield
 /// share to treasury. "The protocol's own money", it already sat
 /// in `ProtocolYieldBalance` since `credit_yield` credited it there;
@@ -1089,6 +1102,13 @@ pub fn withdraw_yield(env: &Env, amount: i128) -> Result<(), PoolError> {
     let treasury = storage::get_treasury(env).ok_or(PoolError::TreasuryNotSet)?;
 
     if amount > storage::get_protocol_yield_balance(env) {
+        return Err(PoolError::ExceedsYieldBalance);
+    }
+    // Code review W2 (design decision 2026-09-29): the protocol's share is pool
+    // cash that claims may spend, and the counter above does not go down when
+    // they do. So the protocol takes only what is left after every stake,
+    // backing, set-aside yield and open claim is covered.
+    if amount > protocol_surplus(env) {
         return Err(PoolError::ExceedsYieldBalance);
     }
     // r3: never touches staker/backer set-aside yield; pulls from the vault

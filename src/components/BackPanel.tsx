@@ -13,6 +13,7 @@ import {
 import { fmtUsdc, readMyBacking, readPoolStats } from "../lib/reads";
 import type { MyBacking } from "../lib/reads";
 import { TxStatus } from "./TxStatus";
+import { MIN_BRIDGEABLE_RAW } from "../lib/network";
 import { evmBurnToAdapter, finishOnStellar, relayAction, relayHomeAction, relayMature, solanaBurnToAdapter } from "../lib/crosschain";
 import { useStaker } from "../lib/useStaker";
 import { useTick } from "../lib/useTick";
@@ -201,7 +202,7 @@ export function BackPanel() {
         ) : null}
         <TxStatus action={completeAction} />
         <TxStatus action={cancelAction} />
-        {backing && backing.yieldOwed > 0n ? (
+        {backing && backing.yieldOwed >= (crossChain ? MIN_BRIDGEABLE_RAW : 1n) ? (
           <button className="secondary-action" style={{ width: "100%", marginTop: 8 }}
             disabled={takeYieldAction.isRunning} onClick={() => takeYieldAction.dispatch()}>
             {takeYieldAction.isRunning ? "Sending..." : `Take ${fmtUsdc(backing.yieldOwed)} USDC yield`}

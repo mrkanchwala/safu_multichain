@@ -72,6 +72,23 @@ export type MyStake = {
   activeClaimId: string | null;
 };
 
+/**
+ * r3 (code review W1): yield takeable right now, INCLUDING vault growth nobody has harvested
+ * yet. The on-chain views count only credited yield, and nothing harvests on a schedule, so a
+ * view alone would hide real yield. This simulates the claim itself: its harvest runs inside the
+ * simulation and nothing is submitted. If the claim would be refused (no yield, a claim open on
+ * the stake), fall back to the credited-only view.
+ */
+async function takeableYield(
+  claimMethod: string, claimArgs: ReturnType<typeof addr>[], viewMethod: string, owner: string,
+): Promise<bigint> {
+  try {
+    return await readContract<bigint>(poolId(), claimMethod, claimArgs);
+  } catch {
+    return readContract<bigint>(poolId(), viewMethod, [addr(owner)]);
+  }
+}
+
 /** `get_stake` + `get_withdrawable_amount` (lib.rs). `get_stake` returns
  * `Option<StakeRecord>` -- null/undefined on no stake, handled below. The
  * record's `active_claim_id` (falls back to `reserved_claim_id` if a claim
@@ -88,7 +105,8 @@ export async function readMyStake(_rpc: unknown, owner: string): Promise<MyStake
   if (!record) return null;
   const [withdrawable, yieldOwed] = await Promise.all([
     readContract<bigint>(poolId(), "get_withdrawable_amount", [addr(owner)]),
-    readContract<bigint>(poolId(), "get_staker_yield_owed", [addr(owner)]),
+    // The stake's beneficiary is the staker itself (Stellar wallets and safu-accounts alike).
+    takeableYield("claim_yield", [addr(owner), addr(owner)], "get_staker_yield_owed", owner),
   ]);
   const claimBytes = (record.active_claim_id ?? record.reserved_claim_id) as
     | Uint8Array
@@ -205,7 +223,7 @@ export async function readMyBacking(owner: string): Promise<MyBacking | null> {
   if (!isLive()) return delay(null);
   const [r, yieldOwed] = await Promise.all([
     readContract<Record<string, unknown> | null | undefined>(poolId(), "get_backer", [addr(owner)]),
-    readContract<bigint>(poolId(), "get_backer_yield_owed", [addr(owner)]),
+    takeableYield("claim_backer_yield", [addr(owner)], "get_backer_yield_owed", owner),
   ]);
   if (!r) return null;
   const n = (k: string) => BigInt((r[k] as bigint | number | undefined) ?? 0);

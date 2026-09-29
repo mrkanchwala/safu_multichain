@@ -484,7 +484,24 @@ pub fn get_pending(env: &Env, kind: GovKind) -> Option<GovProposal> {
 }
 
 /// r3: the setup kinds that apply at once while the pool has never held money.
+const INSTANT_SETUP_KINDS: [GovKind; 3] = [GovKind::Vault, GovKind::Treasury, GovKind::DeployBps];
+
 fn instant_before_funding(env: &Env, kind: GovKind) -> bool {
-    !storage::is_ever_funded(env)
-        && matches!(kind, GovKind::Vault | GovKind::Treasury | GovKind::DeployBps)
+    !storage::is_ever_funded(env) && INSTANT_SETUP_KINDS.contains(&kind)
+}
+
+/// Called once, when the pool is first funded (code review B1, 2026-09-29).
+/// A setup change approved while the pool was empty but not yet executed
+/// would otherwise stay executable at once after money arrives. Its wait
+/// starts now instead. Only ever pushes an `eta` later, never earlier.
+pub(crate) fn end_instant_setup(env: &Env) {
+    let later = env.ledger().timestamp() + GOV_DELAY_SECONDS;
+    for kind in INSTANT_SETUP_KINDS {
+        if let Some(mut p) = storage::get_gov_pending(env, kind) {
+            if p.eta != 0 && p.eta < later {
+                p.eta = later;
+                storage::set_gov_pending(env, kind, &p);
+            }
+        }
+    }
 }

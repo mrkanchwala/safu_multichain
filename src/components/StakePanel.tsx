@@ -15,7 +15,7 @@ import {
 } from "../lib/crosschain";
 import { fmtUsdc, readCoveredWallets, readMyStake, readPoolStats, readYieldIndex, rememberCoveredWallet } from "../lib/reads";
 import type { CoveredWallet, MyStake } from "../lib/reads";
-import { CHAINS, MAX_STAKE_USDC, MIN_STAKE_USDC, POOL_CAP_USDC, YIELD_INDEX_PRECISION } from "../lib/network";
+import { CHAINS, MAX_STAKE_USDC, MIN_BRIDGEABLE_RAW, MIN_STAKE_USDC, POOL_CAP_USDC, YIELD_INDEX_PRECISION } from "../lib/network";
 import type { ChainId } from "../lib/network";
 import { useStaker } from "../lib/useStaker";
 import { useTick } from "../lib/useTick";
@@ -247,7 +247,7 @@ export function StakePanel() {
           {withdrawAction.isRunning ? "Withdrawing..." : crossChain ? "Withdraw to my wallet" : "Withdraw principal + yield"}
         </button>
         <TxStatus action={withdrawAction} />
-        {myStake && myStake.yieldOwed > 0n ? (
+        {myStake && myStake.yieldOwed >= (crossChain ? MIN_BRIDGEABLE_RAW : 1n) ? (
           <button
             className="secondary-action"
             style={{ width: "100%", marginTop: 8 }}

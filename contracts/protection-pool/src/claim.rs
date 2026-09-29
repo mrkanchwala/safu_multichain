@@ -1232,7 +1232,9 @@ pub fn cancel_claim(env: &Env, claim_id: &BytesN<32>) -> Result<(), PoolError> {
         // either, confirmed by reading the source directly.
         stake_record.penalty_locked_until_ledger = env.ledger().sequence() + PENALTY_LOCK_LEDGERS;
         // r3: the stake was out of `total_staked` while forfeited, so it
-        // earns again only from now.
+        // earns again only from now (code review B2: growth so far is
+        // recognised first, for the stakers who were in).
+        crate::vault::harvest(env);
         stake_record.yield_index_at_stake = storage::get_yield_index(env);
         storage::set_total_staked(env, storage::get_total_staked(env) + claim.stake);
         storage::set_total_stakers(env, storage::get_total_stakers(env) + 1);

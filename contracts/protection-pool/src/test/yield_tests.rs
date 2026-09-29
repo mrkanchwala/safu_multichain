@@ -68,8 +68,11 @@ fn deployed<'a>(env: &'a Env, s: &Setup<'a>) -> (Address, MockVaultClient<'a>, i
 }
 
 /// Raises the redemption rate to `rate_bps` and funds the vault to pay it.
+/// New deposits then mint at that same price, as a real vault does (the
+/// mock's 1:1 default would hand every later deposit instant fake growth).
 fn grow(s: &Setup<'_>, vault_id: &Address, mock: &MockVaultClient<'_>, rate_bps: i128) {
     mock.set_rate_bps(&rate_bps);
+    mock.set_deposit_rate_bps(&(10_000 * 10_000 / rate_bps));
     s.token_admin.mint(vault_id, &s.client.get_capacity());
 }
 
@@ -399,5 +402,107 @@ fn an_emergency_exit_pays_the_unpaid_yield_too() {
     s.client.emergency_exit(&staker);
     assert_eq!(balance(&env, &s, &staker), MID_STAKE + owed);
     assert_eq!(s.client.get_yield_reserved().0, 0);
+    assert_full_invariant(&s);
+}
+
+// -----------------------------------------------------------------------
+// Code review 2026-09-29: regressions for two r3 findings
+// -----------------------------------------------------------------------
+
+/// A setup change approved while the pool was empty must not stay instantly
+/// executable once money arrives: the 7-day wait then applies to it too.
+#[test]
+fn an_instant_approval_left_unexecuted_waits_once_money_arrives() {
+    let env = new_env();
+    let s = setup(&env);
+    let change = GovChange::Treasury(Address::generate(&env));
+    s.client.propose_change(&s.admin, &change);
+    s.client.approve_change(&s.client.get_co_signer(), &change);
+    staked_wallet(&env, &s); // money arrives before anyone executes
+    assert_eq!(s.client.try_execute_change(&GovKind::Treasury), Err(Ok(PoolError::GovNotReady)));
+}
+
+/// Growth earned before a staker joins belongs to the stakers who were in:
+/// joining (or backing money maturing) recognises pending growth first.
+#[test]
+fn a_new_staker_does_not_share_growth_earned_before_joining() {
+    let env = new_env();
+    let s = setup(&env);
+    let (a, _) = staked_wallet(&env, &s);
+    let (vault_id, mock, _) = deployed(&env, &s);
+    grow(&s, &vault_id, &mock, 10_000 + GAIN_BPS); // growth not yet harvested
+    let (b, _) = staked_wallet(&env, &s);
+    s.client.harvest();
+    assert_eq!(s.client.get_staker_yield_owed(&b), 0, "B joined after the growth");
+    assert!(s.client.get_staker_yield_owed(&a) > 0);
+    assert_full_invariant(&s);
+}
+
+#[test]
+fn newly_matured_backing_does_not_share_growth_earned_before_it_counted() {
+    let env = new_env();
+    let s = setup(&env);
+    staked_wallet(&env, &s);
+    let b = new_funded_address(&env, &s, MID_STAKE);
+    s.client.back(&b, &MID_STAKE);
+    let (vault_id, mock, _) = deployed(&env, &s);
+    advance_ledgers(&env, MATURITY_LEDGERS);
+    grow(&s, &vault_id, &mock, 10_000 + GAIN_BPS); // earned while b was pending
+    s.client.mature_backing(&b);
+    s.client.harvest();
+    assert_eq!(s.client.get_backer_yield_owed(&b), 0, "pending money earns nothing");
+    assert_full_invariant(&s);
+}
+
+/// Code review W2 (design decision 2026-09-29): claims may spend the
+/// protocol's share of pool cash, and its counter does not go down, so the
+/// treasury may take only the surplus above everything the pool owes.
+#[test]
+fn treasury_takes_only_what_is_left_after_everyone_is_covered() {
+    let env = new_env();
+    let s = setup(&env);
+    set_setting_via_timelock(&env, &s, SettingKey::StakerYieldBps, 5_000);
+    let (staker, _) = staked_wallet(&env, &s);
+    staked_wallet(&env, &s);
+    matured_backer(&env, &s, 20 * MID_STAKE); // room for a large claim
+    let (vault_id, mock, _) = deployed(&env, &s);
+    gov_apply(&env, &s, GovChange::Treasury(Address::generate(&env)));
+    grow(&s, &vault_id, &mock, 10_000 + GAIN_BPS);
+    s.client.harvest();
+    let protocol = s.client.get_yield_balance();
+    assert!(protocol > 0);
+
+    advance_past_time_gate(&env);
+    let entitlement = 5 * MID_STAKE; // Tier C ceiling: more than the forfeited stake
+    let id = submit_claim_signed(
+        &env, &s, &s.oracle, &staker, &tx_hash(&env, 1), &entitlement, &TIER_C, &now_ts(&env),
+    );
+    s.client.approve_claim(&id);
+    // The counter never goes down for a claim (it even gains the forfeited
+    // stake's unpaid yield, per the forfeiture rule).
+    let counter = s.client.get_yield_balance();
+    assert!(counter >= protocol);
+
+    // The open claim now owes more than the protocol's cash: nothing left over.
+    assert_eq!(s.client.try_withdraw_yield(&counter), Err(Ok(PoolError::ExceedsYieldBalance)));
+    assert_eq!(s.client.try_withdraw_yield(&1), Err(Ok(PoolError::ExceedsYieldBalance)));
+    assert_full_invariant(&s);
+}
+
+#[test]
+fn treasury_still_takes_its_full_share_when_nothing_else_is_owed_from_it() {
+    let env = new_env();
+    let s = setup(&env);
+    set_setting_via_timelock(&env, &s, SettingKey::StakerYieldBps, 5_000);
+    staked_wallet(&env, &s);
+    let (vault_id, mock, _) = deployed(&env, &s);
+    let treasury = Address::generate(&env);
+    gov_apply(&env, &s, GovChange::Treasury(treasury.clone()));
+    grow(&s, &vault_id, &mock, 10_000 + GAIN_BPS);
+    s.client.harvest();
+    let protocol = s.client.get_yield_balance();
+    assert!(protocol > 0);
+    s.client.withdraw_yield(&protocol);
+    assert_eq!(balance(&env, &s, &treasury), protocol);
     assert_full_invariant(&s);
 }

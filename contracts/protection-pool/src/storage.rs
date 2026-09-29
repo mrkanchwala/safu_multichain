@@ -694,6 +694,13 @@ pub fn is_ever_funded(env: &Env) -> bool {
     env.storage().instance().get(&DataKey::EverFunded).unwrap_or(false)
 }
 
+/// Marks the pool funded (first stake or backing). Only the false→true
+/// transition does anything: it also ends instant setup for changes already
+/// approved but not yet executed (code review B1, 2026-09-29).
 pub fn set_ever_funded(env: &Env) {
+    if is_ever_funded(env) {
+        return;
+    }
     env.storage().instance().set(&DataKey::EverFunded, &true);
+    crate::governance::end_instant_setup(env);
 }

@@ -175,12 +175,16 @@ pub fn stake(
     // Verified 2026-07-14 via `cargo check` against soroban-sdk 27.0.0.
     let beneficiary_hash = env.crypto().sha256(&beneficiary.to_xdr(env)).to_bytes();
 
+    // r3 (code review B2, 2026-09-29): recognise growth earned so far before
+    // this stake counts, so it goes to the stakers who earned it. Best effort.
+    crate::vault::harvest(env);
+
     // Effects before interaction (CEI).
     let record = StakeRecord {
         beneficiary_hash,
         amount,
-        // Snapshot NOW, before any future extract_yield can move the index,
-        // this staker only accrues yield realised after joining.
+        // Snapshot NOW (after the harvest above): this staker only accrues
+        // yield realised after joining.
         yield_index_at_stake: storage::get_yield_index(env),
         staked_at_ledger: env.ledger().sequence(),
         staked_at_timestamp: env.ledger().timestamp(),

@@ -29,6 +29,12 @@ export const USDC_ASSET_CODE = "USDC";
 // "correct" this back.
 export const USDC_DECIMALS = 7;
 
+// Circle's canonical USDC decimals across CCTP. A safu-account sends home only whole canonical
+// units (it reads the live value from Circle's messenger, `send_all`); the site uses this only
+// to hide a cross-chain yield button whose amount could not be sent yet.
+export const CCTP_CANONICAL_DECIMALS = 6;
+export const MIN_BRIDGEABLE_RAW = 10n ** BigInt(USDC_DECIMALS - CCTP_CANONICAL_DECIMALS);
+
 // Stake bounds -- REAL contract constants, not chosen for the frontend.
 // `stake.rs`: min_stake/max_stake = pool_cap * BPS / 10_000, recomputed live on
 // every call so a pool-cap change takes effect with no re-anchoring step.
