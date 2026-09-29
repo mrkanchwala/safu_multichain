@@ -661,6 +661,7 @@ fn harvest_credits_only_the_growth_above_book_value() {
     // 10% gain. The vault needs real XLM to pay above par, exactly as the
     // real one would after Blend accrues interest.
     mock.set_rate_bps(&11_000);
+    let_growth_through(&env, 5_000); // CSO M2: harvest growth limit needs time
     s.token_admin.mint(&vault_id, &deployed);
 
     let shares = s.client.get_total_deployed_shares();
@@ -711,6 +712,7 @@ fn a_venue_loss_yields_zero_rather_than_panicking() {
     // panic here rather than produce a negative, V8's saturating form
     // (`:912`) is load-bearing, not cosmetic.
     mock.set_rate_bps(&9_000);
+    let_growth_through(&env, 5_000); // CSO M2: harvest growth limit needs time
 
     let shares = s.client.get_total_deployed_shares();
     let yield_amount = s.client.harvest();
@@ -733,6 +735,7 @@ fn min_xlm_out_floor_is_enforced_on_redemption() {
     let deployed = MID_STAKE * 8 / 10;
     s.client.deploy_to_vault(&deployed, &0);
     mock.set_rate_bps(&9_000);
+    let_growth_through(&env, 5_000); // CSO M2: harvest growth limit needs time
     // The real vault enforces the floor itself; switch that off to prove the
     // pool's own guard still catches it (defence in depth).
     mock.disable_min_check();
@@ -761,6 +764,7 @@ fn withdraw_yield_requires_a_treasury_harvest_does_not() {
     let (vault_id, mock) = with_vault(&env, &s, 5_000);
     s.client.deploy_to_vault(&(MID_STAKE / 4), &0);
     mock.set_rate_bps(&11_000);
+    let_growth_through(&env, 5_000); // CSO M2: harvest growth limit needs time
     s.token_admin.mint(&vault_id, &MID_STAKE);
 
     assert!(s.client.try_harvest().is_ok());
@@ -813,6 +817,7 @@ fn withdraw_yield_enforces_v8s_double_gate() {
     let deployed = MID_STAKE * 8 / 10;
     s.client.deploy_to_vault(&deployed, &0);
     mock.set_rate_bps(&11_000);
+    let_growth_through(&env, 5_000); // CSO M2: harvest growth limit needs time
     s.token_admin.mint(&vault_id, &deployed);
     let yield_amount = s.client.harvest();
     let (staker_reserved, _) = s.client.get_yield_reserved();

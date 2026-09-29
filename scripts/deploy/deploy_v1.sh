@@ -97,6 +97,13 @@ POOL=$(stellar contract deploy --wasm "$WASM_DIR/protection_pool.wasm" "${S[@]}"
   --co_signer "$CO_SIGNER" --guardian "$GUARDIAN" --xlm_token "$ASSET_TOKEN" \
   --pool_cap "$POOL_CAP" | tail -1)
 
+# CSO M1 (2026-09-29): lock the pool in the very next transaction. Until the vault, treasury and
+# deploy ceiling are set, nobody can stake or back, so nobody can end instant setup early (the
+# first money starts the 7-day wait for those changes). Governance still works while locked.
+# Unlock with `unpause` once setup is done. The lock ends by itself after 30 days (PAUSE_MAX_SECONDS).
+echo "locking the pool until setup is done"
+stellar contract invoke --id "$POOL" "${S[@]}" -- pause > /dev/null
+
 echo "deploying covered-registry"
 REGISTRY=$(stellar contract deploy --wasm "$WASM_DIR/covered_registry.wasm" "${S[@]}" -- \
   --writer "$REGISTRY_WRITER" --pool "$POOL" | tail -1)
@@ -123,6 +130,7 @@ check "pool admin"       "$(view "$POOL" get_admin)"     "$ADMIN"
 check "pool co_signer"   "$(view "$POOL" get_co_signer)" "$CO_SIGNER"
 check "pool guardian"    "$(view "$POOL" get_guardian)"  "$GUARDIAN"
 check "pool oracle"      "$(view "$POOL" get_oracle)"    "$ORACLE"
+check "pool locked"      "$(view "$POOL" is_paused)"     "true"
 check "registry writer"  "$(view "$REGISTRY" get_writer)" "$REGISTRY_WRITER"
 check "registry pool"    "$(view "$REGISTRY" get_pool)"   "$POOL"
 check "stake adapter pool" "$(view "$STAKE_ADAPTER" pool)" "$POOL"
@@ -173,4 +181,6 @@ print(f"pool file updated: {pool_file} (commit it; rebuild the frontend; restart
 PY
   [ $? = 0 ] || { echo "POOL FILE NOT UPDATED: backend and frontend still point at the old contracts" >&2; fail=1; }
 fi
+echo "POOL IS LOCKED. Next: set vault, treasury and deploy ceiling (two roles, applies at once),"
+echo "then unlock: stellar contract invoke --id $POOL ${S[*]} -- unpause"
 exit $fail

@@ -310,6 +310,14 @@ pub fn staked_wallet_amount(env: &Env, s: &Setup, amount: i128) -> (Address, Add
 /// without repeating the literal.
 pub const SECONDS_PER_LEDGER: u64 = 5;
 
+/// r3 (CSO M2): moves only the clock (not the ledger sequence, so no claim
+/// or cooldown timer moves) far enough for `harvest`'s daily growth limit to
+/// allow `growth_bps` of growth over book value.
+pub fn let_growth_through(env: &Env, growth_bps: i128) {
+    let days = (growth_bps / crate::types::HARVEST_MAX_GROWTH_BPS_PER_DAY + 1) as u64;
+    env.ledger().with_mut(|li| li.timestamp += days * crate::types::SECONDS_PER_DAY);
+}
+
 pub fn advance_ledgers(env: &Env, n: u32) {
     env.ledger().with_mut(|li| {
         li.sequence_number += n;

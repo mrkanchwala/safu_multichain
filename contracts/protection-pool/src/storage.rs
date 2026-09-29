@@ -156,6 +156,8 @@ pub enum DataKey {
     /// r3: set on the first stake or first backing, never cleared. Until
     /// then, vault / treasury / deploy-ceiling changes need no 7-day wait.
     EverFunded,
+    /// r3 (CSO M2): time of the last successful harvest (the growth limit's clock).
+    LastHarvestAt,
 }
 
 // -----------------------------------------------------------------------
@@ -688,6 +690,15 @@ pub fn set_backer_yield_reserved(env: &Env, value: i128) {
 /// subtracts it; only yield payouts may spend it.
 pub fn get_yield_reserved(env: &Env) -> i128 {
     get_staker_yield_reserved(env) + get_backer_yield_reserved(env)
+}
+
+/// r3 (CSO M2): 0 until the first harvest attempt with money deployed.
+pub fn get_last_harvest_at(env: &Env) -> u64 {
+    env.storage().instance().get(&DataKey::LastHarvestAt).unwrap_or(0)
+}
+
+pub fn set_last_harvest_at(env: &Env, value: u64) {
+    env.storage().instance().set(&DataKey::LastHarvestAt, &value);
 }
 
 pub fn is_ever_funded(env: &Env) -> bool {

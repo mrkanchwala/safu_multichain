@@ -179,6 +179,7 @@ fn withdraw_yield_allows_exactly_the_liquid_balance_and_accumulates_it() {
     let deployed = bps_of(MID_STAKE, MAX_DEPLOY_BPS);
     s.client.deploy_to_vault(&deployed, &0);
     mock.set_rate_bps(&(BPS_DENOMINATOR + VAULT_MOVE_BPS));
+    let_growth_through(&env, 5_000); // CSO M2: harvest growth limit needs time
     s.token_admin.mint(&vault_id, &deployed);
     // r3: `harvest` (permissionless) replaces the admin `extract_yield`.
     let yield_amount = s.client.harvest();
@@ -348,12 +349,14 @@ fn deployment_shortfall_fires_on_a_loss_and_stays_silent_at_par() {
 
     // Par: proceeds exactly equal proportional principal.
     mock.set_rate_bps(&BPS_DENOMINATOR);
+    let_growth_through(&env, 5_000); // CSO M2: harvest growth limit needs time
     let before_par = env.events().all().events().len();
     s.client.provide_liquidity(&tranche, &0);
     let par_delta = env.events().all().events().len() - before_par;
 
     // Loss: the venue returns less than principal.
     mock.set_rate_bps(&(BPS_DENOMINATOR - VAULT_MOVE_BPS));
+    let_growth_through(&env, 5_000); // CSO M2: harvest growth limit needs time
     let before_loss = env.events().all().events().len();
     s.client.provide_liquidity(&tranche, &0);
     let loss_delta = env.events().all().events().len() - before_loss;
@@ -426,11 +429,13 @@ fn harvest_never_transfers_to_treasury_gain_or_no_gain() {
     // Par: no growth, so nothing is redeemed and no yield realised.
     // r3: `harvest` replaces the admin `extract_yield`.
     mock.set_rate_bps(&BPS_DENOMINATOR);
+    let_growth_through(&env, 5_000); // CSO M2: harvest growth limit needs time
     assert_eq!(s.client.harvest(), 0);
     assert_eq!(token.balance(&treasury), 0);
 
     // Gain: real yield is realised and split, but still nothing transfers.
     mock.set_rate_bps(&(BPS_DENOMINATOR + VAULT_MOVE_BPS));
+    let_growth_through(&env, 5_000); // CSO M2: harvest growth limit needs time
     s.token_admin.mint(&vault_id, &deployed);
     let gained = s.client.harvest();
     assert!(gained > 0, "test is vacuous without a real gain");

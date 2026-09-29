@@ -59,6 +59,7 @@ fn run(env: &Env, claims: usize) -> (Setup<'_>, Outcome) {
     s.client.deploy_to_vault(&deployed, &0);
     advance_days(env, 365);
     mock.set_rate_bps(&(BPS_DENOMINATOR + VAULT_APY_BPS));
+    let_growth_through(&env, 5_000); // CSO M2: harvest growth limit needs time
     s.token_admin.mint(&vault_id, &bps_of(deployed, VAULT_APY_BPS));
     // r3: `harvest` replaces the admin `extract_yield` (growth only).
     let realised_yield = s.client.harvest();

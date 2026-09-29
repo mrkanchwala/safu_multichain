@@ -21,7 +21,7 @@ use super::common::*;
 use super::d2_vault_tests::{with_vault, MockVaultClient};
 use crate::error::PoolError;
 use crate::settings::SettingKey;
-use crate::types::{BACKER_MATURITY_SECONDS, YIELD_INDEX_PRECISION};
+use crate::types::{BACKER_MATURITY_SECONDS, HARVEST_MAX_GROWTH_BPS_PER_DAY, YIELD_INDEX_PRECISION};
 use crate::{GovChange, GovKind};
 
 const MATURITY_LEDGERS: u32 = (BACKER_MATURITY_SECONDS / SECONDS_PER_LEDGER) as u32;
@@ -74,6 +74,8 @@ fn grow(s: &Setup<'_>, vault_id: &Address, mock: &MockVaultClient<'_>, rate_bps:
     mock.set_rate_bps(&rate_bps);
     mock.set_deposit_rate_bps(&(10_000 * 10_000 / rate_bps));
     s.token_admin.mint(vault_id, &s.client.get_capacity());
+    // The harvest growth limit (CSO M2) needs time to pass for this much growth.
+    let_growth_through(&vault_id.env(), rate_bps - 10_000);
 }
 
 // -----------------------------------------------------------------------
@@ -504,5 +506,57 @@ fn treasury_still_takes_its_full_share_when_nothing_else_is_owed_from_it() {
     assert!(protocol > 0);
     s.client.withdraw_yield(&protocol);
     assert_eq!(balance(&env, &s, &treasury), protocol);
+    assert_full_invariant(&s);
+}
+
+// -----------------------------------------------------------------------
+// CSO M1 / M2 (2026-09-29)
+// -----------------------------------------------------------------------
+
+/// M1: the deploy locks the pool until setup is done. While locked nobody can
+/// put money in (so nobody can end instant setup early), and the two roles
+/// can still set the vault and treasury at once. Unlocking opens it.
+#[test]
+fn a_locked_new_pool_refuses_money_but_still_takes_instant_setup() {
+    let env = new_env();
+    let s = setup(&env);
+    s.client.pause();
+    let b = new_funded_address(&env, &s, MID_STAKE);
+    assert!(s.client.try_back(&b, &MID_STAKE).is_err(), "money got in while locked");
+    assert!(!s.client.is_ever_funded());
+    assert_eq!(try_instant_treasury(&env, &s), Ok(()));
+    let vault = Address::generate(&env);
+    let change = GovChange::Vault(vault.clone());
+    s.client.propose_change(&s.admin, &change);
+    s.client.approve_change(&s.client.get_co_signer(), &change);
+    s.client.execute_change(&GovKind::Vault);
+    s.client.unpause();
+    staked_wallet(&env, &s);
+    assert!(s.client.is_ever_funded());
+}
+
+/// M2: a share price pushed up for a moment books at most the daily growth
+/// limit, nothing at all with no time passed. Real growth is not lost: later
+/// harvests take the rest once time allows it.
+#[test]
+fn a_price_pushed_up_for_a_moment_books_at_most_the_daily_limit() {
+    let env = new_env();
+    let s = setup(&env);
+    staked_wallet(&env, &s);
+    let (vault_id, mock, amount) = deployed(&env, &s);
+    mock.set_rate_bps(&20_000); // share value doubles in one step
+    s.token_admin.mint(&vault_id, &(3 * s.client.get_capacity()));
+
+    assert_eq!(s.client.harvest(), 0, "no time passed, nothing may be booked");
+
+    let_growth_through(&env, HARVEST_MAX_GROWTH_BPS_PER_DAY - 1); // one day
+    let first = s.client.harvest();
+    assert!(first > 0);
+    assert!(first <= bps_of(amount, HARVEST_MAX_GROWTH_BPS_PER_DAY), "booked {first} in one day");
+    assert_eq!(s.client.harvest(), 0, "calling again at once books nothing more");
+
+    let_growth_through(&env, 10_000); // long enough for all of it
+    let rest = s.client.harvest();
+    assert!(first + rest >= amount * 99 / 100, "real growth was lost: {}", first + rest);
     assert_full_invariant(&s);
 }

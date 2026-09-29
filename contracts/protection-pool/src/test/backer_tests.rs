@@ -507,6 +507,7 @@ fn yield_on_matured_backer_money_goes_to_backers() {
     let deployed = (2 * MID_STAKE) * 8_000 / 10_000;
     s.client.deploy_to_vault(&deployed, &0);
     mock.set_rate_bps(&11_000); // +10%
+    let_growth_through(&env, 5_000); // CSO M2: harvest growth limit needs time
     s.token_admin.mint(&vault_id, &deployed); // real tokens to pay above par
     let y = s.client.harvest();
     assert!(y > 0 && deployed / 10 - y <= 2);

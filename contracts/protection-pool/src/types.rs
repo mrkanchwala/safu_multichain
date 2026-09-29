@@ -206,6 +206,13 @@ pub const YIELD_SPLIT_BACKER_BPS: i128 = YIELD_SPLIT_BPS_DENOMINATOR;
 /// because a harvest books every unit it receives as yield: shares that come
 /// back short would leave the remaining position below its book value.
 pub const HARVEST_SLIPPAGE_BPS: i128 = 10;
+/// r3 (CSO M2, 2026-09-29): the most growth one harvest may take, per day
+/// since the last harvest, in bps of book value (10 bp/day, about 36% a year,
+/// far above any real vault yield). `harvest` reads the vault's live share
+/// value; if that value could be pushed up for one transaction, this bounds
+/// what a harvest can book as yield. Real growth above the limit is not
+/// lost: it stays in the vault and a later harvest takes it.
+pub const HARVEST_MAX_GROWTH_BPS_PER_DAY: i128 = 10;
 pub const YIELD_SPLIT_BPS_DENOMINATOR: i128 = 10_000;
 
 /// Fixed-point scale for `YieldIndex`. Chosen with headroom against i128

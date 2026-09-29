@@ -60,8 +60,9 @@ use soroban_sdk::{
 use crate::error::PoolError;
 use crate::storage;
 use crate::types::{
-    AUTO_PUSH_MIN_BPS, BPS_DENOMINATOR, DEPLOY_BPS_DENOMINATOR, HARVEST_SLIPPAGE_BPS,
-    MAX_REBALANCE_SLIPPAGE_BPS, YIELD_INDEX_PRECISION, YIELD_SPLIT_BPS_DENOMINATOR,
+    AUTO_PUSH_MIN_BPS, BPS_DENOMINATOR, DEPLOY_BPS_DENOMINATOR, HARVEST_MAX_GROWTH_BPS_PER_DAY,
+    HARVEST_SLIPPAGE_BPS, MAX_REBALANCE_SLIPPAGE_BPS, SECONDS_PER_DAY, YIELD_INDEX_PRECISION,
+    YIELD_SPLIT_BPS_DENOMINATOR,
 };
 
 // -----------------------------------------------------------------------
@@ -352,6 +353,10 @@ pub fn push_idle(env: &Env) {
 
 /// Shared accounting for every deposit into the vault.
 fn record_deposit(env: &Env, amount: i128, shares_gained: i128) {
+    // CSO M2: the harvest growth limit's clock starts with the first money deployed.
+    if storage::get_last_harvest_at(env) == 0 {
+        storage::set_last_harvest_at(env, env.ledger().timestamp().max(1));
+    }
     storage::set_total_deployed_shares(env, storage::get_total_deployed_shares(env) + shares_gained);
     storage::set_total_deployed_asset(env, storage::get_total_deployed_asset(env) + amount);
     storage::bump_instance_ttl(env);
@@ -1002,6 +1007,20 @@ pub fn harvest(env: &Env) -> i128 {
     if growth <= 0 || value <= 0 {
         return 0;
     }
+    // CSO M2 (2026-09-29): growth limit per day since the last harvest, so a
+    // share value pushed up for one transaction can book at most that much.
+    // The clock starts at the first attempt; it moves only when a harvest
+    // succeeds, so frequent callers cannot starve it.
+    let now = env.ledger().timestamp();
+    let last = storage::get_last_harvest_at(env);
+    if last == 0 {
+        storage::set_last_harvest_at(env, now);
+        return 0;
+    }
+    let elapsed = now.saturating_sub(last) as i128;
+    let limit = deployed_asset * HARVEST_MAX_GROWTH_BPS_PER_DAY * elapsed
+        / (BPS_DENOMINATOR * SECONDS_PER_DAY as i128);
+    let growth = growth.min(limit);
     // Floor: never redeem more shares than the growth is worth.
     let shares = growth * deployed_shares / value;
     if shares <= 0 {
@@ -1018,6 +1037,7 @@ pub fn harvest(env: &Env) -> i128 {
     }
     let received = liquid_balance(env) - liquid_before;
     storage::set_total_deployed_shares(env, deployed_shares - shares);
+    storage::set_last_harvest_at(env, now);
     credit_yield(env, received);
     received
 }
