@@ -2,10 +2,9 @@
 //!
 //! Money out (`withdraw`, `claim_stream`, `emergency_exit`,
 //! `complete_backer_withdrawal`) pulls from the vault when cash is short;
-//! money in (`stake`, `back`) pushes idle cash above the buffer. Spec:
-//! `outputs/2026-09-24_plan-eng-review-safu-in-path-liquidity-rebalancing.md`.
+//! money in (`stake`, `back`) pushes idle cash above the buffer.
 //!
-//! The second half stress-tests each exit path adversarially (founder,
+//! The second half stress-tests each exit path adversarially (
 //! 2026-09-24): can anyone game the pull or push to take more than their
 //! own money, strand someone else's, or break the accounting?
 
@@ -396,7 +395,7 @@ fn stress_many_stakers_in_and_out() {
 }
 
 // -----------------------------------------------------------------------
-// Adversarial: can money coming in be stolen? (founder, 2026-09-24)
+// Adversarial: can money coming in be stolen? (2026-09-24)
 // Backer signatures are covered in backer_tests (`only_auth_is`).
 // -----------------------------------------------------------------------
 

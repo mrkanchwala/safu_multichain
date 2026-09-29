@@ -21,7 +21,7 @@
 //! - All wallets, stakes, and "attacks" here are synthetic fixtures on a
 //!   fresh test contract instance, not real funds or a real incident.
 //! - Only the public entitlement formula (`min(stake x tier_ratio,
-//!   loss)`) and the real, audited on-chain entrypoints (`stake`,
+//!   loss)`) and the real on-chain entrypoints (`stake`,
 //!   `submit_claim`, `approve_claim`, `claim_stream`) are exercised.
 
 use soroban_sdk::Env;

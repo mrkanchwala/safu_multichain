@@ -22,7 +22,7 @@ import { useTick } from "../lib/useTick";
 import { toFriendlyError } from "../lib/friendly-error";
 import { TxStatus } from "./TxStatus";
 
-// Stake tab. Rebuilt 2026-09-24 (P5 Stage 2) for all three wallet families:
+// Stake tab. Rebuilt 2026-09-24 (multichain build) for all three wallet families:
 //   Stellar wallet  -> `stake` directly, signed by the wallet kit (unchanged).
 //   EVM / Solana    -> USDC burned on the home chain to the stake adapter over Circle's CCTP; the
 //                      relayer finishes it on Stellar, where the wallet's own safu-account stakes.

@@ -35,7 +35,7 @@ if [ "$IS_MAINNET" = 1 ] && [ "${CONFIRM_MAINNET:-}" != "yes" ]; then
 fi
 
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
-# WASM_DIR from the environment deploys prebuilt WASMs (the D-fast build from
+# WASM_DIR from the environment deploys prebuilt WASMs (the fast-clock build from
 # scripts/e2e/build_fast.sh) and skips the build, which would only rebuild contracts/.
 if [ -n "${WASM_DIR:-}" ]; then
   [ "$IS_MAINNET" = 0 ] || { echo "WASM_DIR override refused on mainnet" >&2; exit 1; }

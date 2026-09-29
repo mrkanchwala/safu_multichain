@@ -1,7 +1,7 @@
 import { USDC_DECIMALS } from "./network";
 import { addr, bytesn32, hexFromBytes, isLive, poolId, readContract } from "./soroban";
 
-// WIRED TO THE LIVE POOL, 2026-09-19 (post-B1 fix) -- these used to be Stage 1
+// WIRED TO THE LIVE POOL, 2026-09-19 (after the pool-read fix) -- these used to be Stage 1
 // stubs returning fixed dummy values regardless of real chain state, a leftover
 // from before the pool deployed. `isLive()` now gates each one exactly the way
 // `actions.ts`'s write path already did; when live, every read below is a real
@@ -21,7 +21,7 @@ import { addr, bytesn32, hexFromBytes, isLive, poolId, readContract } from "./so
 // exactly (types.rs:246-266) -- 8 states, u32-valued, not the old vault's
 // 7-state mock with different names.
 //
-// FIXED again 2026-09-19 (post-B1): the real `get_claim` struct, verified
+// FIXED again 2026-09-19 (after the pool-read fix): the real `get_claim` struct, verified
 // live against the deployed pool, has no `loss` or `payout` field -- those
 // were invented for the old mock. The real fields used here are `entitlement`
 // (what the oracle signed, capped at the tier ceiling) and `streamed` (how

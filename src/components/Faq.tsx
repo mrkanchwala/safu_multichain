@@ -86,7 +86,7 @@ const GROUPS: { id: string; title: string; items: { q: string; a: ReactNode }[] 
     items: [
       {
         q: "Is SAFU safe to use?",
-        a: "The contracts have their own test suites and fuzz testing, and every design choice we already know about is written up for the auditors. The Stellar contract goes through an independent audit before launch, and the report will be linked from this page. Your own keys never leave your wallet, and the pool only pays out against a signed, rule-checked result.",
+        a: "The contracts have their own test suites and fuzz testing, and every design choice we already know about is written up for the auditors. The Stellar contract gets an independent audit after launch. The report will be linked here. Your own keys never leave your wallet, and the pool only pays out against a signed, rule-checked result.",
       },
       {
         q: "Can someone else claim for my wallet?",

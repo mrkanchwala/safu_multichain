@@ -1,4 +1,4 @@
-//! v1 (2026-09-23, pre-audit gate P1): fuzz target for the CCTP path, on the
+//! v1 (2026-09-23, pre-audit hardening): fuzz target for the CCTP path, on the
 //! REAL stack: Circle's CCTP v2 contracts, the SAFU pool, both adapters (stake
 //! and back) and the per-user `safu-account` they deploy, all as release WASM.
 //! Owner actions carry real signed Soroban auth entries (EVM personal_sign /
@@ -25,7 +25,7 @@
 //!      action moves nothing. A successful send-home burns exactly what left
 //!      the account, in whole canonical units. A Solana send-home only
 //!      succeeds once a payout account is saved.
-//!   7. (/cso H-1, 2026-09-24) A Solana account's saved payout account is
+//!   7. (security review H-1, 2026-09-24) A Solana account's saved payout account is
 //!      exactly the first valid one any landed deposit carried: the owner's
 //!      own associated token account for the burned mint, never changed after,
 //!      never set from an EVM deposit, a thief's account or garbage.

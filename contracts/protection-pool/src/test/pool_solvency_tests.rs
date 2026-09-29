@@ -1,10 +1,10 @@
 #![cfg(test)]
-//! v1 (2026-09-22): pool solvency under the founder's liquidity model
+//! v1 (2026-09-22): pool solvency under the pool's liquidity model
 //! ("stake inflow > payouts": stakers are always repaid in full, nobody is
 //! deducted; a claim larger than the claimant's stake is funded from pooled
-//! liquidity). See memory/projects/safu/key-decisions.md.
+//! liquidity).
 //!
-//! Scenario (founder's numbers): $100K pool cap, filled by 1,000 stakers at
+//! Scenario (design numbers): $100K pool cap, filled by 1,000 stakers at
 //! the $100 max stake, 80% deployed to the vault, 5% yearly vault yield,
 //! yield split 50% stakers / 50% protocol, protocol share left in the pool.
 //!
@@ -153,7 +153,7 @@ fn solvency_one_claim_past_the_buffer_makes_the_last_withdrawer_wait_until_new_s
     );
     assert!(!o.stuck.is_empty(), "past the buffer, the last withdrawer must wait");
 
-    // Founder's model: new stake arrives and the stuck staker is repaid in full.
+    // The liquidity model: new stake arrives and the stuck staker is repaid in full.
     let newcomer = new_funded_address(&env, &s, STAKE);
     s.client.stake(&newcomer, &STAKE, &Address::generate(&env));
     let (staker, ben) = &o.stuck[0];

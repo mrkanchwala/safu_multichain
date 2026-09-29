@@ -1,6 +1,6 @@
 //! v1 (2026-09-22): adjustable pool settings.
 //!
-//! Founder decision: the pool is NOT upgradeable (no WASM swap, which could
+//! Design decision: the pool is NOT upgradeable (no WASM swap, which could
 //! change anything, including how funds move). Instead, a fixed list of
 //! numbers can change, each only inside hard bounds written here, and only
 //! through a public three-step path:
@@ -87,7 +87,7 @@ const VESTING_MAX: i128 = 90 * LEDGERS_PER_DAY as i128;
 const ADMIT_BPS_MIN: i128 = 1;
 const ADMIT_BPS_MAX: i128 = 2_500; // 25%/day, today's highest band
 const PAYOUT_BPS_MIN: i128 = 1;
-const PAYOUT_BPS_MAX: i128 = 600; // 6%/day ceiling on money leaving (founder)
+const PAYOUT_BPS_MAX: i128 = 600; // 6%/day ceiling on money leaving
 const BACKER_NOTICE_MAX: i128 = 90 * SECONDS_PER_DAY as i128;
 
 /// Defaults = the values the pool shipped with, so a fresh deploy behaves

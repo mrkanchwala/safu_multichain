@@ -60,7 +60,7 @@ paused), the USDC waits in the account. It is never lost; the owner can
    recomputes the PDA from the burner and the burned mint and ignores anything
    else. The account saves the first valid one for good, and every payout goes
    there. No withdrawal call takes a destination, so nothing signed later can
-   redirect money (pre-audit /cso H-1, 2026-09-24). A deposit without valid
+   redirect money (security review H-1, 2026-09-24). A deposit without valid
    hook data still lands; the user just can't send home until some deposit
    carries it. EVM burns need no hook data (payouts always go to the owner).
 
@@ -75,16 +75,16 @@ MessageTransmitterV2, `receive_message` on Solana). Someone pays that gas:
 - **Option B:** a SAFU relayer completes it. On Solana this needs a dedicated
   Solana relayer key (KMS alias reserved: `safu-solana-relayer`, not created).
 
-**DECIDED 2026-09-23 (founder): Option A.** The frontend hands the user a
+**DECIDED 2026-09-23: Option A.** The frontend hands the user a
 normal `receiveMessage` / `receive_message` transaction on their home chain;
 they approve and pay in their own wallet. No SAFU relayer on this leg, and
-**`safu-solana-relayer` is dropped** — do not create it. Because
+**`safu-solana-relayer` is dropped** , do not create it. Because
 `destinationCaller` is empty here, an abandoned payout is not lost: anyone,
 including SAFU ad hoc, can complete it later.
 
 **The inbound leg is the opposite and stays SAFU-paid.** After Circle attests
 a home-chain burn, a SAFU relayer calls `mint_and_stake` on Stellar and pays
-the XLM fee — the user holds no Stellar key by design. Built in Phase 4
+the XLM fee , the user holds no Stellar key by design. Built in Phase 4
 (Iris poll → `mint_and_stake`).
 
 ## Fees and decimals
@@ -103,12 +103,12 @@ Heaviest transaction (first deposit: Circle mint + account deploy + stake):
 14.1M instructions, 10.6 MB, against testnet limits of 400M / 40 MB
 (test `first_deposit_fits_network_limits`).
 
-## Testnet (throwaway, 2026-09-22; abandon at B4)
+## Testnet (throwaway, 2026-09-22; superseded)
 
 | | |
 |---|---|
 | Pool (Circle USDC, no vault) | `CAE2RCDPZG55ZQT7FT7GYBCFTCSWHN4T3EBXYVYDOX2N3UK6EDZHB5DX` |
-| Staking adapter | `CDJ4XO75RBZSDKNDPWCPYF6VFSU6335F77ZGPQGYX4P26FDIUCFCC7PH` (pre-backer build; redeploy for B4) |
+| Staking adapter | `CDJ4XO75RBZSDKNDPWCPYF6VFSU6335F77ZGPQGYX4P26FDIUCFCC7PH` (pre-backer build; superseded) |
 | Circle MessageTransmitterV2 / TokenMessengerMinterV2 | `CBJ6MTCK…VVJY` / `CDNG7HXA…RTHP` |
 | Circle testnet USDC SAC | `CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA` |
 

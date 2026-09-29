@@ -14,7 +14,7 @@ missing relay must not lose a genuine claim.
 
 ## Trust model, stated plainly
 
-- **Message verification is LayerZero's, not ours.** This contract calls the endpoint's `clear` before
+- **LayerZero verifies the messages.** This contract calls the endpoint's `clear` before
   it stores anything, and stores nothing if `clear` rejects (unit-tested against a rejecting endpoint).
   Whether the real endpoint rejects an unverified message is only proven by the live testnet e2e.
 - **The sender is pinned per source chain** via `set_peer`. A wrong or unconfigured sender is rejected
@@ -29,7 +29,7 @@ missing relay must not lose a genuine claim.
 - **No upgrade path.** The built wasm exposes no upgrade function.
 - **Entries expire.** A registration's storage TTL is bumped to about 120 days on write.
   `extend_registration_ttl(commitment)` is permissionless and refreshes it. After expiry `is_registered`
-  returns `None`, which degrades to the off-chain gate, not to a rejected claim.
+  returns `None`, which falls back to the off-chain gate and leaves the claim open.
 
 ## Scope of review
 

@@ -139,7 +139,7 @@ pub enum DataKey {
     TotalBackedPending,
     /// v1: per-backer record. Persistent.
     Backer(Address),
-    /// Pre-audit gate P2 (2026-09-23): the third governance role.
+    /// Pre-audit hardening (2026-09-23): the third governance role.
     Guardian,
     /// Timestamp a pause ends (0 = not paused). Replaces `Paused`.
     PausedUntil,

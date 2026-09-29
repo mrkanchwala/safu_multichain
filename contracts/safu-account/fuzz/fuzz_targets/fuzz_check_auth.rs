@@ -1,4 +1,4 @@
-//! v1 (2026-09-23, pre-audit gate P1): fuzz target for `safu-account`'s
+//! v1 (2026-09-23, pre-audit hardening): fuzz target for `safu-account`'s
 //! `__check_auth`, the only thing standing between a home-chain signature and
 //! the user's money.
 //!

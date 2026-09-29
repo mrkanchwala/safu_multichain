@@ -2,8 +2,7 @@
 //! 6 real bugs were found by hand during this session's audit (stale
 //! approval surviving a coSigner rotation, double-release of
 //! total_allocated on re-execution, false-insolvent on same-claim
-//! correction, etc., see outputs/2026-07-14_audit-chain-soroban-
-//! protectionpool.md in the research-ops repo). fuzz_solvency.rs never
+//! correction, etc., found in the 2026-07-14 security review). fuzz_solvency.rs never
 //! calls approve_override/cancel_pending_override/transfer_admin/
 //! set_co_signer at all, so this is genuinely new coverage, not a
 //! duplicate of the first target.
@@ -65,7 +64,7 @@ fuzz_target!(|ops: Vec<Op>| {
     let admins: Vec<Address> = (0..2).map(|_| Address::generate(&env)).collect();
     let co_signers: Vec<Address> = (0..2).map(|_| Address::generate(&env)).collect();
     let oracle = Address::generate(&env);
-    // Pre-audit gate P2: third governance role; roles rotate only through
+    // Pre-audit hardening: third governance role; roles rotate only through
     // governance (two roles + 7 days), exercised below.
     let guardian = Address::generate(&env);
 

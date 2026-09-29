@@ -6,7 +6,7 @@ import { toFriendlyError } from "../lib/friendly-error";
 import { EthereumIcon, SolanaIcon, StellarIcon, WalletConnectIcon } from "./Icons";
 import { POOL } from "../lib/pool";
 
-// One Connect button, two steps (redesigned 2026-09-25, founder): step 1 picks the chain, step 2
+// One Connect button, two steps (redesigned 2026-09-25): step 1 picks the chain, step 2
 // lists that chain's wallets. Stellar skips step 2: the wallet kit's own window already lists its
 // extensions + WalletConnect. Ethereum lists EIP-6963 browser wallets, Solana wallet-standard
 // ones; both end with WalletConnect (phone).

@@ -8,7 +8,7 @@
   --bg-panel-alt: #171717;
   --border: #232323;
   --text: #f4f4f2;
-  /* #9a9a9a -> #c4c4c0, 2026-09-25 (founder: grey was hard to read). Now
+  /* #9a9a9a -> #c4c4c0, 2026-09-25 (grey was hard to read). Now
      11.3 / 10.7 / 10.2:1 on bg / panel / panel-alt; white stays 18:1. */
   --text-muted: #c4c4c0;
   --font-display: "Fraunces", serif;

@@ -1,4 +1,4 @@
-// WalletConnect for Ethereum (Sepolia) and Solana (devnet), added 2026-09-25 (founder).
+// WalletConnect for Ethereum (Sepolia) and Solana (devnet), added 2026-09-25.
 //
 // Same pattern the Stellar wallet kit's own WalletConnect module uses (node_modules/@creit.tech/
 // stellar-wallets-kit/esm/sdk/modules/wallet-connect.module.js): SignClient owns the session,
@@ -35,7 +35,7 @@ const EVM_CHAIN = `eip155:${EVM_CHAIN_ID}`;
 const EVM_NETWORK = IS_MAINNET ? mainnet : sepolia;
 const SOL_NETWORK = IS_MAINNET ? solana : solanaDevnet;
 const SOL_CHAIN = SOL_NETWORK.caipNetworkId;
-// Mainnet ids are ASKED FOR TOO (founder phone test 2026-09-25): a proposal listing only testnets
+// Mainnet ids are ASKED FOR TOO (phone test 2026-09-25): a proposal listing only testnets
 // is rejected by most phone wallets -- Rainbow "Unsupported chains" (5100), Trust "User rejected"
 // (5000) on Solana devnet. Nothing is ever sent on mainnet:
 //  * Ethereum still needs Sepolia in the approved session (eth_sendTransaction is chain-bound);

@@ -8,8 +8,7 @@
 //! Every function that used to trap now returns `Err(PoolError::...)` on
 //! the same conditions, in the same order, with no behavior change beyond
 //! the caller now getting a typed error code instead of an opaque panic
-//! message. See `error.rs` for the enum + `outputs/2026-07-31_plan-eng-review-
-//! safu-soroban-typed-errors.md` (research-ops repo) for why.
+//! message. See `error.rs` for the enum.
 
 use soroban_sdk::{contractevent, Address, BytesN, Env};
 
@@ -17,7 +16,7 @@ use crate::error::PoolError;
 use crate::storage;
 use crate::types::{ClaimStatus, StakeRecord, APPROVE_WINDOW_LEDGERS};
 
-// Pre-audit gate P2 (2026-09-23, M2): admin actions emit events, so stakers,
+// Pre-audit hardening (2026-09-23, M2): admin actions emit events, so stakers,
 // monitors and the keeper see every one (T3's Repudiate.2 finding).
 
 /// A pause ends on its own after this long; the admin can renew it. So a
@@ -96,7 +95,7 @@ pub fn initialize(
     if env.storage().instance().has(&crate::storage::DataKey::Admin) {
         return Err(PoolError::AlreadyInitialized);
     }
-    // V8 (S4 audit checklist item): oracle != coSigner enforced at
+    // V8 (audit checklist item): oracle != coSigner enforced at
     // construction and at every setter. V8 constructor also requires
     // coSigner != owner (msg.sender), missing from the first build pass,
     // found on full source read (2026-07-14).
@@ -106,7 +105,7 @@ pub fn initialize(
     if co_signer == admin {
         return Err(PoolError::CoSignerEqualsAdmin);
     }
-    // Pre-audit gate P2: the guardian is the third governance role.
+    // Pre-audit hardening: the guardian is the third governance role.
     crate::governance::check_roles_distinct(admin, co_signer, guardian, oracle)?;
     if pool_cap <= 0 {
         return Err(PoolError::PoolCapNotPositive);

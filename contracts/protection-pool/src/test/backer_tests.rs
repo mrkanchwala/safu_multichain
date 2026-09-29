@@ -1,5 +1,5 @@
 #![cfg(test)]
-//! v1 (2026-09-22): backers. One test per locked rule (founder: "test
+//! v1 (2026-09-22): backers. One test per locked rule ("test
 //! everything"): maturity (rule 4), notice + still counted during it (rule 2),
 //! only free capital leaves (rule 3), own address + own signature only
 //! (rule 1), full amount back, pause behaviour, and every capacity site that

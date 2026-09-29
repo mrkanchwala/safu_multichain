@@ -8,15 +8,13 @@
 //! withdrawal paths with no cooldown to react inside, `stake::withdraw`
 //! (no time lock) and `stake::emergency_exit` (runs while paused).
 //!
-//! Design locked by `outputs/2026-08-14_plan-eng-review-safu-t2-d2-yield-integration.md`:
+//! Design locked by the 2026-08-14 engineering review:
 //!
 //! 1. The FIRST deposit is a separate admin call (`deploy_to_vault`): it
 //!    sets the reference rate every later deposit is checked against.
 //! 2. Bounded by `deploy_bps` (hard-capped at `MAX_DEPLOY_BPS`) and floored
 //!    so it can never deploy XLM already reserved as `total_allocated`.
-//! 3. SUPERSEDED 2026-09-24 (founder; `outputs/2026-09-24_mechanism-review-
-//!    safu-in-path-liquidity-pull.md`, `..._plan-eng-review-safu-in-path-
-//!    liquidity-rebalancing.md`): was "never auto-unwound from a user path".
+//! 3. SUPERSEDED 2026-09-24 (design and engineering review): was "never auto-unwound from a user path".
 //!    The pool now rebalances itself inside user calls, both ways:
 //!    - money out (`withdraw`, `claim_stream`, `emergency_exit`,
 //!      `complete_backer_withdrawal`): `pull_for_payment` redeems from the
@@ -190,7 +188,7 @@ pub struct DeploymentShortfall {
 
 /// v1 (2026-09-24): an in-path push got fewer shares than the contract's
 /// own reference rate allows. The shares actually received are recorded
-/// (accounting stays true, founder decision A); this makes it visible.
+/// (accounting stays true, design decision A); this makes it visible.
 #[contractevent]
 pub struct PushBelowFloor {
     #[topic]
@@ -826,8 +824,8 @@ pub fn ensure_liquidity(env: &Env) -> Result<i128, PoolError> {
     let claims_shortfall = (total_allocated - liquid).max(0);
     //
     // 2. OVER-CEILING DRIFT: the vault position is a larger share of the
-    //    pool than `deploy_bps` allows. This is the case the founder
-    //    identified 2026-08-24: stakers withdrawing shrinks `total_staked`
+    //    pool than `deploy_bps` allows. This is the case identified
+    //    2026-08-24: stakers withdrawing shrinks `total_staked`
     //    while `deployed_asset` is unchanged, so the RATIO climbs above the
     //    configured line without a single new deployment. `vault.rs`
     //    previously documented this as "drift, not a breach... resolved by
@@ -878,7 +876,7 @@ pub fn ensure_liquidity(env: &Env) -> Result<i128, PoolError> {
 /// above proportional principal. Principal stays in the contract, exactly
 /// as V8 does.
 ///
-/// CHANGED 2026-09-18 (founder decision): the realised excess used to go
+/// CHANGED 2026-09-18 (design decision): the realised excess used to go
 /// 100% to treasury on the spot. It now SPLITS at `YIELD_SPLIT_STAKER_BPS`
 /// (50/50): the staker half compounds into `YieldIndex` (every live staker's
 /// withdrawable balance grows proportionally: see `stake.rs::withdraw`),
@@ -924,7 +922,7 @@ pub fn extract_yield(env: &Env, shares: i128, min_asset_out: i128) -> Result<i12
         if total_staked > 0 {
             // v1: only yield earned on STAKER capital is shareable with
             // stakers (their fraction of capacity); yield on backer money
-            // goes to the protocol (founder decision 2026-09-22).
+            // goes to the protocol (design decision, 2026-09-22).
             let staker_capital_yield = yield_amount * total_staked / storage::get_capacity(env);
             staker_share = staker_capital_yield
                 * crate::settings::get(env, crate::settings::SettingKey::StakerYieldBps)
@@ -965,7 +963,7 @@ pub fn extract_yield(env: &Env, shares: i128, min_asset_out: i128) -> Result<i12
 }
 
 /// V8 `withdrawYield` (`:860`), send the protocol's own realised yield
-/// share to treasury. "The protocol's own money" (founder), it already sat
+/// share to treasury. "The protocol's own money", it already sat
 /// in `ProtocolYieldBalance` since `extract_yield` credited it there;
 /// nothing new is realised or computed here, only paid out.
 ///

@@ -19,14 +19,14 @@ mod d1_signature_tests;
 /// as `d1_signature_tests`: this covers the liquid-vs-deployed accounting
 /// layer and its invariant, not pool mechanics.
 mod d2_vault_tests;
-/// Pre-audit gate P2 (2026-09-23): key-loss-safe governance scenarios.
+/// Pre-audit hardening (2026-09-23): key-loss-safe governance scenarios.
 mod governance_tests;
 /// v1 (2026-09-24): in-path two-way rebalancing, plus adversarial stress on
 /// every exit path (can the pull/push be gamed?).
 mod inpath_liquidity_tests;
 mod mutation_gap_tests;
 mod override_tests;
-/// Pre-audit gate P2 (2026-09-23): the two `/audit-chain` findings.
+/// Pre-audit hardening (2026-09-23): the two `/audit-chain` findings.
 mod p2_findings_tests;
 mod pool_demo_tests;
 mod pool_solvency_tests;

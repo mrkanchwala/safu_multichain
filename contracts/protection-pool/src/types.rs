@@ -29,7 +29,7 @@ pub const LEDGERS_PER_DAY: u32 = 17_280;
 /// the LEDGERS_PER_DAY constants above, which drive duration/gate math
 /// off `env.ledger().sequence()`. Soroban exposes both `sequence()` (a
 /// ledger number) and `timestamp()` (real Unix seconds) on `env.ledger()`;
-/// mixing them for their respective purposes is deliberate, not sloppy.
+/// mixing them for their respective purposes is deliberate.
 pub const SECONDS_PER_DAY: u64 = 86_400;
 /// 30-day window after a hack within which the claim must be submitted,
 /// expressed in real seconds (compared against `env.ledger().timestamp()`
@@ -41,7 +41,7 @@ pub const CLAIM_WINDOW_SECONDS: u64 = 30 * SECONDS_PER_DAY;
 pub const BPS_DENOMINATOR: i128 = 10_000;
 
 /// 90-day time gate before a stake is claim-eligible (V8: CLAIM_MIN_DAYS).
-/// Production value, restored from T3 for the v1 build (founder decision
+/// Production value, restored from T3 for the v1 build (design decision
 /// 2026-09-22). Fixed forever: not one of the adjustable settings.
 pub const TIME_GATE_LEDGERS: u32 = 90 * LEDGERS_PER_DAY;
 /// Cooldown between claim activation and first payout stream. Production
@@ -65,7 +65,7 @@ pub const PENALTY_LOCK_LEDGERS: u32 = 365 * LEDGERS_PER_DAY;
 // un-revokes that approval. These two constants exist to make that failure
 // mode unreachable, and the const-assert below is what proves it rather
 // than leaving it to convention (eng review, Warning 6 / revocation-TTL
-// resolution, `outputs/2026-08-13_plan-eng-review-safu-t2-d1-ed25519.md`).
+// resolution, 2026-08-13).
 // -----------------------------------------------------------------------
 
 /// Maximum lifetime of a single oracle approval signature, in real seconds.
@@ -101,9 +101,8 @@ const _: () = assert!(
     "revocation TTL must outlive the longest legal approval deadline"
 );
 
-/// Points burn-on-claim mechanism (locked 2026-07-22, task plan
-/// `outputs/2026-07-22_task-plan-safu-points-burn-mechanism.md`, eng review
-/// `outputs/2026-07-22_plan-eng-review-safu-points-burn-mechanism.md`).
+/// Points burn-on-claim mechanism (locked 2026-07-22 after an
+/// engineering review).
 ///
 /// Rule A: once a claim's 90-day time gate is met, the staker has this long
 /// to actively call `approve_claim` (which burns their full lifetime points
@@ -141,11 +140,10 @@ pub const COLLECTION_INACTIVITY_LEDGERS: u32 = 100 * LEDGERS_PER_DAY;
 // deploy policy here would therefore break principal withdrawal as well as
 // claims.
 //
-// Locked design (eng review 2026-08-14,
-// `outputs/2026-08-14_plan-eng-review-safu-t2-d2-yield-integration.md`):
+// Locked design (eng review 2026-08-14):
 // deployment is bounded by `deploy_bps` and floored so it can never touch
 // already-reserved entitlements. The 2026-08-14 rule "NEVER auto-unwound from
-// any user-facing path" was SUPERSEDED 2026-09-24 (founder): the pool now
+// any user-facing path" was SUPERSEDED 2026-09-24: the pool now
 // pulls from the vault inside a payment when cash is short and pushes idle
 // cash in on stake/back, both through `try_` calls that leave no state behind
 // on a vault failure. See vault.rs module doc, rule 3.
@@ -180,14 +178,15 @@ pub const MAX_REBALANCE_SLIPPAGE_BPS: i128 = 500;
 pub const AUTO_PUSH_MIN_BPS: i128 = 100;
 
 // -----------------------------------------------------------------------
-// Yield split: added for the Stellar Pro Hackathon fork (2026-09-18,
-// founder decision). `extract_yield` used to send 100% of realised yield to
-// treasury. Now it splits: half compounds into every live staker's balance
+// Yield split: added 2026-09-18 (design
+// decision). `extract_yield` used to send 100% of realised yield to
+// treasury. Now it splits by the adjustable `StakerYieldBps` setting (default
+// below: 100% to stakers). The staker share compounds into every live staker's balance
 // (via `YieldIndex`, an Aave-style growing multiplier, NOT a per-user
 // share token, which would reopen the classic ERC4626 first-depositor
-// donation-attack surface), half becomes protocol-owned money sitting in
+// donation-attack surface); any remainder becomes protocol-owned money sitting in
 // the pool, withdrawable by the admin at any time via `withdraw_yield`
-// ("the protocol's own money", founder's words, not auto-transferred the
+// ("the protocol's own money", not auto-transferred the
 // moment it is realised).
 //
 // Deliberately does NOT touch `StakeRecord.amount` or `tier_cap`'s input.
@@ -195,9 +194,9 @@ pub const AUTO_PUSH_MIN_BPS: i128 = 100;
 // principal (already bounded by MAX_STAKE_BPS below) forever, yield never
 // inflates how much a wallet can be paid on a claim, only how much it can
 // withdraw voluntarily. "if the yield+principal is 2% [of pool cap], it
-// still caps the protection to 1.25%" (founder).
+// still caps the protection to 1.25%".
 /// v1 (2026-09-22): DEFAULT of the adjustable `StakerYieldBps` setting.
-/// Founder decision: 100% of yield on staker capital goes to stakers.
+/// Design decision: 100% of yield on staker capital goes to stakers.
 pub const YIELD_SPLIT_STAKER_BPS: i128 = 10_000;
 pub const YIELD_SPLIT_BPS_DENOMINATOR: i128 = 10_000;
 
@@ -218,7 +217,7 @@ pub const YIELD_INDEX_PRECISION: i128 = 1_000_000_000_000;
 // with different pool sizes (EVM/Solana/BNB relaunches) without
 // re-deriving bounds by hand each time, this is meant to be the reusable
 // base pattern, not a Soroban-only fix.
-// SET 2026-09-19 (founder, this build): $10 min / $100 max per staker at the
+// SET 2026-09-19 : $10 min / $100 max per staker at the
 // $100,000 USDC deploy target -- no longer V8's ratio. Both land on clean
 // integers at this pool cap (100_000 * 1 / 10_000 = 10, * 10 / 10_000 = 100),
 // so no rounding approximation is needed, unlike the superseded V8-matching
@@ -329,9 +328,9 @@ pub struct StakeRecord {
     /// is untouched until release), but the wallet still can't queue a
     /// second one without this guard.
     pub reserved_claim_id: Option<BytesN<32>>,
-    /// Pre-audit gate P2 (2026-09-23): set when a claim on this stake is
+    /// Pre-audit hardening (2026-09-23): set when a claim on this stake is
     /// approved (the stake is forfeited). The address can never stake again
-    /// (founder rule). Cleared only by `cancel_claim` undoing that claim.
+    /// (pool rule). Cleared only by `cancel_claim` undoing that claim.
     pub claim_approved: bool,
 }
 
@@ -340,7 +339,7 @@ pub struct StakeRecord {
 // -----------------------------------------------------------------------
 
 /// How long new backer money waits before it counts toward capacity
-/// (withdrawal-safety rule 4). Fixed in code, not a setting (founder
+/// (withdrawal-safety rule 4). Fixed in code, not a setting (design
 /// decision 2026-09-22): it is the guard against deposit spike -> admit
 /// claims -> pull out.
 pub const BACKER_MATURITY_SECONDS: u64 = 7 * SECONDS_PER_DAY;

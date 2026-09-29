@@ -4,7 +4,7 @@
 //! (a confidence signal for stakers). Backers earn nothing: yield on backer
 //! money goes to the protocol (vault.rs `extract_yield`). Anyone can back.
 //!
-//! No loss accounting (founder decision 2026-09-22, same as stakers): a
+//! No loss accounting (design decision 2026-09-22, same as stakers): a
 //! backer always gets back exactly what they put in. What makes backers the
 //! last line of defence is rule 3 below: a staker can leave with only a
 //! liquidity check, a backer can only take out capital that open claims do

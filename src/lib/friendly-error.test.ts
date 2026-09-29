@@ -54,7 +54,7 @@ describe("toFriendlyError", () => {
     expect(result.raw).toBe("plain string rejection");
   });
 
-  // 2026-09-25 founder live test: these all reached users as the generic line.
+  // 2026-09-25 live test: these all reached users as the generic line.
   it("translates a contract error inside a relay detail", () => {
     const r = toFriendlyError(new Error("PREPARE_FAILED: HostError: Error(Contract, #62) ..."));
     expect(r.message).toContain("payout hasn't started");

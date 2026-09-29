@@ -6,7 +6,7 @@
 //! of `protection-pool` (mechanism review 2026-09-22: in the pool it gives
 //! neither uniqueness nor enforcement).
 //!
-//! Rules (founder, locked 2026-09-22):
+//! Rules (locked 2026-09-22):
 //! - Up to `MAX_WALLETS_PER_STAKER` (3) wallets per staker. A constant.
 //! - A wallet belongs to ONE staker, and FOREVER. There is no deregister,
 //!   swap or admin override: nothing in this contract removes or moves a
@@ -27,7 +27,7 @@
 //! Because registrations are permanent, a compromised writer could bind a
 //! wallet to the wrong staker for good: the writer key belongs on KMS.
 //!
-//! Writer changes (pre-audit gate P2, 2026-09-23): only the pool can set a
+//! Writer changes (pre-audit hardening, 2026-09-23): only the pool can set a
 //! new writer, through the pool's own governance (any 2 of its 3 roles, 7
 //! days public, with 90-day recovery if keys are lost). One governance for
 //! the whole system, so the registry can never be stranded by a lost key.

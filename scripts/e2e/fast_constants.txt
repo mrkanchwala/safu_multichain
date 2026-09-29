@@ -1,4 +1,4 @@
-# Duration constants replaced in the D-fast build (P5 testnet e2e).
+# Duration constants replaced in the fast-clock build (testnet end-to-end run).
 # Format: <path under contracts/> | <exact production line, trimmed> | <fast line, trimmed>
 # build_fast.sh fails if any production line is missing or not unique, and its diff guard fails
 # if the fast tree differs from contracts/ in any line not listed here.

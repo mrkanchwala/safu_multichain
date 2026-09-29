@@ -206,7 +206,7 @@ fn tampered_tier_is_rejected() {
     let sig = sign_approval(&env, &s, &staker, &txh, &ENTITLEMENT, &TIER_C, &hack, &deadline);
 
     // Tier C -> Tier A would triple the coverage cap. V8 added tier to the
-    // signed payload for exactly this reason (its "B2 fix").
+    // signed payload for exactly this reason (an earlier fix).
     let tier_a: u32 = 1;
     assert_signature_trap(submit_raw(
         &s, &s.oracle, &staker, &txh, &ENTITLEMENT, &tier_a, &hack, &deadline, &sig,
@@ -481,7 +481,7 @@ fn rotating_the_pubkey_invalidates_old_signatures_and_accepts_new_ones() {
     let s = setup(&env);
     let (staker, _ben) = staked_wallet(&env, &s);
     let new_key = other_signing_key();
-    // Pre-audit gate P2: the oracle moves only through governance (7 days).
+    // Pre-audit hardening: the oracle moves only through governance (7 days).
     gov_apply(&env, &s, crate::GovChange::Oracle(s.oracle.clone(), verifying_key_bytes(&env, &new_key)));
 
     // Signed after the wait so the deadline is live: only the key differs.
@@ -716,7 +716,7 @@ fn revoking_a_deadline_beyond_the_max_window_is_rejected() {
 }
 
 // -----------------------------------------------------------------------
-// Pre-audit gate P2: the admin's unsigned claim path is removed
+// Pre-audit hardening: the admin's unsigned claim path is removed
 // -----------------------------------------------------------------------
 
 #[test]

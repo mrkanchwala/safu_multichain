@@ -553,7 +553,7 @@ impl ProtectionPool {
     }
 
     /// The protocol's own realised, unwithdrawn yield share, "the
-    /// protocol's own money" (founder), withdrawable any time via
+    /// protocol's own money", withdrawable any time via
     /// `withdraw_yield`. CHANGED 2026-09-18: now reads the explicit
     /// `ProtocolYieldBalance` counter, not the removed residual formula
     /// (documented bug history: see vault.rs).

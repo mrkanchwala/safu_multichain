@@ -17,7 +17,7 @@ import { IS_MAINNET, POOL } from "./pool";
 const STELLAR_WALLET_NETWORK = IS_MAINNET ? Networks.PUBLIC : Networks.TESTNET;
 import type { WcSession } from "./walletconnect";
 
-// Wallet scope, 2026-09-25 (founder): WalletConnect on all 3 chains plus extension wallets.
+// Wallet scope, 2026-09-25: WalletConnect on all 3 chains plus extension wallets.
 // WalletConnect had been kept out because safustaking.com's project id is domain-allowlisted to
 // safustaking.com and this app lived elsewhere. It moved to the safustaking.com root on 2026-09-25,
 // and the same project id was verified live on /t3 (QR + relay pairing, Ethereum and Stellar).
@@ -25,12 +25,12 @@ import type { WcSession } from "./walletconnect";
 // WalletConnect = lib/walletconnect.ts. Both are dynamic imports: ~2 MB each, only on demand.
 // Extensions added: xBull, LOBSTR, Rabet, Hana (Stellar); any wallet-standard Solana wallet.
 //
-// HOT Wallet added 2026-09-20 (founder ask -- Freighter only supports one active account per
+// HOT Wallet added 2026-09-20 (requested: Freighter only supports one active account per
 // browser profile, so testing two payout wallets meant re-importing a seed each time).
 // CONFIRMED NON-FUNCTIONAL FOR THIS BUILD, same day: HOT Wallet's own Stellar adapter
 // (node_modules/@hot-wallet/sdk/src/adapter/stellar.ts) hardcodes getNetwork() to
 // "Public Global Stellar Network" with no testnet branch anywhere in the source -- not a default,
-// the only value it can ever return. The founder independently confirmed HOT's own app shows no
+// the only value it can ever return. We independently confirmed HOT's own app shows no
 // Stellar testnet option at all. Left in the module list anyway (harmless, clearly its own
 // product, does not affect Freighter/Albedo) -- pull it before a public submission if an
 // unexplained dead option in the connect modal is worse than the polish gain of leaving it.
@@ -103,7 +103,7 @@ function loadStellarWalletConnect(): Promise<void> {
   return stellarWcReady;
 }
 
-// --- EVM + Solana, added 2026-09-24 (P5 Stage 2) -------------------------------------------------
+// --- EVM + Solana, added 2026-09-24 (multichain build) -------------------------------------------------
 // EVM: EIP-6963 extension discovery + legacy window.ethereum, the same connection model as
 // safustaking.com (website/js/connector-evm.js), plus WalletConnect (lib/walletconnect.ts).
 // Solana: any wallet-standard extension that can sign Solana transactions (was limited to

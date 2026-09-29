@@ -22,8 +22,8 @@ function poolConfig(mode: string) {
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => ({
-  // Served from the safustaking.com domain root (site exchange 2026-09-25:
-  // /prohackathon retired, the old T3 site moved to /t3). Asset URLs are
+  // Served from the safustaking.com domain root (since 2026-09-25;
+  // the older T3 site lives at /t3). Asset URLs are
   // root-absolute (/assets/...), matching nginx's root for this dist.
   base: '/',
   // HOT Wallet's SDK expects Node's global/Buffer -- see src/lib/client.tsx.

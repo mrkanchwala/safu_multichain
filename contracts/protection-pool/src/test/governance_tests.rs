@@ -1,4 +1,4 @@
-//! Pre-audit gate P2 (2026-09-23): key-loss-safe governance. One test per
+//! Pre-audit hardening (2026-09-23): key-loss-safe governance. One test per
 //! scenario from the mechanism review: a lost role, a stolen role, two lost
 //! roles, and the pause that ends on its own.
 

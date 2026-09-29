@@ -4,7 +4,7 @@ For the security auditor, not end users. Items here are deliberate design choice
 with measured consequences, disclosed up front so they are not reported as
 undiscovered findings. Each one points to the test or script that measures it.
 
-## 1. Pool liquidity model: stake inflow > payouts (founder decision, 2026-09-22)
+## 1. Pool liquidity model: stake inflow > payouts (design decision, 2026-09-22)
 
 **Behaviour.** Stakers are always repaid their full principal (plus their yield
 share); no staker's balance is ever reduced after a claim. A claim larger than the
@@ -53,7 +53,7 @@ No WASM upgrade exists. A fixed set of numbers is adjustable within hard bounds
 Settings a live claim depends on (cooldown, vesting) are fixed on the claim at
 activation. Tests: `src/test/settings_tests.rs`.
 
-## 3. Key-loss-safe governance: 2 of 3 roles, 7-day delay, 90-day recovery (founder decision, 2026-09-23)
+## 3. Key-loss-safe governance: 2 of 3 roles, 7-day delay, 90-day recovery (design decision, 2026-09-23)
 
 **Behaviour.** Three roles: admin, co-signer, guardian (`src/governance.rs`). Every
 change that grants power or moves where money goes (the three roles, the oracle
@@ -78,7 +78,7 @@ own (section 4), so no money is frozen forever.
 
 **Tests.** `src/test/governance_tests.rs`.
 
-## 4. Admin alone can pause the pool and suspend a stake (/cso M-1, 2026-09-24: disclose, no change)
+## 4. Admin alone can pause the pool and suspend a stake (security review M-1, 2026-09-24: disclose, no change)
 
 **Behaviour.** `pause()` and `suspend_stake()` need the admin only (`src/admin.rs`).
 A pause lasts at most 30 days (`PAUSE_MAX_SECONDS`) and ends on its own, but the admin
@@ -96,7 +96,7 @@ and replacing the admin needs no contract change.
 
 **Tests.** `src/test/admin_tests.rs`, `src/test/governance_tests.rs`.
 
-## 5. The pool rebalances with its yield vault inside user calls (founder decision, 2026-09-24)
+## 5. The pool rebalances with its yield vault inside user calls (design decision, 2026-09-24)
 
 **Behaviour.** Up to 80% of capacity (`deploy_bps`) can sit in the DeFindex vault. The pool
 keeps that line itself, with no keeper (`src/vault.rs`, module doc rule 3):
@@ -114,7 +114,7 @@ keeps that line itself, with no keeper (`src/vault.rs`, module doc rule 3):
 - A pull accepts up to 5% below book value (`MAX_REBALANCE_SLIPPAGE_BPS`, enforced by the
   vault's own `min_amounts_out`). A realised loss is marked down in `total_staked` pool-wide,
   never on the exiting staker's own payout, and never on backers: backers are always repaid in
-  full (founder decision 2026-09-24: backers exist to build confidence, they never get burnt).
+  full (design decision 2026-09-24: backers exist to build confidence, they never get burnt).
   So during a vault loss, early exits are paid in
   full and the loss stays with those who remain (a bank-run shape). This exists without the
   in-path pull too (anyone can call `ensure_liquidity`); the pull only makes exiting faster.

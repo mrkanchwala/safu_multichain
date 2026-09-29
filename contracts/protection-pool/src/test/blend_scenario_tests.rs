@@ -2,7 +2,7 @@
 
 //! SCF #44 reviewer comment (1): "deliver a Blend exploit analysis with
 //! simulations showing how the protocol would have helped." This is that
-//! artifact, built directly against the real, audited `ProtectionPool`
+//! artifact, built directly against the real `ProtectionPool`
 //! contract (not a standalone wrapper script), see README.md "Blend/
 //! YieldBlox illustrative scenario" for the full narrative and disclosure.
 //!
@@ -22,7 +22,7 @@
 //!   and lives entirely off-chain, outside this repo.
 //! - Only the public entitlement formula (`min(stake x tier_ratio, loss)`,
 //!   already SAFU's own published protocol mechanic) is exercised, via
-//!   the real, audited on-chain `submit_claim`/`approve_claim`/
+//!   the real on-chain `submit_claim`/`approve_claim`/
 //!   `claim_stream` entrypoints, not re-derived or approximated.
 
 use soroban_sdk::{BytesN, Env};
@@ -44,7 +44,7 @@ const TIER_C: u32 = 3;
 /// `MAX_STAKE` constant (the contract's own real MAX_STAKE_BPS bound,
 /// "$1M" in this scenario's illustrative $-mapping). 10.8x stake mirrors
 /// the real, publicly-reported ~$10.8M Blend/YieldBlox loss against a
-/// "$1M" illustrative stake, same ratio the mechanism-review locked, not
+/// "$1M" illustrative stake, same ratio the design review locked, not
 /// a coincidence.
 const ILLUSTRATIVE_LOSS: i128 = MAX_STAKE * 108 / 10;
 
@@ -157,19 +157,17 @@ fn ordinary_transaction_never_becomes_a_claim() {
 //
 // SCOPE, distinct from pool_demo_tests.rs -- read before changing this:
 // This models the HYPOTHETICAL protocol-level pool described in SAFU's
-// own submitted case study (outputs/2026-06-27_content-scf44-resubmission.md,
-// "Edit 1 -- Blend Simulation"): "SAFU runs two separate pools. The
+// own submitted case study ("Blend Simulation"): "SAFU runs two separate pools. The
 // individual pool covers personal wallet holders... The protocol pool is
 // funded by a Stellar seed plus DeFi protocols staking at institutional
 // minimums, and it covers protocol-level exploits across any pool
 // member." That protocol pool does NOT exist as a deployed contract --
 // SAFU has no live protocol-level pool product, confirmed in the
-// 2026-07-29 mechanism-review (outputs/2026-07-29_mechanism-review-safu-
-// scf-blend-integration-vs-pool.md) and locked as out of scope for this
+// 2026-07-29 design review and locked as out of scope for this
 // grant. This test therefore:
 // - Uses a SEPARATE, independent contract instance sized for
 //   institutional depositors (100x the real retail pool cap, per
-//   founder direction) -- NOT the live testnet contract, and does not
+//   chosen scale) -- NOT the live testnet contract, and does not
 //   claim to be. No live contract ID is referenced anywhere below.
 // - Uses the real Blend/YieldBlox tx hash and the real, publicly-
 //   reported loss scale as the incident anchor (same public facts the
@@ -180,7 +178,7 @@ fn ordinary_transaction_never_becomes_a_claim() {
 //   verified by the assertions below, never just asserted in prose.
 // -----------------------------------------------------------------------
 
-/// 100x the real retail pool cap (founder direction) -- an illustrative
+/// 100x the real retail pool cap (chosen scale) -- an illustrative
 /// institutional/protocol-pool size, not a deployed value.
 const PROTOCOL_POOL_CAP: i128 = DEMO_POOL_CAP * 100;
 
@@ -304,7 +302,7 @@ fn blend_protocol_pool_hypothetical_demo() {
     pause();
     println!(" same real submit_claim/approve_claim/claim_stream entrypoints");
     pause();
-    println!(" as the audited ProtectionPool contract, run in isolation.");
+    println!(" as the ProtectionPool contract, run in isolation.");
     pause();
     println!("================================================================");
     pause();
@@ -323,7 +321,7 @@ fn blend_protocol_pool_hypothetical_demo() {
     pause();
     print_solvency(&s, "pool funded");
 
-    // Same 10.8x stake:loss ratio the mechanism-review locked (mirrors
+    // Same 10.8x stake:loss ratio the design review locked (mirrors
     // the real, publicly-reported ~$10.8M Blend/YieldBlox loss against a
     // stake at the contract's own real per-depositor bound), now
     // expressed in this hypothetical pool's actual units so every number

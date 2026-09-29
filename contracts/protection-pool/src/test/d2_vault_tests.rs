@@ -629,7 +629,7 @@ fn redeem_bounds_are_enforced() {
 
 #[test]
 fn extract_yield_sends_only_the_excess_above_principal() {
-    // Rewritten 2026-09-18 for the yield split (founder decision): extract_yield
+    // Rewritten 2026-09-18 for the yield split (design decision): extract_yield
     // no longer auto-transfers to treasury at all, it splits the realised
     // excess 50/50 into YieldIndex (stakers) and ProtocolYieldBalance
     // (protocol, withdrawable later). Only withdraw_yield ever moves tokens

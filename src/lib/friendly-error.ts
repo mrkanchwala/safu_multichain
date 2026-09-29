@@ -2,7 +2,7 @@
  * Turns a raw wallet/backend/contract error into one plain sentence a user can act on: what
  * happened, whether their money is safe, and what to do next.
  *
- * Rewritten 2026-09-18 (dropped lending contract) and again 2026-09-25 after the founder's live
+ * Rewritten 2026-09-18 (dropped lending contract) and again 2026-09-25 after a live
  * test: relayed actions, contract errors and the app's own crosschain messages all reached users
  * as the generic line or as jargon ("burn", "reverted", "simulation"). Sources covered:
  *   - contract errors: "Error(Contract, #N)" inside simulation/relay details, N from

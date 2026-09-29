@@ -5,9 +5,8 @@
 //! `From`/enum-of-enums plumbing without changing the on-chain ABI shape.
 //! Variant names are module-prefixed-in-spirit via grouping/comments
 //! below, not via separate types, so the flat numbering stays a single
-//! source of truth. See `outputs/2026-07-31_plan-eng-review-safu-soroban-typed-errors.md`
-//! (research-ops repo) for why this conversion was done and the
-//! module-by-module rollout order (admin -> stake -> claim).
+//! source of truth. The conversion was rolled out module by module
+//! (admin -> stake -> claim).
 
 use soroban_sdk::contracterror;
 
@@ -245,12 +244,12 @@ pub enum PoolError {
     /// Requested more than the backer's matured balance.
     BackerAmountExceedsBalance = 112,
 
-    // -- pre-audit gate P2 (2026-09-23): stake/claim binding (113-116) --
+    // -- pre-audit hardening (2026-09-23): stake/claim binding (113-116) --
     /// A claim for this stake is queued. Withdraw or exit once it is
     /// released (then it runs its normal course) or has expired.
     ClaimQueuedForStake = 113,
     /// This address had a claim approved. It can never stake again
-    /// (founder rule 2026-09-23).
+    /// (rule set 2026-09-23).
     AddressHasApprovedClaim = 114,
     /// The stake behind this queued claim is no longer the one it was filed
     /// against. The claim can only expire.

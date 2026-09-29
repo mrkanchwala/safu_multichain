@@ -6,14 +6,14 @@
 //! a Stellar key: the account is the staker in the pool, and it accepts only
 //! its owner's home-chain signature (EVM secp256k1 or Solana Ed25519).
 //!
-//! Rules (founder, 2026-09-22):
+//! Rules (2026-09-22):
 //! - Money only ever leaves toward the owner's own home-chain address
 //!   (`send_home`). No other destination, no admin, no upgrade. No call
 //!   takes a destination, so no owner signature can redirect money.
 //!   Solana: CCTP mints to a USDC token account, not the wallet. The owner's
 //!   deposit names it in hook data, the adapter checks it is the owner's own
 //!   associated token account, and this account saves the first valid one
-//!   for good (pre-audit /cso H-1, 2026-09-24: a destination signed at
+//!   for good (security review H-1, 2026-09-24: a destination signed at
 //!   withdrawal was an opaque 32-byte hash, the phishing case SAFU covers).
 //! - Pool payouts and withdrawals land in the account itself (beneficiary =
 //!   the account), then go home.

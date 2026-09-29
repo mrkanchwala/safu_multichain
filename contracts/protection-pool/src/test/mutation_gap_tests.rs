@@ -638,7 +638,7 @@ fn claim_stream_cap_shrinking_mid_day_fails_gracefully_not_via_panic() {
 
 /// A forfeited stake (withdrawn=true, amount kept live) passes the
 /// `amount > 0 && !withdrawn` guard and is then refused by the lifetime ban
-/// (founder rule 2026-09-23: once a claim is approved, never stake again).
+/// (pool rule 2026-09-23: once a claim is approved, never stake again).
 /// Asserting the EXACT error still kills stake.rs's `&&`->`||` mutant: under
 /// `||` this record would hit `AlreadyStaked` instead.
 #[test]

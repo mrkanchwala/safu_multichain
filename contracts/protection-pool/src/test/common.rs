@@ -48,7 +48,7 @@ pub struct Setup<'a> {
     pub admin: Address,
     pub oracle: Address,
     pub co_signer: Address,
-    /// Pre-audit gate P2: the third governance role.
+    /// Pre-audit hardening: the third governance role.
     pub guardian: Address,
     pub token_admin: StellarAssetClient<'a>,
     pub token_id: Address,
@@ -467,7 +467,7 @@ pub fn set_setting_via_timelock(
     s.client.execute_setting(&key);
 }
 
-/// Pre-audit gate P2: make a governance change the only way production can:
+/// Pre-audit hardening: make a governance change the only way production can:
 /// one role proposes, a second approves the same change, 7 days pass, anyone
 /// executes. Picks two roles that are not the one being replaced, read live
 /// (a test may already have rotated one).

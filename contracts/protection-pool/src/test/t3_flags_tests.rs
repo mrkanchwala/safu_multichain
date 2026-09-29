@@ -682,7 +682,7 @@ fn ensure_liquidity_pulls_exactly_the_shortfall() {
     assert_invariant(&s);
 }
 
-/// The founder's case, 2026-08-24: stakers withdrawing shrinks `total_staked`
+/// Case found 2026-08-24: stakers withdrawing shrinks `total_staked`
 /// while `deployed_asset` is unchanged, so the vault's SHARE of the pool climbs
 /// above `deploy_bps` without a single new deployment. Previously documented
 /// as drift needing an admin `provide_liquidity`; `ensure_liquidity` now

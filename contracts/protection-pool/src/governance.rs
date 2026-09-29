@@ -1,7 +1,7 @@
-//! Pre-audit gate P2 (2026-09-23): key-loss-safe governance.
+//! Pre-audit hardening (2026-09-23): key-loss-safe governance.
 //!
 //! The pool is never upgraded, so it must survive losing or leaking any key
-//! for its whole life. Founder decision, after a scenario sweep (mechanism
+//! for its whole life. Design decision, after a scenario sweep (mechanism
 //! review 2026-09-23):
 //!
 //! - THREE roles: admin, co-signer, guardian. Each is meant to be a 2-of-3
@@ -10,7 +10,7 @@
 //!   its own signers against its medium threshold).
 //! - Standard path: any role proposes, a SECOND role approves the same
 //!   change, then it waits `GOV_DELAY_SECONDS` (7 days) in public, then
-//!   anyone executes. Cancelling also takes two roles (founder, 2026-09-23),
+//!   anyone executes. Cancelling also takes two roles (2026-09-23),
 //!   so a lone thief cannot keep cancelling honest changes. The role a
 //!   change replaces never counts, cannot propose it and cannot cancel it,
 //!   so a stolen role can neither block nor clog its own removal.

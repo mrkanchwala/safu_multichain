@@ -1,4 +1,4 @@
-//! Pre-audit gate P2 (2026-09-23): regression tests for the two findings of
+//! Pre-audit hardening (2026-09-23): regression tests for the two findings of
 //! the v1 `/audit-chain` pass. Each test asserts the CORRECT behaviour.
 //!
 //! H1: a queued (`Reserved`) claim did not block `withdraw`/`emergency_exit`,
@@ -7,7 +7,7 @@
 //!
 //! H2: staking again after an approved claim overwrote the stake record
 //! (clearing `suspended`, and letting a later `cancel_claim` restore money
-//! that had already left). Founder rule 2026-09-23: once a claim is approved,
+//! that had already left). Pool rule 2026-09-23: once a claim is approved,
 //! that address can never stake again.
 
 #![cfg(test)]

@@ -443,7 +443,7 @@ fn evm_account_ignores_hook_data_and_pays_its_owner() {
     assert_eq!(acct.send_home(), max * 2);
 }
 
-/// Pre-audit /cso H-1 (2026-09-24): a Solana payout goes only to the owner's
+/// security review H-1 (2026-09-24): a Solana payout goes only to the owner's
 /// own USDC token account, named by the owner's deposit and saved once. No
 /// owner signature at withdrawal can change it.
 #[test]

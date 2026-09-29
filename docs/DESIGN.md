@@ -4,11 +4,11 @@
 
 Two things happen to crypto wallets and positions that no existing product covers together: a wallet gets drained by phishing, an approval exploit, or a stolen key; or a lending position gets liquidated on a price that was never real. Both are losses a user did nothing wrong to suffer, and both are usually met with either nothing, or a discretionary compensation decision taken by a committee weeks later.
 
-SAFU pays for both, automatically, from one pool. Stake USDC once; it covers a wallet drain on Ethereum, Solana or Stellar, or a wrongful liquidation on any lending market, at a deterministic multiple of your own stake. No vote, no appeal, no human decides.
+SAFU pays for both, automatically, from one pool. Stake USDC once; it covers a wallet drain on Ethereum, Solana or Stellar, or a wrongful liquidation on a listed lending market, at a deterministic multiple of your own stake. No vote, no appeal, no human decides.
 
 ## One pool, not two contracts
 
-This build forks SAFU's own live, audited protection-pool, the same contract design already running on Stellar mainnet, rather than building a new lending market. That choice follows directly from a simple fact: `submit_claim` doesn't care *why* a loss happened. It checks an oracle signature, a tier ceiling, and a real-loss cap. Wrongful liquidation slots into that same claim path as a second detected cause alongside wallet drain, it needed a new off-chain detector, not a new contract.
+This build extends SAFU's own protection-pool, the same contract design already running on Stellar mainnet. No new lending market was built. That choice follows directly from a simple fact: `submit_claim` doesn't care *why* a loss happened. It checks an oracle signature, a tier ceiling, and a real-loss cap. Wrongful liquidation slots into that same claim path as a second detected cause alongside wallet drain: the only new part is an off-chain detector, and the contract stays the same.
 
 The pool is USDC-denominated. Whatever asset was lost, ETH, USDC, USDT on Ethereum, SOL on Solana, XLM on Stellar, the payout always settles in USDC from this one pool on Stellar. Stellar holds the money and the price truth for every covered chain (see "Pricing" below).
 
@@ -28,7 +28,7 @@ The actual entitlement is `min(ceiling, real loss)`, capped by the ceiling but n
 
 A staker registers up to three wallets they want covered, on any mix of chains, **before** anything happens to them. A claim can only name a wallet already on that list, checked against a timestamp that must predate the loss.
 
-This closes a real gap that a naive multi-chain design opens: without it, a stranger's public drain transaction could be cited by anyone as their own loss. Pre-registration means the binding exists before the loss does, so citing someone else's drain afterward gains nothing. It does not require a signature from the drained wallet itself, deliberately, since key compromise is a covered vector, and demanding a signature from a compromised wallet would authenticate the thief, not the victim.
+This closes a real gap that a naive multi-chain design opens: without it, a stranger's public drain transaction could be cited by anyone as their own loss. Pre-registration means the binding exists before the loss does, so citing someone else's drain afterward gains nothing. It does not require a signature from the drained wallet itself, deliberately, since key compromise is a covered vector, and demanding a signature from a compromised wallet would authenticate the thief.
 
 ## Pricing
 
@@ -38,13 +38,13 @@ Every covered asset is priced through Reflector, the Stellar-native oracle netwo
 
 A lending position liquidated on a manufactured price is a covered loss, on any of the three chains. The detector compares the price a liquidation was executed at against Reflector's own price history over a window ending at that liquidation, never against the lending market's own feed, which is exactly the tick under question. A liquidation priced inside that comparison is a genuine market move and pays nothing; one priced meaningfully outside it is treated as fed a manufactured price, and the claim path opens.
 
-Self-liquidation needs no special handling: the check evaluates the price, never who triggered the liquidation. If a lending market really was fed a bad price, the loss is real regardless of who benefits from reporting it, that is the correct outcome, not a gap.
+Self-liquidation needs no special handling: the check evaluates the price, never who triggered the liquidation. If a lending market really was fed a bad price, the loss is real regardless of who benefits from reporting it, and paying it is the correct outcome.
 
 The exact comparison window and threshold are not published here, for the same reason SAFU's fraud-scoring internals never are: publishing the exact numbers makes the check gameable. The structural mechanism, an independent price history, compared over a window, with a flag on excess deviation, is the part that matters and the part that's disclosed.
 
 ## On-chain and off-chain
 
-| On-chain (audited, frozen) | Off-chain (Python, changeable) |
+| On-chain (fixed at deploy) | Off-chain (Python, changeable) |
 |---|---|
 | Tier ceilings (15x / 10x / 5x) | Which wallets are registered to which staker |
 | `entitlement > ceiling` rejection | The wrongful-liquidation price check |
@@ -52,15 +52,15 @@ The exact comparison window and threshold are not published here, for the same r
 | 90-day time gate, cooldown, vesting | The actual entitlement number |
 | Solvency and daily outflow caps | Real-loss capping |
 
-The contract never learns what was lost, on which chain, or why the claim was ruled wrongful, it verifies a signed number against a ceiling. Everything that decides *that* number is off-chain and can be corrected without touching the audited artifact.
+The contract never learns what was lost, on which chain, or why the claim was ruled wrongful, it verifies a signed number against a ceiling. Everything that decides *that* number is off-chain and can be corrected without touching the deployed contract.
 
 ## Yield
 
-Staked USDC deploys into a DeFindex vault targeting Blend's USDC pool. Realised yield splits 50/50: half compounds into every live staker's own withdrawable balance (principal plus their proportional share, computed via a growing index rather than per-user share tokens, the index approach avoids a known share-price manipulation pattern that a naive share-token design would be exposed to), and half becomes the protocol's own, withdrawable on its own schedule. Neither half auto-transfers the moment it's realised.
+Staked USDC deploys into a DeFindex vault targeting Blend's USDC pool. Yield on staker money is shared with stakers (all of it by default, an adjustable setting): it compounds into every live staker's own withdrawable balance through a growing index rather than per-user share tokens, which avoids a known share-price manipulation pattern. Yield on backer money goes to the protocol. Nothing auto-transfers the moment it's realised.
 
 ## What is deliberately not covered
 
-Two specific gaps in the underlying scanner, disclosed rather than hidden: USDC and USDT losses on Solana (no SPL balance-delta path yet), and USDC losses on Stellar itself (a trustline balance is never read as a numeric amount yet). Both fail closed, a claim citing either is refused, not silently under-priced.
+Covered assets are ETH, USDC and USDT on Ethereum, SOL, USDC and USDT on Solana, and XLM, USDC and USDT0 on Stellar. A wrongful-liquidation claim pays only on a listed lending market and only when that market's own price feed failed; where the scanner cannot yet read a market's liquidation bonus, the claim is refused rather than guessed. Everything outside these lines fails closed: a claim citing it is refused outright.
 
 ## What's real vs. what's a testnet stand-in
 

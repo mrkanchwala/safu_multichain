@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the D-fast WASMs for the P5 testnet e2e: the production contracts with the
+# Build the fast-clock WASMs for the testnet end-to-end run: the production contracts with the
 # duration constants in fast_constants.txt shortened to minutes.
 #
 # Usage: scripts/e2e/build_fast.sh
@@ -26,7 +26,7 @@ export PYTHONPATH="$ROOT/scripts/e2e${PYTHONPATH:+:$PYTHONPATH}"
 
 if ! git -C "$ROOT" diff --quiet HEAD -- contracts || [ -n "$(git -C "$ROOT" ls-files --others --exclude-standard -- contracts)" ]; then
   if [ "${ALLOW_DIRTY:-}" != "1" ]; then
-    echo "contracts/ has uncommitted changes: D-fast must come from a commit (ALLOW_DIRTY=1 for a dry run)" >&2
+    echo "contracts/ has uncommitted changes: fast-clock must come from a commit (ALLOW_DIRTY=1 for a dry run)" >&2
     exit 1
   fi
   DIRTY=-dirty

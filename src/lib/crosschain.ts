@@ -1,4 +1,4 @@
-// Cross-chain stakers and backers (EVM / Solana owners), 2026-09-24, P5 Stage 2.
+// Cross-chain stakers and backers (EVM / Solana owners), 2026-09-24, multichain build.
 //
 // An EVM or Solana wallet never holds a Stellar account. Its USDC crosses on Circle's CCTP to one of
 // our adapters, which creates the owner's own safu-account on Stellar and stakes (stake adapter) or
@@ -252,7 +252,7 @@ export type RelayAction =
   | "request_back_withdrawal" | "cancel_back_withdrawal" | "complete_back_withdrawal_home";
 
 /** The safu-account accepts only a plain Ed25519 signature over the 32 payload bytes. Some Solana
- *  wallets sign a different format (founder test 2026-09-25, Night wallet: every relayed action was
+ *  wallets sign a different format (live test 2026-09-25, Night wallet: every relayed action was
  *  refused, while the same action signed plainly passed). Checked here so the user gets a clear
  *  message instead of a generic failure. A browser without Ed25519 in WebCrypto skips the check
  *  and the backend still enforces it. */
@@ -289,7 +289,7 @@ export async function relayMature(account: string): Promise<string> {
 //
 // Every "home" action (claim_home, withdraw_home, exit_home, send_home, complete_back_withdrawal_home)
 // burns USDC on Stellar to the owner's own address / ATA. Circle attests it; then someone must submit
-// it on the home chain. SAFU does not pay that gas (founder decision 2026-09-23): the connected wallet
+// it on the home chain. SAFU does not pay that gas (design decision, 2026-09-23): the connected wallet
 // sends a normal `receiveMessage` (Sepolia) or `receive_message` (Solana devnet) transaction. If the
 // user walks away, nothing is lost: anyone can finish the same message later.
 

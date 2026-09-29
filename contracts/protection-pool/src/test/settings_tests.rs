@@ -38,7 +38,7 @@ fn defaults_match_the_shipped_values() {
     assert_eq!(s.client.get_setting(&SettingKey::MinStakeBps), MIN_STAKE_BPS);
     assert_eq!(s.client.get_setting(&SettingKey::MaxStakeBps), MAX_STAKE_BPS);
     assert_eq!(s.client.get_setting(&SettingKey::StakerYieldBps), 10_000);
-    assert_eq!(YIELD_SPLIT_STAKER_BPS, 10_000, "founder: 100% of staker-capital yield to stakers");
+    assert_eq!(YIELD_SPLIT_STAKER_BPS, 10_000, "100% of staker-capital yield to stakers");
     assert_eq!(s.client.get_setting(&SettingKey::CooldownLedgers), COOLDOWN_LEDGERS as i128);
     assert_eq!(s.client.get_setting(&SettingKey::VestingLedgers), VESTING_LEDGERS as i128);
     assert_eq!(s.client.get_setting(&SettingKey::AdmitLowBps), STRESS_RATE_BAND_1_BPS);

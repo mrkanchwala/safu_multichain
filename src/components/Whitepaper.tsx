@@ -239,7 +239,7 @@ export function Whitepaper({ onBack }: { onBack: () => void }) {
           <p>
             The contracts
             have their own test suites and fuzz testing, and design choices we already know about are written up for
-            the auditors. The Stellar contract goes through an independent audit before launch, and the report will be linked from this page.
+            the auditors. The Stellar contract gets an independent audit after launch. The report will be linked here.
           </p>
         </Slide>
 

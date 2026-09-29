@@ -16,7 +16,7 @@ import { evmBurnToAdapter, finishOnStellar, relayAction, relayHomeAction, relayM
 import { useStaker } from "../lib/useStaker";
 import { useTick } from "../lib/useTick";
 
-// Back the pool tab (2026-09-24, founder): like Stake, without covered wallets. Backing adds
+// Back the pool tab (2026-09-24): like Stake, without covered wallets. Backing adds
 // capacity for claims; it earns no coverage. Stellar wallets act directly. EVM/Solana wallets back
 // through the BACK adapter over CCTP (its own safu-account, separate from the staking one; proven
 // live by e2e groups BB/BBS); later steps are owner-signed and relayed.

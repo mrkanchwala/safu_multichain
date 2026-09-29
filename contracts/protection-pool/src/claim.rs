@@ -33,9 +33,7 @@
 //!
 //! CONVERTED 2026-07-31: `panic!("SAFU: ...")` -> `Result<_, PoolError>`,
 //! same conditions/order, no behavior change beyond a typed error code
-//! instead of an opaque panic message, see error.rs and
-//! `outputs/2026-07-31_plan-eng-review-safu-soroban-typed-errors.md`
-//! (research-ops repo). `tier_ratio`/`tier_cap` (internal helpers called
+//! instead of an opaque panic message, see error.rs. `tier_ratio`/`tier_cap` (internal helpers called
 //! from several functions below) became fallible too, since the invalid-
 //! tier check they own is externally reachable from submit_claim/
 //! approve_override/execute_override's caller-supplied `tier` argument.
@@ -156,7 +154,7 @@ pub struct OverrideExecuted {
     pub points_burned: i128,
 }
 
-/// Pre-audit gate P2 (M2): each signer's approval is public, so the other
+/// Pre-audit hardening (M2): each signer's approval is public, so the other
 /// signer and monitors see a pending override before it executes.
 #[contractevent]
 pub struct OverrideApproved {
@@ -259,7 +257,7 @@ fn compute_claim_id(env: &Env, wallet: &Address, tx_hash: &BytesN<32>) -> BytesN
 // -----------------------------------------------------------------------
 // D1 (T2), oracle approval payload + Ed25519 verification.
 //
-// Ported from `SAFUPoolV8.sol:412-424`, which is an audited, live-on-mainnet
+// Ported from `SAFUPoolV8.sol:412-424`, which is a live-on-mainnet
 // payload. This is a port, not a fresh design; the deviations below are
 // forced by chain differences, not preference.
 // -----------------------------------------------------------------------
@@ -283,7 +281,7 @@ fn compute_claim_id(env: &Env, wallet: &Address, tx_hash: &BytesN<32>) -> BytesN
 /// **Field order mirrors V8 exactly**, with two substitutions:
 /// - `address(this)` -> `env.current_contract_address()`
 /// - `block.chainid` -> `env.ledger().network_id()`. Read live from the
-///   host, never a value baked in at `initialize` (the original task plan
+///   host, never a value baked in at `initialize` (the original plan
 ///   assumed no Soroban equivalent existed, it does, `ledger.rs:102`).
 ///   Reading it live means no deployer-supplied trust and no migration if a
 ///   stored value were ever set wrong.
@@ -394,7 +392,7 @@ fn verify_oracle_signature(
 // 90-day time gate now only moves a claim to AwaitingApproval; activation
 // (and therefore burn) happens only via approve_claim or an override.
 // Also now burns the wallet's ENTIRE lifetime points_balance (this record's
-// points and every earlier cycle's), deliberate, per the founder: a staker who has
+// points and every earlier cycle's), deliberate: a staker who has
 // cycled through multiple stake/unstake cycles has a bigger balance, and
 // burning all of it, earlier cycles included, is the intended weight on the
 // claim decision. Order matters: bank this record's points into the
@@ -410,7 +408,7 @@ fn activate_claim(env: &Env, stake_record: &mut StakeRecord, claim: &mut Claim) 
 
     let stake_amount = stake_record.amount;
     stake_record.withdrawn = true;
-    // Pre-audit gate P2 (H2): approved means this address never stakes again.
+    // Pre-audit hardening (H2): approved means this address never stakes again.
     stake_record.claim_approved = true;
     // Deliberately NOT zeroed here: verified against the live V8 source
     // (submitClaim's forfeiture path only sets `s.withdrawn = true`,
@@ -572,7 +570,7 @@ pub fn submit_claim(
 ) -> Result<BytesN<32>, PoolError> {
     storage::require_not_paused(env)?;
 
-    // Pre-audit gate P2 (2026-09-23): oracle only. The admin's unsigned
+    // Pre-audit hardening (2026-09-23): oracle only. The admin's unsigned
     // manual path is removed: one admin key alone could otherwise file claims
     // with no attestation. Manual corrections use the 2-of-2 override.
     let oracle = storage::get_oracle(env);
@@ -684,8 +682,8 @@ pub fn submit_claim(
     // `oracle_rate_limited` was ADDED to this set 2026-08-24, having first
     // been deliberately excluded the same day. The exclusion reasoned that it
     // is a flat anti-abuse counter rather than a capacity signal, which is
-    // true but turned out to be the wrong test. The right test is the
-    // founder's: a genuine hack that cannot be admitted because of system
+    // true but turned out to be the wrong test. The right test is this
+    // one: a genuine hack that cannot be admitted because of system
     // logic must not be silently lost. This limit is `total_stakers / 10`,
     // so it bites hardest precisely during a mass incident (a bridge failure
     // hitting many stakers at once), the moment when losing genuine claims
@@ -786,7 +784,7 @@ pub fn try_release_queued_claim(env: &Env, claim_id: &BytesN<32>) -> Result<(), 
             return Err(PoolError::WalletHasDifferentActiveClaim);
         }
     }
-    // Pre-audit gate P2 (H1): release only against the SAME live stake the
+    // Pre-audit hardening (H1): release only against the SAME live stake the
     // claim was queued on. The stake record's own queue pointer is what ties
     // the two together; a withdrawn or replaced stake has nothing to forfeit.
     if stake_record.reserved_claim_id.as_ref() != Some(claim_id)
@@ -941,7 +939,7 @@ pub fn approve_claim(env: &Env, claim_id: &BytesN<32>) -> Result<(), PoolError> 
     if stake_record.suspended {
         return Err(PoolError::StakeSuspended);
     }
-    // Pre-audit gate P2 (H1): the stake must still be the live one this
+    // Pre-audit hardening (H1): the stake must still be the live one this
     // claim was admitted against. Forfeiting an already-emptied record
     // would pay the claim for nothing.
     if stake_record.withdrawn || stake_record.active_claim_id.as_ref() != Some(claim_id) {

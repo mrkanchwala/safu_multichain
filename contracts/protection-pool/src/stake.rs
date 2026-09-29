@@ -19,9 +19,7 @@
 //! `stakeETH` checks exactly.
 //!
 //! CONVERTED 2026-07-31: `panic!("SAFU: ...")` -> `Result<_, PoolError>`,
-//! same conditions/order, no behavior change, see error.rs and
-//! `outputs/2026-07-31_plan-eng-review-safu-soroban-typed-errors.md`
-//! (research-ops repo).
+//! same conditions/order, no behavior change, see error.rs.
 
 use soroban_sdk::{contractevent, token::TokenClient, xdr::ToXdr, Address, Env};
 
@@ -137,7 +135,7 @@ pub fn stake(
         if existing.amount > 0 && !existing.withdrawn {
             return Err(PoolError::AlreadyStaked);
         }
-        // Pre-audit gate P2 (founder rule 2026-09-23): once a claim is
+        // Pre-audit hardening (rule set 2026-09-23): once a claim is
         // approved, this address never stakes again. A new record would
         // overwrite the forfeited one while its claim is still paying out.
         if existing.claim_approved {
@@ -157,7 +155,7 @@ pub fn stake(
     // Address has no equivalent zero sentinel, so that specific check is
     // dropped, not silently reinterpreted as something else.)
     //
-    // beneficiary == staker is ALLOWED as of 2026-09-19 (founder decision,
+    // beneficiary == staker is ALLOWED as of 2026-09-19 (design decision,
     // this fork only), the multichain covered-wallet model decouples the
     // staking wallet from the protected wallets, so a fresh/disposable
     // staking address never needs a separate payout address. Off-chain
@@ -258,7 +256,7 @@ pub fn withdraw(env: &Env, staker: &Address, beneficiary: &Address) -> Result<()
     if record.active_claim_id.is_some() {
         return Err(PoolError::ClaimActive);
     }
-    // Pre-audit gate P2 (H1): a queued claim holds no reservation, but it
+    // Pre-audit hardening (H1): a queued claim holds no reservation, but it
     // is still a claim on THIS stake. Leaving now would let it be released
     // and paid later with nothing left to forfeit.
     if record.reserved_claim_id.is_some() {

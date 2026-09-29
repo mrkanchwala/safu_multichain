@@ -20,10 +20,10 @@ import type { View } from "./lib/links";
 // Borrow/Lend/Backstop tabs removed 2026-09-18 -- there is no lending market
 // in this build. Stake (with the yield strip folded in, per Addendum 5's cut
 // lever) built 2026-09-18 (A8).
-// Four main tabs, 2026-09-24 (founder): Claims' two sub-views became main tabs, backing got its own.
+// Four main tabs, 2026-09-24: Claims' two sub-views became main tabs, backing got its own.
 type Tab = "stake" | "back" | "file" | "collect";
 
-// TRY offramp (SEP-6 anchor) removed 2026-09-22, founder decision: not part
+// TRY offramp (SEP-6 anchor) removed 2026-09-22, design decision: not part
 // of the v1 build. Payouts stay USDC.
 const TABS: { id: Tab; label: string }[] = [
   { id: "stake", label: "Stake" },
