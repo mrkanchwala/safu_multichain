@@ -29,21 +29,20 @@ contracts/                 Soroban contracts (Rust, soroban-sdk 27, wasm32v1-non
 contracts-evm/             Foundry: a mock lending market for liquidation tests, a LayerZero registry sender
 contracts-solana/          Solana LayerZero registry sender
 contracts-layerzero/       Vendored LayerZero code
-backend/                   Claim API (FastAPI): registry, ownership checks, loss pricing, oracle signing, fee relayer
 src/                       The site (React + Vite), wallets on all three chains
 config/                    One file per network: pool.testnet.json, pool.mainnet.json
-scripts/deploy/            Contract deploy (deploy_v1.sh) and site deploy (deploy_site.sh)
-scripts/e2e/               Live testnet end-to-end scripts
+scripts/deploy/            Contract deploy (deploy_v1.sh)
+scripts/e2e/               Fast-build guard: the testnet build differs from this one only in time constants
 docs/                      Design, CCTP flow, testing, auditor disclosures
 ```
 
 The three LayerZero folders hold an earlier registry design, kept for reference now that the registry is written directly on Stellar and cross-chain money moves over CCTP.
 
-The backend imports the scanner and the tier engine from a separate private package and does not start without it, which is why backend tests stay out of CI.
+The claim backend (scanner, tier engine, loss pricing, oracle signing, fee relayer), the server configuration and the live testnet scripts are kept in a private repository. Scoring rules are not published, so a claim cannot be shaped to pass them.
 
 ## Networks
 
-One setting picks the network for the whole pool: `SAFU_POOL_NETWORK=testnet` or `mainnet`. The backend, the site build and the nginx security headers all read `config/pool.<network>.json`. There is no default, and a blank value stops the backend. The deploy script writes contract addresses into that file. See [config/README.md](config/README.md).
+One setting picks the network for the whole pool: `SAFU_POOL_NETWORK=testnet` or `mainnet`. The site build here and the private backend both read `config/pool.<network>.json`. There is no default, and a blank value stops the backend. The deploy script writes contract addresses into that file. See [config/README.md](config/README.md).
 
 ## Tests
 
@@ -51,10 +50,10 @@ One setting picks the network for the whole pool: `SAFU_POOL_NETWORK=testnet` or
 |---|---|---|
 | Soroban contracts | 442 | VPS (CI runs the pool suite on `main`) |
 | Contract fuzz targets | 6 | VPS, in a capped Docker container |
-| Backend (pytest) | 632 | VPS |
+| Backend (pytest, private repository) | 632 | VPS |
 | EVM (Foundry) | 21 | Local |
 | Site (vitest) | 17 | Local and CI |
-| Live testnet end to end | 6 staged hacks across 3 chains | Stellar testnet, Sepolia, Solana devnet |
+| Live testnet end to end (private repository) | 6 staged hacks across 3 chains | Stellar testnet, Sepolia, Solana devnet |
 
 What each suite covers, file by file, and how to run it: [docs/TESTING.md](docs/TESTING.md).
 

@@ -6,10 +6,10 @@ Every suite in this repository: what it proves, how to run it, and where it runs
 |---|---|---|
 | Soroban contracts | 442 | VPS (CI runs the pool suite on `main`) |
 | Contract fuzz targets | 6 | VPS, in a capped Docker container |
-| Backend (pytest) | 632 | VPS |
+| Backend (pytest, private repository) | 632 | VPS |
 | EVM (Foundry) | 21 | Local |
 | Site (vitest) | 17 | Local and CI |
-| Live testnet end to end | 6 staged hacks across 3 chains | Stellar testnet, Sepolia, Solana devnet |
+| Live testnet end to end (private repository) | 6 staged hacks across 3 chains | Stellar testnet, Sepolia, Solana devnet |
 
 ## 1. Soroban contract tests (442)
 
@@ -89,11 +89,7 @@ Run fuzzing on a Linux server inside a Docker container with fixed CPU and memor
 
 ## 3. Backend (632)
 
-```bash
-python3 -m pytest
-```
-
-Needs the private scanner package next to this repository (see the README). The suite covers:
+The backend lives in a private repository with the scanner and the tier engine, so its tests are listed here without the code. The suite covers:
 
 - Claim filing end to end: one or many transactions, the 20-drain limit, the 30-day window
 - Covered-wallet registry: ownership proof, the on-chain registry writer, races between two registrations
@@ -129,13 +125,13 @@ npm run lint     # oxlint
 
 ## 6. Live testnet end to end
 
-These scripts run the real contracts, the real backend and real Circle CCTP against Stellar testnet, Sepolia and Solana devnet. They use throwaway keys that are not in this repository, so they are a record of how the system was tested more than a one-command suite.
+These scripts run the real contracts, the real backend and real Circle CCTP against Stellar testnet, Sepolia and Solana devnet. They sit in the private repository with the backend they drive. The fast-build guard below is public.
 
 ### Fast build
 
 Real waiting periods (a 90-day queue, a 7-day cooldown, 45 days of streaming) cannot be tested live in an afternoon. `scripts/e2e/build_fast.sh` copies the contracts, shortens only the time constants listed in `scripts/e2e/fast_constants.txt` to minutes, and builds both trees. It fails unless the two trees differ in exactly those lines and nothing else, and unless the other three contracts come out byte-identical. The testnet runs used that fast build; the deployable build is the unmodified `contracts/` tree.
 
-### Scripts
+### Scripts (private repository)
 
 | Script | What it does |
 |---|---|
