@@ -407,6 +407,9 @@ fn activate_claim(env: &Env, stake_record: &mut StakeRecord, claim: &mut Claim) 
     storage::set_points_balance(env, &claim.wallet, 0);
 
     let stake_amount = stake_record.amount;
+    // r3 (2026-09-29): the stake's unpaid yield goes to the pool (protocol
+    // share) with the stake. Settled BEFORE `total_staked` drops below.
+    crate::vault::forfeit_staker_yield(env, stake_record);
     stake_record.withdrawn = true;
     // Pre-audit hardening (H2): approved means this address never stakes again.
     stake_record.claim_approved = true;
@@ -1228,6 +1231,9 @@ pub fn cancel_claim(env: &Env, claim_id: &BytesN<32>) -> Result<(), PoolError> {
         // it's already correct; V8's own cancelClaim doesn't touch it
         // either, confirmed by reading the source directly.
         stake_record.penalty_locked_until_ledger = env.ledger().sequence() + PENALTY_LOCK_LEDGERS;
+        // r3: the stake was out of `total_staked` while forfeited, so it
+        // earns again only from now.
+        stake_record.yield_index_at_stake = storage::get_yield_index(env);
         storage::set_total_staked(env, storage::get_total_staked(env) + claim.stake);
         storage::set_total_stakers(env, storage::get_total_stakers(env) + 1);
     }

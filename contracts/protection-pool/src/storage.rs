@@ -145,6 +145,17 @@ pub enum DataKey {
     PausedUntil,
     /// A pending governance change, one slot per kind (governance.rs).
     GovPending(crate::governance::GovKind),
+    /// r3 (2026-09-29): growing multiplier for backer yield, same shape as
+    /// `YieldIndex` but over matured backer money (`TotalBacked`).
+    BackerYieldIndex,
+    /// r3: staker yield credited but not yet paid. Held as cash in the pool
+    /// and set aside: never deployed, never used for claims or principal.
+    StakerYieldReserved,
+    /// r3: backer yield credited but not yet paid. Same rule as above.
+    BackerYieldReserved,
+    /// r3: set on the first stake or first backing, never cleared. Until
+    /// then, vault / treasury / deploy-ceiling changes need no 7-day wait.
+    EverFunded,
 }
 
 // -----------------------------------------------------------------------
@@ -640,4 +651,49 @@ pub fn set_backer(env: &Env, backer: &Address, record: &BackerRecord) {
     env.storage()
         .persistent()
         .extend_ttl(&key, BUMP_THRESHOLD, BUMP_TO);
+}
+
+// -----------------------------------------------------------------------
+// r3 (2026-09-29): backer yield, set-aside yield, first-funding flag.
+// -----------------------------------------------------------------------
+
+pub fn get_backer_yield_index(env: &Env) -> i128 {
+    env.storage()
+        .instance()
+        .get(&DataKey::BackerYieldIndex)
+        .unwrap_or(crate::types::YIELD_INDEX_PRECISION)
+}
+
+pub fn set_backer_yield_index(env: &Env, value: i128) {
+    env.storage().instance().set(&DataKey::BackerYieldIndex, &value);
+}
+
+pub fn get_staker_yield_reserved(env: &Env) -> i128 {
+    env.storage().instance().get(&DataKey::StakerYieldReserved).unwrap_or(0)
+}
+
+pub fn set_staker_yield_reserved(env: &Env, value: i128) {
+    env.storage().instance().set(&DataKey::StakerYieldReserved, &value);
+}
+
+pub fn get_backer_yield_reserved(env: &Env) -> i128 {
+    env.storage().instance().get(&DataKey::BackerYieldReserved).unwrap_or(0)
+}
+
+pub fn set_backer_yield_reserved(env: &Env, value: i128) {
+    env.storage().instance().set(&DataKey::BackerYieldReserved, &value);
+}
+
+/// Cash owed to stakers and backers as yield. Every free-cash check
+/// subtracts it; only yield payouts may spend it.
+pub fn get_yield_reserved(env: &Env) -> i128 {
+    get_staker_yield_reserved(env) + get_backer_yield_reserved(env)
+}
+
+pub fn is_ever_funded(env: &Env) -> bool {
+    env.storage().instance().get(&DataKey::EverFunded).unwrap_or(false)
+}
+
+pub fn set_ever_funded(env: &Env) {
+    env.storage().instance().set(&DataKey::EverFunded, &true);
 }

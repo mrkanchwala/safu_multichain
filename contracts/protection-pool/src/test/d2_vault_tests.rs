@@ -217,6 +217,15 @@ impl MockVault {
             .get(&MockKey::Shares(id))
             .unwrap_or(0)
     }
+
+    /// r3: mirrors the real vault's view (signature verified over RPC):
+    /// the asset value of `vault_shares` at the current redemption rate.
+    pub fn get_asset_amounts_per_shares(env: Env, vault_shares: i128) -> Vec<i128> {
+        let rate: i128 = env.storage().instance().get(&MockKey::RateBps).unwrap();
+        let mut out = Vec::new(&env);
+        out.push_back(vault_shares * rate / 10_000);
+        out
+    }
 }
 
 // -----------------------------------------------------------------------

@@ -194,6 +194,8 @@ pub fn stake(
     storage::set_stake(env, staker, &record);
     storage::set_total_staked(env, total_staked + amount);
     storage::set_total_stakers(env, storage::get_total_stakers(env) + 1);
+    // r3: from the first stake on, vault/treasury/deploy-ceiling changes wait 7 days.
+    storage::set_ever_funded(env);
     storage::bump_instance_ttl(env);
 
     Staked { staker: staker.clone(), amount }.publish(env);
@@ -277,14 +279,12 @@ pub fn withdraw(env: &Env, staker: &Address, beneficiary: &Address) -> Result<()
     let final_points = compute_points(env, staker);
     let amount = record.amount;
 
-    // Principal + this staker's proportional share of yield realised since
-    // they joined. Floor division: any dust rounds toward the pool, same
-    // direction every other rounding decision in this contract goes.
-    // `amount` (flat principal) is still what total_staked/tier_cap use
-    // below and elsewhere: only the actual token TRANSFER pays the
-    // yield-inflated figure.
-    let current_index = storage::get_yield_index(env);
-    let payout = amount * current_index / record.yield_index_at_stake;
+    // Principal + this staker's unpaid yield. r3 (2026-09-29): the yield
+    // part comes from the staker set-aside (additive index, see
+    // `StakeRecord`); `amount` (flat principal) is still what
+    // total_staked/tier_cap use below and elsewhere.
+    crate::vault::harvest(env);
+    let owed = crate::vault::staker_yield_owed(env, &record);
 
     // D2: before D2 this transfer could not fail on funds, `total_staked`
     // WAS the contract's real balance. Once XLM can sit in the yield vault
@@ -292,13 +292,15 @@ pub fn withdraw(env: &Env, staker: &Address, beneficiary: &Address) -> Result<()
     // as an opaque SAC host trap. Checked before any state mutation so the
     // typed error is the only outcome; principal is never at risk, it is in
     // the vault. v1: `pull_for_payment` redeems from the vault first if cash
-    // is short. Checked against `payout` (principal + accrued yield), not the
-    // bare principal: the yield share must also be physically liquid.
-    crate::vault::pull_for_payment(env, payout)?;
+    // is short. r3: checked against principal only; the yield part is
+    // set-aside cash, which is always liquid.
+    crate::vault::pull_for_payment(env, amount)?;
+    let payout = amount + crate::vault::take_staker_yield(env, owed);
 
     // Effects before interaction (CEI).
     record.withdrawn = true;
     record.amount = 0;
+    record.yield_index_at_stake = storage::get_yield_index(env);
     storage::set_stake(env, staker, &record);
 
     if final_points > 0 {
@@ -332,10 +334,10 @@ pub fn withdraw(env: &Env, staker: &Address, beneficiary: &Address) -> Result<()
 /// and skips the beneficiary-hash check (V8's emergencyExit sends
 /// directly to msg.sender, not a separate beneficiary, same here).
 ///
-/// DELIBERATE SCOPE BOUNDARY (2026-09-18): pays flat `record.amount` only,
-/// no yield-index reconciliation. This is a panic-time safety exit, not the
-/// normal path: a staker fleeing mid-pause forgoes any accrued yield in
-/// exchange for the guarantee their principal comes back with no lock.
+/// r3 (2026-09-29): also pays the staker's unpaid yield from the set-aside
+/// (design rule: yield is never lost). No harvest here: this runs while
+/// paused, and only already-credited yield is paid. Replaces the 2026-09-18
+/// rule that an exit forgoes yield.
 pub fn emergency_exit(env: &Env, staker: &Address) -> Result<(), PoolError> {
     staker.require_auth();
 
@@ -361,9 +363,12 @@ pub fn emergency_exit(env: &Env, staker: &Address) -> Result<(), PoolError> {
     // modifier would leave this path unfundable exactly when it matters).
     // v1: the in-path pull has no pause guard either, for the same reason.
     crate::vault::pull_for_payment(env, amount)?;
+    let owed = crate::vault::staker_yield_owed(env, &record);
+    let payout = amount + crate::vault::take_staker_yield(env, owed);
 
     record.withdrawn = true;
     record.amount = 0;
+    record.yield_index_at_stake = storage::get_yield_index(env);
     storage::set_stake(env, staker, &record);
 
     // Clamped at 0, same reason as `withdraw`.
@@ -372,9 +377,53 @@ pub fn emergency_exit(env: &Env, staker: &Address) -> Result<(), PoolError> {
     storage::set_total_stakers(env, storage::get_total_stakers(env).saturating_sub(1));
     storage::bump_instance_ttl(env);
 
-    EmergencyExit { staker: staker.clone(), amount }.publish(env);
+    EmergencyExit { staker: staker.clone(), amount: payout }.publish(env);
 
     let token = TokenClient::new(env, &asset_token_address(env));
-    token.transfer(&env.current_contract_address(), staker, &amount);
+    token.transfer(&env.current_contract_address(), staker, &payout);
     Ok(())
+}
+
+/// r3 (2026-09-29): take yield without unstaking. Design rule: any time, no
+/// wait, no pool-health check; the stake, its coverage and its 90-day clock
+/// are untouched (coverage is principal only). Works while paused (the
+/// harvest is skipped then, already-credited yield is still paid).
+///
+/// Paid to the beneficiary, hash-checked exactly as in `withdraw`. Refused
+/// while a claim is open or queued on this stake: if that claim is
+/// approved, the unpaid yield goes to the pool with the stake. A forfeited
+/// stake has no yield left to take (moved at forfeiture).
+pub fn claim_yield(env: &Env, staker: &Address, beneficiary: &Address) -> Result<i128, PoolError> {
+    staker.require_auth();
+    let mut record = storage::get_stake(env, staker).ok_or(PoolError::NoStake)?;
+    if record.amount <= 0 || record.withdrawn {
+        return Err(PoolError::NoActiveStake);
+    }
+    if record.active_claim_id.is_some() {
+        return Err(PoolError::ClaimActive);
+    }
+    if record.reserved_claim_id.is_some() {
+        return Err(PoolError::ClaimQueuedForStake);
+    }
+    let expected_hash = env.crypto().sha256(&beneficiary.to_xdr(env)).to_bytes();
+    if expected_hash != record.beneficiary_hash {
+        return Err(PoolError::WrongBeneficiary);
+    }
+
+    crate::vault::harvest(env);
+    let owed = crate::vault::staker_yield_owed(env, &record);
+    let paid = crate::vault::take_staker_yield(env, owed);
+    if paid <= 0 {
+        return Err(PoolError::NoYieldOwed);
+    }
+
+    // Effects before interaction (CEI).
+    record.yield_index_at_stake = storage::get_yield_index(env);
+    storage::set_stake(env, staker, &record);
+    storage::bump_instance_ttl(env);
+    crate::vault::YieldPaid { owner: staker.clone(), to: beneficiary.clone(), amount: paid }.publish(env);
+
+    let token = TokenClient::new(env, &asset_token_address(env));
+    token.transfer(&env.current_contract_address(), beneficiary, &paid);
+    Ok(paid)
 }

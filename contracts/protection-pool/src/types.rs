@@ -197,7 +197,15 @@ pub const AUTO_PUSH_MIN_BPS: i128 = 100;
 // still caps the protection to 1.25%".
 /// v1 (2026-09-22): DEFAULT of the adjustable `StakerYieldBps` setting.
 /// Design decision: 100% of yield on staker capital goes to stakers.
-pub const YIELD_SPLIT_STAKER_BPS: i128 = 10_000;
+pub const YIELD_SPLIT_STAKER_BPS: i128 = YIELD_SPLIT_BPS_DENOMINATOR;
+/// r3 (2026-09-29): DEFAULT of the adjustable `BackerYieldBps` setting.
+/// 100% of yield on matured backer money goes to backers. Money still in
+/// its 7-day wait is not in `TotalBacked`, so it earns nothing.
+pub const YIELD_SPLIT_BACKER_BPS: i128 = YIELD_SPLIT_BPS_DENOMINATOR;
+/// r3: slippage floor for a harvest. Tighter than the rebalance floor
+/// because a harvest books every unit it receives as yield: shares that come
+/// back short would leave the remaining position below its book value.
+pub const HARVEST_SLIPPAGE_BPS: i128 = 10;
 pub const YIELD_SPLIT_BPS_DENOMINATOR: i128 = 10_000;
 
 /// Fixed-point scale for `YieldIndex`. Chosen with headroom against i128
@@ -298,6 +306,12 @@ pub struct StakeRecord {
     /// on a pool that has never realised yield snapshot at
     /// `YIELD_INDEX_PRECISION` (the 1.0x starting value), so the ratio is
     /// exactly 1 until the first `extract_yield` call.
+    ///
+    /// r3 (2026-09-29): the index is ADDITIVE per unit of principal (each
+    /// credit adds `share * PRECISION / total_staked`), so yield owed is
+    /// `amount * (YieldIndex - yield_index_at_stake) / PRECISION`. The old
+    /// ratio `amount * index / at_stake` underpaid anyone who joined after
+    /// the first credit. Reset to the live index whenever yield is paid out.
     pub yield_index_at_stake: i128,
     pub staked_at_ledger: u32,
     /// Real Unix timestamp at stake time, used ONLY for the absolute
@@ -358,6 +372,10 @@ pub struct BackerRecord {
     pub withdraw_amount: i128,
     /// Earliest completion timestamp for the open request.
     pub withdraw_ready_at: u64,
+    /// r3: `BackerYieldIndex` at the last settlement of this record.
+    pub yield_index_at: i128,
+    /// r3: yield settled to this backer and not yet paid.
+    pub yield_owed: i128,
 }
 
 // -----------------------------------------------------------------------

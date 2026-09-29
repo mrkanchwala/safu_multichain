@@ -364,7 +364,18 @@ pub fn approve_change(env: &Env, caller: &Address, change: GovChange) -> Result<
     }
     *approver_slot(&mut p, role) = Some(caller.clone());
     if p.eta == 0 && live_approvals(env, &p) >= 2 {
-        p.eta = env.ledger().timestamp() + GOV_DELAY_SECONDS;
+        let now = env.ledger().timestamp();
+        // r3 (2026-09-29, design decision): before any money has ever entered the
+        // pool, vault / treasury / deploy ceiling need no wait: nothing is
+        // at risk and the wait protects nobody. `EverFunded` is set on the
+        // first stake or backing and never cleared, so a pool that later
+        // empties does not reopen this. Still needs two roles, as always.
+        // `max(1)`: 0 means "not approved yet" in `execute_change`.
+        p.eta = if instant_before_funding(env, kind) {
+            now.max(1)
+        } else {
+            now + GOV_DELAY_SECONDS
+        };
     }
     storage::set_gov_pending(env, kind, &p);
     storage::bump_instance_ttl(env);
@@ -470,4 +481,10 @@ pub fn execute_change(env: &Env, kind: GovKind) -> Result<(), PoolError> {
 
 pub fn get_pending(env: &Env, kind: GovKind) -> Option<GovProposal> {
     storage::get_gov_pending(env, kind)
+}
+
+/// r3: the setup kinds that apply at once while the pool has never held money.
+fn instant_before_funding(env: &Env, kind: GovKind) -> bool {
+    !storage::is_ever_funded(env)
+        && matches!(kind, GovKind::Vault | GovKind::Treasury | GovKind::DeployBps)
 }

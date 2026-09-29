@@ -28,7 +28,7 @@ use crate::error::PoolError;
 use crate::storage;
 use crate::types::{
     COOLDOWN_LEDGERS, LEDGERS_PER_DAY, MAX_STAKE_BPS, MIN_STAKE_BPS, SECONDS_PER_DAY,
-    VESTING_LEDGERS, YIELD_SPLIT_STAKER_BPS,
+    VESTING_LEDGERS, YIELD_SPLIT_BACKER_BPS, YIELD_SPLIT_BPS_DENOMINATOR, YIELD_SPLIT_STAKER_BPS,
 };
 
 /// Delay between co-signer approval and the earliest execution.
@@ -45,7 +45,7 @@ pub enum SettingKey {
     /// Max stake, bps of pool cap.
     MaxStakeBps = 1,
     /// Share of vault yield on STAKER capital paid to stakers, bps. The rest
-    /// (and all yield on backer capital) goes to the protocol.
+    /// goes to the protocol. (Backer capital: `BackerYieldBps`.)
     StakerYieldBps = 2,
     /// Cooldown between claim activation and first payout, in ledgers.
     CooldownLedgers = 3,
@@ -64,6 +64,9 @@ pub enum SettingKey {
     /// Pool cap RAISE. Lowering stays immediate via `set_pool_cap` (a safety
     /// brake); raising after anyone has staked goes through this timelock.
     PoolCap = 12,
+    /// r3 (2026-09-29): share of vault yield on MATURED BACKER capital paid
+    /// to backers, bps. The rest goes to the protocol.
+    BackerYieldBps = 13,
 }
 
 /// A proposed change waiting for co-signer approval and/or its timelock.
@@ -79,7 +82,7 @@ pub struct PendingSetting {
 // Hard bounds. Changing any of these means a new contract.
 const STAKE_BPS_MIN: i128 = 1; // 0.01% of cap
 const STAKE_BPS_MAX: i128 = 125; // 1.25% of cap (T3's max)
-const STAKER_YIELD_BPS_MAX: i128 = 10_000; // 100%
+const YIELD_BPS_MAX: i128 = YIELD_SPLIT_BPS_DENOMINATOR; // 100%, shared by both yield settings
 const COOLDOWN_MIN: i128 = 7 * LEDGERS_PER_DAY as i128;
 const COOLDOWN_MAX: i128 = 30 * LEDGERS_PER_DAY as i128;
 const VESTING_MIN: i128 = 30 * LEDGERS_PER_DAY as i128;
@@ -107,6 +110,7 @@ fn default_value(env: &Env, key: SettingKey) -> i128 {
         SettingKey::PayoutHighBps => 100,
         SettingKey::BackerNoticeSeconds => 30 * SECONDS_PER_DAY as i128,
         SettingKey::PoolCap => storage::get_pool_cap(env),
+        SettingKey::BackerYieldBps => YIELD_SPLIT_BACKER_BPS,
     }
 }
 
@@ -115,7 +119,7 @@ fn in_bounds(env: &Env, key: SettingKey, value: i128) -> bool {
         SettingKey::MinStakeBps | SettingKey::MaxStakeBps => {
             (STAKE_BPS_MIN..=STAKE_BPS_MAX).contains(&value)
         }
-        SettingKey::StakerYieldBps => (0..=STAKER_YIELD_BPS_MAX).contains(&value),
+        SettingKey::StakerYieldBps => (0..=YIELD_BPS_MAX).contains(&value),
         SettingKey::CooldownLedgers => (COOLDOWN_MIN..=COOLDOWN_MAX).contains(&value),
         SettingKey::VestingLedgers => (VESTING_MIN..=VESTING_MAX).contains(&value),
         SettingKey::AdmitLowBps | SettingKey::AdmitMidBps | SettingKey::AdmitHighBps => {
@@ -126,6 +130,7 @@ fn in_bounds(env: &Env, key: SettingKey, value: i128) -> bool {
         }
         SettingKey::BackerNoticeSeconds => (0..=BACKER_NOTICE_MAX).contains(&value),
         SettingKey::PoolCap => value > storage::get_pool_cap(env),
+        SettingKey::BackerYieldBps => (0..=YIELD_BPS_MAX).contains(&value),
     }
 }
 

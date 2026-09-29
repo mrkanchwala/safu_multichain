@@ -60,8 +60,8 @@ use soroban_sdk::{
 use crate::error::PoolError;
 use crate::storage;
 use crate::types::{
-    AUTO_PUSH_MIN_BPS, BPS_DENOMINATOR, DEPLOY_BPS_DENOMINATOR, MAX_REBALANCE_SLIPPAGE_BPS,
-    YIELD_INDEX_PRECISION, YIELD_SPLIT_BPS_DENOMINATOR,
+    AUTO_PUSH_MIN_BPS, BPS_DENOMINATOR, DEPLOY_BPS_DENOMINATOR, HARVEST_SLIPPAGE_BPS,
+    MAX_REBALANCE_SLIPPAGE_BPS, YIELD_INDEX_PRECISION, YIELD_SPLIT_BPS_DENOMINATOR,
 };
 
 // -----------------------------------------------------------------------
@@ -106,6 +106,13 @@ pub trait VaultInterface {
 
     /// The vault is itself a token; dfToken balance IS the share position.
     fn balance(env: Env, id: Address) -> i128;
+
+    /// r3 (2026-09-29): current asset value of `vault_shares`, one entry per
+    /// vault asset (single-asset here). Verified against the deployed
+    /// testnet vault's own spec over RPC (`stellar contract info interface`):
+    /// `get_asset_amounts_per_shares(vault_shares: i128) -> Result<Vec<i128>, ContractError>`.
+    /// Read only by `harvest`, never by any payout or solvency decision.
+    fn get_asset_amounts_per_shares(env: Env, vault_shares: i128) -> Vec<i128>;
 }
 
 // -----------------------------------------------------------------------
@@ -149,16 +156,24 @@ pub struct LiquidityAutoDeployed {
     pub shares_gained: i128,
 }
 
+/// r3 (2026-09-29): emitted every time vault growth is recognised as yield,
+/// whichever path redeemed it (harvest, in-path pull, keeper, admin).
+/// Replaces `YieldExtracted`. Nothing transfers here.
 #[contractevent]
-pub struct YieldExtracted {
-    pub shares_redeemed: i128,
-    pub asset_received: i128,
+pub struct YieldCredited {
     pub yield_amount: i128,
-    /// Added 2026-09-18 with the yield split, staker_share compounds into
-    /// YieldIndex, protocol_share becomes withdrawable ProtocolYieldBalance.
-    /// Neither transfers here; both are visible for audit off this event.
     pub staker_share: i128,
+    pub backer_share: i128,
     pub protocol_share: i128,
+}
+
+/// r3: a staker's or backer's yield paid out.
+#[contractevent]
+pub struct YieldPaid {
+    #[topic]
+    pub owner: Address,
+    pub to: Address,
+    pub amount: i128,
 }
 
 #[contractevent]
@@ -220,10 +235,19 @@ pub fn liquid_balance(env: &Env) -> i128 {
 /// transfer trap opaquely. Called immediately before every outbound
 /// transfer in `stake.rs` and `claim.rs`.
 pub fn require_liquidity(env: &Env, amount: i128) -> Result<(), PoolError> {
-    if liquid_balance(env) < amount {
+    if free_liquid(env) < amount {
         return Err(PoolError::InsufficientLiquidity);
     }
     Ok(())
+}
+
+/// r3 (2026-09-29): liquid cash minus yield owed to stakers and backers.
+/// Every payment other than a yield payout, and every push into the vault,
+/// is bounded by this, so set-aside yield is never spent on anything else.
+/// The protocol's own yield share is NOT set aside (design decision
+/// 2026-09-29): it is pool cash, usable for claims until withdrawn.
+pub fn free_liquid(env: &Env) -> i128 {
+    liquid_balance(env) - storage::get_yield_reserved(env)
 }
 
 // -----------------------------------------------------------------------
@@ -235,7 +259,7 @@ pub fn require_liquidity(env: &Env, amount: i128) -> Result<(), PoolError> {
 /// (`capacity × (1 − deploy_bps)`); if the vault can't give that much, try
 /// the shortfall alone. Then the usual check: pay, or `InsufficientLiquidity`.
 pub fn pull_for_payment(env: &Env, amount: i128) -> Result<(), PoolError> {
-    let liquid = liquid_balance(env);
+    let liquid = free_liquid(env);
     if liquid < amount {
         let shortfall = amount - liquid;
         let buffer = storage::get_capacity(env)
@@ -296,7 +320,7 @@ pub fn push_idle(env: &Env) {
         return; // the first deposit is the admin's (reference rate)
     }
     let capacity = storage::get_capacity(env);
-    let idle = (liquid_balance(env) - storage::get_total_allocated(env)).max(0);
+    let idle = (free_liquid(env) - storage::get_total_allocated(env)).max(0);
     let room = (capacity * storage::get_deploy_bps(env) / DEPLOY_BPS_DENOMINATOR - deployed_asset).max(0);
     let amount = idle.min(room);
     if amount <= 0 || amount < capacity * AUTO_PUSH_MIN_BPS / BPS_DENOMINATOR {
@@ -342,6 +366,12 @@ fn record_redeem(env: &Env, vault_addr: &Address, shares: i128, asset_received: 
     let principal_equiv = deployed_asset * shares / deployed_shares;
     storage::set_total_deployed_shares(env, deployed_shares - shares);
     storage::set_total_deployed_asset(env, deployed_asset - principal_equiv);
+    // r3 (2026-09-29): growth that comes back with any redemption is yield.
+    // Before r3 it landed as unowned cash and `push_idle` re-deposited it as
+    // principal, so it reached nobody.
+    if asset_received > principal_equiv {
+        credit_yield(env, asset_received - principal_equiv);
+    }
     if asset_received < principal_equiv {
         let shortfall = principal_equiv - asset_received;
         storage::set_total_staked(env, storage::get_total_staked(env).saturating_sub(shortfall));
@@ -365,7 +395,7 @@ fn record_redeem(env: &Env, vault_addr: &Address, shares: i128, asset_received: 
 // (2026-08-20: two activated claims misread as +4,100 XLM "yield" that was
 // really forfeited principal). Replaced by `storage::get_protocol_yield_balance`,
 // an explicit increment/decrement counter that cannot drift the same way,
-// it is credited only by `extract_yield`'s protocol-share split and debited
+// it is credited only by `credit_yield`'s protocol-share split and debited
 // only by `withdraw_yield`, with no dependency on `total_allocated` timing
 // at all. `get_yield_balance()` in lib.rs now reads that counter directly.
 
@@ -377,7 +407,7 @@ fn record_redeem(env: &Env, vault_addr: &Address, shares: i128, asset_received: 
 pub fn withdrawable_amount(env: &Env, staker: &Address) -> i128 {
     match storage::get_stake(env, staker) {
         Some(record) if record.amount > 0 && !record.withdrawn => {
-            record.amount * storage::get_yield_index(env) / record.yield_index_at_stake
+            record.amount + staker_yield_owed(env, &record)
         }
         _ => 0,
     }
@@ -552,7 +582,8 @@ pub fn deploy_to_vault(
     }
     let vault_addr = storage::get_vault(env).ok_or(PoolError::VaultNotSet)?;
 
-    let liquid = liquid_balance(env);
+    // r3: set-aside yield is never deployed.
+    let liquid = free_liquid(env);
     if liquid < amount {
         return Err(PoolError::InsufficientLiquidity);
     }
@@ -635,7 +666,8 @@ pub fn auto_deploy_liquidity(env: &Env) -> Result<i128, PoolError> {
         return Err(PoolError::NothingDeployed);
     }
 
-    let liquid = liquid_balance(env);
+    // r3: set-aside yield is never deployed.
+    let liquid = free_liquid(env);
     let total_allocated = storage::get_total_allocated(env);
     let idle = (liquid - total_allocated).max(0);
     if idle == 0 {
@@ -702,7 +734,7 @@ pub fn auto_deploy_liquidity(env: &Env) -> Result<i128, PoolError> {
 }
 
 // -----------------------------------------------------------------------
-// Redemption: shared core for provide_liquidity and extract_yield.
+// Redemption: shared core for provide_liquidity and ensure_liquidity.
 // -----------------------------------------------------------------------
 
 /// Redeems `shares`, returns `(asset_received, principal_equivalent)`.
@@ -808,7 +840,8 @@ pub fn provide_liquidity(
 /// No `require_not_paused`, same reasoning as `provide_liquidity` above,
 /// this IS the pause-time liquidity-restoring path.
 pub fn ensure_liquidity(env: &Env) -> Result<i128, PoolError> {
-    let liquid = liquid_balance(env);
+    // r3: set-aside yield cannot cover claims, so it does not count here.
+    let liquid = free_liquid(env);
     let total_allocated = storage::get_total_allocated(env);
     let deployed_shares = storage::get_total_deployed_shares(env);
     let deployed_asset = storage::get_total_deployed_asset(env);
@@ -872,99 +905,172 @@ pub fn ensure_liquidity(env: &Env) -> Result<i128, PoolError> {
     Ok(asset_received)
 }
 
-/// V8 `extractYield` (`:898`), redeem a tranche and split ONLY the excess
-/// above proportional principal. Principal stays in the contract, exactly
-/// as V8 does.
-///
-/// CHANGED 2026-09-18 (design decision): the realised excess used to go
-/// 100% to treasury on the spot. It now SPLITS at `YIELD_SPLIT_STAKER_BPS`
-/// (50/50): the staker half compounds into `YieldIndex` (every live staker's
-/// withdrawable balance grows proportionally: see `stake.rs::withdraw`),
-/// the protocol half is added to `ProtocolYieldBalance` and stays IN THE
-/// POOL: "the protocol's own money", withdrawn later via `withdraw_yield`,
-/// not auto-transferred here. Nothing transfers to treasury in this
-/// function anymore.
-///
-/// If `total_staked` is 0 (no live stakers to credit), the entire realised
-/// amount goes to the protocol share instead of being silently stranded,
-/// there is nobody for a staker-side index bump to benefit.
-///
-/// Saturating at zero on a loss is V8's behaviour (`:912`) and is load-
-/// bearing here, not cosmetic: this workspace builds with
-/// `overflow-checks = true`, so an unguarded `asset_received - principal`
-/// would panic rather than yield a negative. On a shortfall the redemption
-/// still completes, nothing is split, and `DeploymentShortfall` fires from
-/// `redeem`.
-pub fn extract_yield(env: &Env, shares: i128, min_asset_out: i128) -> Result<i128, PoolError> {
-    let admin = storage::get_admin(env);
-    admin.require_auth();
+// -----------------------------------------------------------------------
+// r3 (2026-09-29): yield. Design rules, 2026-09-29:
+//   1. Backers earn on MATURED money only (money in its wait is not in
+//      `TotalBacked`, so the split below never reaches it).
+//   2. Every owner takes their yield any time: no wait, no notice, no
+//      pool-health check, and a staker keeps their stake.
+//   3. No admin step: a yield payout harvests vault growth itself.
+//   4. Staker and backer yield is set aside (`StakerYieldReserved`,
+//      `BackerYieldReserved`): never deployed, never used for claims or
+//      principal. The protocol share is pool cash, usable for claims until
+//      the protocol withdraws it.
+// Replaces the admin-only `extract_yield`.
+// -----------------------------------------------------------------------
 
-    let vault_addr = storage::get_vault(env).ok_or(PoolError::VaultNotSet)?;
-
-    let (asset_received, principal_equiv) = redeem(env, &vault_addr, shares, min_asset_out)?;
-
-    let yield_amount = if asset_received > principal_equiv {
-        asset_received - principal_equiv
-    } else {
-        0
-    };
+/// The one place yield is split. Called for every unit of growth that
+/// comes back from the vault (`record_redeem` and `harvest`). Each side's
+/// index moves by what it can represent exactly; rounding dust goes to the
+/// protocol share, so the set-aside counters always equal what the indexes
+/// owe (to within per-record floor rounding, which favours the pool).
+pub(crate) fn credit_yield(env: &Env, amount: i128) {
+    if amount <= 0 {
+        return;
+    }
+    let total_staked = storage::get_total_staked(env);
+    let total_backed = storage::get_total_backed(env);
+    let capacity = total_staked + total_backed;
 
     let mut staker_share: i128 = 0;
-    let mut protocol_share: i128 = 0;
-
-    if yield_amount > 0 {
-        storage::set_total_extracted_yield(
-            env,
-            storage::get_total_extracted_yield(env) + yield_amount,
-        );
-
-        let total_staked = storage::get_total_staked(env);
+    let mut backer_share: i128 = 0;
+    if capacity > 0 {
         if total_staked > 0 {
-            // v1: only yield earned on STAKER capital is shareable with
-            // stakers (their fraction of capacity); yield on backer money
-            // goes to the protocol (design decision, 2026-09-22).
-            let staker_capital_yield = yield_amount * total_staked / storage::get_capacity(env);
-            staker_share = staker_capital_yield
+            let part = amount * total_staked / capacity
                 * crate::settings::get(env, crate::settings::SettingKey::StakerYieldBps)
                 / YIELD_SPLIT_BPS_DENOMINATOR;
-            protocol_share = yield_amount - staker_share;
-
-            if staker_share > 0 {
-                // Floor: dust below one index-precision unit rounds toward
-                // the pool, same direction as every other rounding call here.
-                let bump = staker_share * YIELD_INDEX_PRECISION / total_staked;
-                if bump > 0 {
-                    storage::set_yield_index(env, storage::get_yield_index(env) + bump);
-                }
+            let bump = part * YIELD_INDEX_PRECISION / total_staked;
+            if bump > 0 {
+                storage::set_yield_index(env, storage::get_yield_index(env) + bump);
+                staker_share = bump * total_staked / YIELD_INDEX_PRECISION;
+                storage::set_staker_yield_reserved(
+                    env,
+                    storage::get_staker_yield_reserved(env) + staker_share,
+                );
             }
-        } else {
-            // Nobody staked right now: the whole amount is protocol's,
-            // there is no staker-side index to credit.
-            protocol_share = yield_amount;
         }
-
-        storage::set_protocol_yield_balance(
-            env,
-            storage::get_protocol_yield_balance(env) + protocol_share,
-        );
+        if total_backed > 0 {
+            let part = amount * total_backed / capacity
+                * crate::settings::get(env, crate::settings::SettingKey::BackerYieldBps)
+                / YIELD_SPLIT_BPS_DENOMINATOR;
+            let bump = part * YIELD_INDEX_PRECISION / total_backed;
+            if bump > 0 {
+                storage::set_backer_yield_index(env, storage::get_backer_yield_index(env) + bump);
+                backer_share = bump * total_backed / YIELD_INDEX_PRECISION;
+                storage::set_backer_yield_reserved(
+                    env,
+                    storage::get_backer_yield_reserved(env) + backer_share,
+                );
+            }
+        }
     }
+    let protocol_share = amount - staker_share - backer_share;
+    storage::set_protocol_yield_balance(
+        env,
+        storage::get_protocol_yield_balance(env) + protocol_share,
+    );
+    storage::set_total_extracted_yield(env, storage::get_total_extracted_yield(env) + amount);
     storage::bump_instance_ttl(env);
 
-    YieldExtracted {
-        shares_redeemed: shares,
-        asset_received,
-        yield_amount,
-        staker_share,
-        protocol_share,
-    }
-    .publish(env);
+    YieldCredited { yield_amount: amount, staker_share, backer_share, protocol_share }.publish(env);
+}
 
-    Ok(yield_amount)
+/// Permissionless, best effort. Redeems only the vault's growth above book
+/// value and credits it. Never fails and never changes book value: the
+/// redeemed shares leave `TotalDeployedShares`, `TotalDeployedAsset` stays,
+/// so the remaining shares still cover the full book value. Skipped while
+/// paused. Returns the yield credited (0 if nothing to take or any vault
+/// call fails).
+pub fn harvest(env: &Env) -> i128 {
+    if storage::is_paused(env) {
+        return 0;
+    }
+    let Some(vault_addr) = storage::get_vault(env) else {
+        return 0;
+    };
+    let deployed_shares = storage::get_total_deployed_shares(env);
+    let deployed_asset = storage::get_total_deployed_asset(env);
+    if deployed_shares <= 0 || deployed_asset <= 0 {
+        return 0;
+    }
+    let vault = VaultClient::new(env, &vault_addr);
+    let Ok(Ok(values)) = vault.try_get_asset_amounts_per_shares(&deployed_shares) else {
+        return 0;
+    };
+    let value = values.get(0).unwrap_or(0);
+    let growth = value - deployed_asset;
+    if growth <= 0 || value <= 0 {
+        return 0;
+    }
+    // Floor: never redeem more shares than the growth is worth.
+    let shares = growth * deployed_shares / value;
+    if shares <= 0 {
+        return 0;
+    }
+    let expected = value * shares / deployed_shares;
+    let mut mins = Vec::new(env);
+    mins.push_back(expected * (BPS_DENOMINATOR - HARVEST_SLIPPAGE_BPS) / BPS_DENOMINATOR);
+
+    let liquid_before = liquid_balance(env);
+    authorize_withdraw(env, &vault_addr, shares, &mins);
+    if vault.try_withdraw(&shares, &mins, &env.current_contract_address()).is_err() {
+        return 0;
+    }
+    let received = liquid_balance(env) - liquid_before;
+    storage::set_total_deployed_shares(env, deployed_shares - shares);
+    credit_yield(env, received);
+    received
+}
+
+/// Staker yield owed and not yet paid (additive index, see `StakeRecord`).
+pub(crate) fn staker_yield_owed(env: &Env, record: &crate::types::StakeRecord) -> i128 {
+    let delta = storage::get_yield_index(env) - record.yield_index_at_stake;
+    if delta <= 0 || record.amount <= 0 {
+        return 0;
+    }
+    record.amount * delta / YIELD_INDEX_PRECISION
+}
+
+/// Takes `owed` out of the staker set-aside. Returns what can actually be
+/// paid: capped by the set-aside, which after a vault loss marks
+/// `total_staked` down can hold less than the records' sum.
+pub(crate) fn take_staker_yield(env: &Env, owed: i128) -> i128 {
+    let reserved = storage::get_staker_yield_reserved(env);
+    let paid = owed.min(reserved).max(0);
+    storage::set_staker_yield_reserved(env, reserved - paid);
+    paid
+}
+
+/// Same for backers.
+pub(crate) fn take_backer_yield(env: &Env, owed: i128) -> i128 {
+    let reserved = storage::get_backer_yield_reserved(env);
+    let paid = owed.min(reserved).max(0);
+    storage::set_backer_yield_reserved(env, reserved - paid);
+    paid
+}
+
+/// Moves a forfeited stake's unpaid yield to the protocol share (design
+/// rule 2026-09-29: a forfeited stake and its yield go to the pool).
+pub(crate) fn forfeit_staker_yield(env: &Env, record: &mut crate::types::StakeRecord) {
+    // Already out of `total_staked`: it has earned nothing since, and its
+    // yield was settled when it left.
+    if record.withdrawn {
+        record.yield_index_at_stake = storage::get_yield_index(env);
+        return;
+    }
+    let moved = take_staker_yield(env, staker_yield_owed(env, record));
+    record.yield_index_at_stake = storage::get_yield_index(env);
+    if moved > 0 {
+        storage::set_protocol_yield_balance(
+            env,
+            storage::get_protocol_yield_balance(env) + moved,
+        );
+    }
 }
 
 /// V8 `withdrawYield` (`:860`), send the protocol's own realised yield
 /// share to treasury. "The protocol's own money", it already sat
-/// in `ProtocolYieldBalance` since `extract_yield` credited it there;
+/// in `ProtocolYieldBalance` since `credit_yield` credited it there;
 /// nothing new is realised or computed here, only paid out.
 ///
 /// CHANGED 2026-09-18: gate switched from the residual `yield_balance()`
@@ -985,14 +1091,14 @@ pub fn withdraw_yield(env: &Env, amount: i128) -> Result<(), PoolError> {
     if amount > storage::get_protocol_yield_balance(env) {
         return Err(PoolError::ExceedsYieldBalance);
     }
-    if amount > liquid_balance(env) {
-        return Err(PoolError::InsufficientLiquidity);
-    }
+    // r3: never touches staker/backer set-aside yield; pulls from the vault
+    // if cash is short, like every other payment.
+    pull_for_payment(env, amount)?;
 
     // NOTE 2026-09-18: total_extracted_yield is NOT incremented here.
-    // extract_yield already counts the full realised amount the moment it
+    // credit_yield already counts the full realised amount the moment it
     // is redeemed from the vault, that is what "extracted" names. Adding
-    // to it again here, now that extract_yield and the treasury payout are
+    // to it again here, now that crediting and the treasury payout are
     // two separate events instead of one atomic step, would double-count
     // every stroop that gets withdrawn (found as a real test failure while
     // building the split: 8M realised + 4M withdrawn read back as 12M).

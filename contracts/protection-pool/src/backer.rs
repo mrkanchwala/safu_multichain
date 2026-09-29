@@ -1,8 +1,14 @@
 //! v1 (2026-09-22): backers.
 //!
 //! A backer deposits money that adds to the pool's capacity and liquidity
-//! (a confidence signal for stakers). Backers earn nothing: yield on backer
-//! money goes to the protocol (vault.rs `extract_yield`). Anyone can back.
+//! (a confidence signal for stakers). Anyone can back.
+//!
+//! r3 (2026-09-29, design decision): backers earn yield on MATURED money
+//! (`BackerYieldBps`, default 100%; the rest goes to the protocol). Money in
+//! its maturity wait earns nothing. Yield can be taken any time
+//! (`claim_backer_yield`), with no notice and no free-capital check, and is
+//! also paid with every completed withdrawal. Before r3 all yield on backer
+//! money went to the protocol.
 //!
 //! No loss accounting (design decision 2026-09-22, same as stakers): a
 //! backer always gets back exactly what they put in. What makes backers the
@@ -31,7 +37,7 @@ use soroban_sdk::{contractevent, token::TokenClient, Address, Env};
 
 use crate::error::PoolError;
 use crate::storage;
-use crate::types::{BackerRecord, BACKER_MATURITY_SECONDS};
+use crate::types::{BackerRecord, BACKER_MATURITY_SECONDS, YIELD_INDEX_PRECISION};
 
 #[contractevent]
 pub struct Backed {
@@ -70,19 +76,34 @@ pub struct BackerWithdrawn {
     pub amount: i128,
 }
 
-fn empty_record() -> BackerRecord {
+fn empty_record(env: &Env) -> BackerRecord {
     BackerRecord {
         amount: 0,
         pending_amount: 0,
         pending_matures_at: 0,
         withdraw_amount: 0,
         withdraw_ready_at: 0,
+        yield_index_at: storage::get_backer_yield_index(env),
+        yield_owed: 0,
     }
+}
+
+/// r3: settles yield earned on the counted balance since the last
+/// settlement into `yield_owed`. Must run before `amount` changes.
+fn accrue_yield(env: &Env, record: &mut BackerRecord) {
+    let index = storage::get_backer_yield_index(env);
+    let delta = index - record.yield_index_at;
+    if delta > 0 && record.amount > 0 {
+        record.yield_owed += record.amount * delta / YIELD_INDEX_PRECISION;
+    }
+    record.yield_index_at = index;
 }
 
 /// Moves matured pending money into the counted balance. Returns the amount
 /// moved (0 if nothing pending or not yet mature). Caller persists `record`.
+/// r3: settles yield first, so newly counted money earns only from now.
 fn settle_maturity(env: &Env, record: &mut BackerRecord) -> i128 {
+    accrue_yield(env, record);
     if record.pending_amount <= 0 || env.ledger().timestamp() < record.pending_matures_at {
         return 0;
     }
@@ -105,7 +126,7 @@ pub fn back(env: &Env, backer: &Address, amount: i128) -> Result<(), PoolError> 
         return Err(PoolError::AmountNotPositive);
     }
 
-    let mut record = storage::get_backer(env, backer).unwrap_or_else(empty_record);
+    let mut record = storage::get_backer(env, backer).unwrap_or_else(|| empty_record(env));
     let matured = settle_maturity(env, &mut record);
 
     let matures_at = env.ledger().timestamp() + BACKER_MATURITY_SECONDS;
@@ -113,6 +134,8 @@ pub fn back(env: &Env, backer: &Address, amount: i128) -> Result<(), PoolError> 
     record.pending_matures_at = matures_at;
     storage::set_backer(env, backer, &record);
     storage::set_total_backed_pending(env, storage::get_total_backed_pending(env) + amount);
+    // r3: from the first backing on, vault/treasury/deploy-ceiling changes wait 7 days.
+    storage::set_ever_funded(env);
     storage::bump_instance_ttl(env);
 
     if matured > 0 {
@@ -211,10 +234,14 @@ pub fn complete_withdrawal(env: &Env, backer: &Address) -> Result<i128, PoolErro
     if storage::get_total_allocated(env) > storage::get_capacity(env) - amount {
         return Err(PoolError::BackerCapitalNotFree);
     }
+    crate::vault::harvest(env);
     crate::vault::pull_for_payment(env, amount)?;
 
     // Effects before interaction (CEI).
     let matured = settle_maturity(env, &mut record);
+    // r3: unpaid yield goes out with the principal (set-aside cash).
+    let paid_yield = crate::vault::take_backer_yield(env, record.yield_owed);
+    record.yield_owed -= paid_yield;
     record.amount -= amount;
     record.withdraw_amount = 0;
     record.withdraw_ready_at = 0;
@@ -226,8 +253,50 @@ pub fn complete_withdrawal(env: &Env, backer: &Address) -> Result<i128, PoolErro
         BackingMatured { backer: backer.clone(), amount: matured }.publish(env);
     }
     BackerWithdrawn { backer: backer.clone(), amount }.publish(env);
+    if paid_yield > 0 {
+        crate::vault::YieldPaid { owner: backer.clone(), to: backer.clone(), amount: paid_yield }.publish(env);
+    }
 
     let token = TokenClient::new(env, &storage::get_asset_token(env));
-    token.transfer(&env.current_contract_address(), backer, &amount);
+    token.transfer(&env.current_contract_address(), backer, &(amount + paid_yield));
     Ok(amount)
+}
+
+/// r3 (2026-09-29): take backer yield any time, no notice, no free-capital
+/// check, principal untouched. Paid only to the backer's own address
+/// (rule 1). Works while paused (harvest skipped then). Also matures any
+/// pending money that is due, so it starts earning.
+pub fn claim_yield(env: &Env, backer: &Address) -> Result<i128, PoolError> {
+    backer.require_auth();
+    let mut record = storage::get_backer(env, backer).ok_or(PoolError::NoBacker)?;
+    crate::vault::harvest(env);
+    let matured = settle_maturity(env, &mut record);
+    let paid = crate::vault::take_backer_yield(env, record.yield_owed);
+    if paid <= 0 {
+        return Err(PoolError::NoYieldOwed);
+    }
+    record.yield_owed -= paid;
+    storage::set_backer(env, backer, &record);
+    storage::bump_instance_ttl(env);
+
+    if matured > 0 {
+        BackingMatured { backer: backer.clone(), amount: matured }.publish(env);
+    }
+    crate::vault::YieldPaid { owner: backer.clone(), to: backer.clone(), amount: paid }.publish(env);
+
+    let token = TokenClient::new(env, &storage::get_asset_token(env));
+    token.transfer(&env.current_contract_address(), backer, &paid);
+    Ok(paid)
+}
+
+/// r3: view of a backer's unpaid yield, including what has accrued since
+/// the record was last touched. Read-only.
+pub fn yield_owed_view(env: &Env, backer: &Address) -> i128 {
+    match storage::get_backer(env, backer) {
+        Some(mut record) => {
+            accrue_yield(env, &mut record);
+            record.yield_owed
+        }
+        None => 0,
+    }
 }

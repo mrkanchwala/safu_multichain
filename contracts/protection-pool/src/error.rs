@@ -281,4 +281,8 @@ pub enum PoolError {
     GovAlreadyApproved = 126,
     /// The role a change replaces cannot cancel it.
     GovCannotCancel = 127,
+
+    // -- r3 yield (128) --
+    /// No yield is owed to this staker or backer right now.
+    NoYieldOwed = 128,
 }

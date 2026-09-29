@@ -524,10 +524,23 @@ impl ProtectionPool {
         vault::ensure_liquidity(&env)
     }
 
-    /// Redeem a tranche and send only the excess above proportional
-    /// principal to treasury. Returns the yield amount (0 on a loss).
-    pub fn extract_yield(env: Env, shares: i128, min_asset_out: i128) -> Result<i128, PoolError> {
-        vault::extract_yield(&env, shares, min_asset_out)
+    /// r3 (2026-09-29): permissionless. Redeems only the vault's growth above
+    /// book value and splits it (stakers / backers / protocol). Best effort:
+    /// returns 0 rather than failing. Also runs inside every yield payout,
+    /// so nobody has to call it. Replaces the admin-only `extract_yield`.
+    pub fn harvest(env: Env) -> i128 {
+        vault::harvest(&env)
+    }
+
+    /// r3: a staker takes their yield without unstaking. Paid to the
+    /// beneficiary (hash-checked as in `withdraw`).
+    pub fn claim_yield(env: Env, staker: Address, beneficiary: Address) -> Result<i128, PoolError> {
+        stake::claim_yield(&env, &staker, &beneficiary)
+    }
+
+    /// r3: a backer takes their yield, principal untouched. Paid to the backer.
+    pub fn claim_backer_yield(env: Env, backer: Address) -> Result<i128, PoolError> {
+        backer::claim_yield(&env, &backer)
     }
 
     /// Send already-liquid excess above staker principal to treasury.
@@ -561,8 +574,8 @@ impl ProtectionPool {
         storage::get_protocol_yield_balance(&env)
     }
 
-    /// Aave-style growing multiplier. 1.0x is `YIELD_INDEX_PRECISION`; grows
-    /// only via `extract_yield`'s staker-share split. Exposed mainly for
+    /// Additive staker yield index. Starts at `YIELD_INDEX_PRECISION`; grows
+    /// only via `credit_yield`'s staker-share split. Exposed mainly for
     /// audit/observability: callers wanting a staker's actual withdrawable
     /// balance should call `get_withdrawable_amount` instead of re-deriving
     /// the ratio themselves.
@@ -575,6 +588,35 @@ impl ProtectionPool {
     /// stake, a withdrawn stake, or a forfeited (claimed) one.
     pub fn get_withdrawable_amount(env: Env, staker: Address) -> i128 {
         vault::withdrawable_amount(&env, &staker)
+    }
+
+    /// r3: a staker's yield credited and not yet paid (excludes growth
+    /// still in the vault until the next harvest).
+    pub fn get_staker_yield_owed(env: Env, staker: Address) -> i128 {
+        match storage::get_stake(&env, &staker) {
+            Some(record) if !record.withdrawn => vault::staker_yield_owed(&env, &record),
+            _ => 0,
+        }
+    }
+
+    /// r3: a backer's yield credited and not yet paid.
+    pub fn get_backer_yield_owed(env: Env, backer: Address) -> i128 {
+        backer::yield_owed_view(&env, &backer)
+    }
+
+    pub fn get_backer_yield_index(env: Env) -> i128 {
+        storage::get_backer_yield_index(&env)
+    }
+
+    /// r3: set-aside yield (stakers, backers). Never deployed or spent on claims.
+    pub fn get_yield_reserved(env: Env) -> (i128, i128) {
+        (storage::get_staker_yield_reserved(&env), storage::get_backer_yield_reserved(&env))
+    }
+
+    /// r3: false until the first stake or backing; while false, vault /
+    /// treasury / deploy-ceiling changes apply without the 7-day wait.
+    pub fn is_ever_funded(env: Env) -> bool {
+        storage::is_ever_funded(&env)
     }
 
     pub fn get_total_extracted_yield(env: Env) -> i128 {
