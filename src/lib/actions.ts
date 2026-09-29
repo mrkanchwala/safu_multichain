@@ -72,6 +72,17 @@ export async function withdrawStake(
 }
 
 /**
+ * r3: take the stake's yield without unstaking. Real signature:
+ * `claim_yield(staker, beneficiary)` -- paid to the beneficiary, which must
+ * match the stake's (hash-checked on-chain, same as `withdraw`).
+ */
+export async function claimStakerYield(client: AppClient, beneficiary: string): Promise<string> {
+  if (!isLive()) return fakeSignature();
+  const who = requireAddress(client);
+  return invokeContract(poolId(), "claim_yield", [addr(who), addr(beneficiary)], who);
+}
+
+/**
  * Redirect a stake's payout to a different beneficiary.
  *
  * Renamed from `setPayoutAddress` 2026-09-18 -- the old name called a method
@@ -163,4 +174,11 @@ export async function completeBackerWithdrawal(client: AppClient): Promise<strin
   if (!isLive()) return fakeSignature();
   const who = requireAddress(client);
   return invokeContract(poolId(), "complete_backer_withdrawal", [addr(who)], who);
+}
+
+/** r3: take backer yield any time, principal untouched. `claim_backer_yield(backer)`. */
+export async function claimBackerYield(client: AppClient): Promise<string> {
+  if (!isLive()) return fakeSignature();
+  const who = requireAddress(client);
+  return invokeContract(poolId(), "claim_backer_yield", [addr(who)], who);
 }

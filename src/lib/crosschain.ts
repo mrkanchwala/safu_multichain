@@ -249,7 +249,8 @@ export async function finishOnStellar(
 
 export type RelayAction =
   | "approve_claim" | "claim_home" | "withdraw_home" | "exit_home" | "send_home"
-  | "request_back_withdrawal" | "cancel_back_withdrawal" | "complete_back_withdrawal_home";
+  | "request_back_withdrawal" | "cancel_back_withdrawal" | "complete_back_withdrawal_home"
+  | "claim_yield_home" | "claim_backer_yield_home";
 
 /** The safu-account accepts only a plain Ed25519 signature over the 32 payload bytes. Some Solana
  *  wallets sign a different format (live test 2026-09-25, Night wallet: every relayed action was
@@ -293,7 +294,10 @@ export async function relayMature(account: string): Promise<string> {
 // sends a normal `receiveMessage` (Sepolia) or `receive_message` (Solana devnet) transaction. If the
 // user walks away, nothing is lost: anyone can finish the same message later.
 
-export type HomeAction = "claim_home" | "withdraw_home" | "exit_home" | "send_home" | "complete_back_withdrawal_home";
+export type HomeAction =
+  | "claim_home" | "withdraw_home" | "exit_home" | "send_home" | "complete_back_withdrawal_home"
+  // r3: take yield, keep the stake / backing, send it home.
+  | "claim_yield_home" | "claim_backer_yield_home";
 
 const TRANSMITTER = parseAbi([
   "function receiveMessage(bytes message, bytes attestation) returns (bool)",

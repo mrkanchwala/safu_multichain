@@ -5,6 +5,7 @@ import type { AppClient } from "../lib/client";
 import {
   backPool,
   cancelBackerWithdrawal,
+  claimBackerYield,
   completeBackerWithdrawal,
   matureBacking,
   requestBackerWithdrawal,
@@ -79,6 +80,10 @@ export function BackPanel() {
   const completeAction = useAction(() => done(crossChain
     ? relayHomeAction(client, need(), "complete_back_withdrawal_home", {}, setProgress).finally(() => setProgress(null))
     : completeBackerWithdrawal(client)));
+  // r3: take backer yield any time, backing untouched. EVM / Solana: sent home over CCTP.
+  const takeYieldAction = useAction(() => done(crossChain
+    ? relayHomeAction(client, need(), "claim_backer_yield_home", {}, setProgress).finally(() => setProgress(null))
+    : claimBackerYield(client)));
 
   const now = Date.now() / 1000;
   const canMature = !!backing && backing.pendingAmount > 0n && backing.pendingMaturesAt <= now;
@@ -144,6 +149,12 @@ export function BackPanel() {
                   </div>
                 </div>
               ) : null}
+              {backing.yieldOwed > 0n ? (
+                <div className="side-stat">
+                  <div className="k">Yield earned</div>
+                  <div className="v">{fmtUsdc(backing.yieldOwed)} USDC</div>
+                </div>
+              ) : null}
               {hasRequest ? (
                 <div className="side-stat">
                   <div className="k">Withdrawal requested</div>
@@ -190,6 +201,13 @@ export function BackPanel() {
         ) : null}
         <TxStatus action={completeAction} />
         <TxStatus action={cancelAction} />
+        {backing && backing.yieldOwed > 0n ? (
+          <button className="secondary-action" style={{ width: "100%", marginTop: 8 }}
+            disabled={takeYieldAction.isRunning} onClick={() => takeYieldAction.dispatch()}>
+            {takeYieldAction.isRunning ? "Sending..." : `Take ${fmtUsdc(backing.yieldOwed)} USDC yield`}
+          </button>
+        ) : null}
+        <TxStatus action={takeYieldAction} />
       </div>
 
       <div>

@@ -706,3 +706,180 @@ fn first_deposit_fits_network_limits() {
     assert!(r.disk_read_entries < TX_MAX_DISK_READ_ENTRIES);
     assert!(r.write_entries < TX_MAX_WRITE_ENTRIES);
 }
+
+// ------------------------------------------------------------ yield (r3) --
+//
+// r3 (2026-09-29): a home-chain owner takes yield without unstaking or
+// unbacking, and it burns home. Needs real vault growth, so a minimal vault
+// with the DeFindex interface the pool calls (same shape as the pool's own
+// test mock, signature verified over RPC) is wired in through governance.
+
+mod yield_home {
+    use super::*;
+    use protection_pool::{GovChange, GovKind};
+    use soroban_sdk::{contract, contractimpl, contracttype};
+
+    #[contracttype]
+    enum VKey {
+        Token,
+        RateBps,
+        Shares(Address),
+    }
+
+    #[contract]
+    struct Vault;
+
+    #[contractimpl]
+    impl Vault {
+        pub fn init(env: Env, token: Address) {
+            env.storage().instance().set(&VKey::Token, &token);
+            env.storage().instance().set(&VKey::RateBps, &BPS);
+        }
+        pub fn set_rate_bps(env: Env, bps: i128) {
+            env.storage().instance().set(&VKey::RateBps, &bps);
+        }
+        pub fn deposit(env: Env, amounts: Vec<i128>, _min: Vec<i128>, from: Address, _invest: bool) -> i128 {
+            from.require_auth();
+            let amount = amounts.get(0).unwrap();
+            let token: Address = env.storage().instance().get(&VKey::Token).unwrap();
+            TokenClient::new(&env, &token).transfer(&from, &env.current_contract_address(), &amount);
+            let cur: i128 = env.storage().instance().get(&VKey::Shares(from.clone())).unwrap_or(0);
+            env.storage().instance().set(&VKey::Shares(from), &(cur + amount));
+            amount
+        }
+        pub fn withdraw(env: Env, shares: i128, min_out: Vec<i128>, from: Address) -> i128 {
+            from.require_auth();
+            let token: Address = env.storage().instance().get(&VKey::Token).unwrap();
+            let rate: i128 = env.storage().instance().get(&VKey::RateBps).unwrap();
+            let cur: i128 = env.storage().instance().get(&VKey::Shares(from.clone())).unwrap_or(0);
+            env.storage().instance().set(&VKey::Shares(from.clone()), &(cur - shares));
+            let out = shares * rate / BPS;
+            assert!(out >= min_out.get(0).unwrap_or(0), "below min_amounts_out");
+            TokenClient::new(&env, &token).transfer(&env.current_contract_address(), &from, &out);
+            out
+        }
+        pub fn balance(env: Env, id: Address) -> i128 {
+            env.storage().instance().get(&VKey::Shares(id)).unwrap_or(0)
+        }
+        pub fn get_asset_amounts_per_shares(env: Env, vault_shares: i128) -> Vec<i128> {
+            let rate: i128 = env.storage().instance().get(&VKey::RateBps).unwrap();
+            vec![&env, vault_shares * rate / BPS]
+        }
+    }
+
+    /// Deploy ceiling for these flows, bps of capacity.
+    const DEPLOY_BPS: i128 = 8_000;
+    /// Vault gain applied once, bps.
+    const GAIN_BPS: i128 = 1_000;
+
+    fn gov(env: &Env, s: &Stack, change: GovChange, kind: GovKind) {
+        let (admin, co) = (s.pool.get_admin(), s.pool.get_co_signer());
+        s.pool.propose_change(&admin, &change);
+        s.pool.approve_change(&co, &change);
+        let eta = s.pool.get_pending_change(&kind).unwrap().eta;
+        env.ledger().with_mut(|li| li.timestamp = li.timestamp.max(eta));
+        s.pool.execute_change(&kind);
+    }
+
+    /// Wires a vault, deploys up to the ceiling, then grows it by GAIN_BPS.
+    fn deploy_and_grow<'a>(env: &'a Env, s: &Stack<'a>) -> VaultClient<'a> {
+        env.mock_all_auths();
+        let vault = VaultClient::new(env, &env.register(Vault, ()));
+        vault.init(&s.c.usdc.address);
+        gov(env, s, GovChange::Vault(vault.address.clone()), GovKind::Vault);
+        gov(env, s, GovChange::DeployBps(DEPLOY_BPS), GovKind::DeployBps);
+        let amount = s.pool.get_capacity() * DEPLOY_BPS / BPS;
+        s.pool.deploy_to_vault(&amount, &0);
+        vault.set_rate_bps(&(BPS + GAIN_BPS));
+        s.c.usdc_admin.mint(&vault.address, &amount);
+        vault
+    }
+
+    #[test]
+    fn staker_takes_yield_home_and_keeps_the_stake() {
+        let env = Env::default();
+        let s = setup_stack(&env);
+        let owner = Owner::evm(0x11);
+        let amount = mid_stake(&s);
+        let account = bridge_in(&env, &s, owner.domain(), 1, owner.sender32(&env), amount).unwrap().unwrap();
+        let acct = SafuAccountContractClient::new(&env, &account);
+        deploy_and_grow(&env, &s);
+        s.pool.harvest();
+        let owed = s.pool.get_staker_yield_owed(&account);
+        assert!(owed > s.c.scale(), "test is vacuous without bridgeable yield");
+
+        env.set_auths(&[owner_auth(&env, &account, &owner, 1, &account, "claim_yield_home", ().into_val(&env))]);
+        env.cost_estimate().budget().reset_unlimited();
+        env.cost_estimate().disable_resource_limits();
+        let sent = acct.claim_yield_home();
+        let r = env.cost_estimate().resources();
+        std::println!("claim_yield_home: instructions={} mem_bytes={} reads={} writes={}",
+            r.instructions, r.mem_bytes, r.disk_read_entries, r.write_entries);
+        assert!(r.instructions < TX_MAX_INSTRUCTIONS);
+        assert!(r.mem_bytes < TX_MEMORY_LIMIT);
+        assert!(r.disk_read_entries < TX_MAX_DISK_READ_ENTRIES);
+        assert!(r.write_entries < TX_MAX_WRITE_ENTRIES);
+
+        // Everything bridgeable went home; the sub-unit remainder waits.
+        assert_eq!(sent, owed - owed % s.c.scale());
+        assert_eq!(acct.balance(), owed % s.c.scale());
+        assert_eq!(staked(&s, &account), amount, "stake kept");
+        assert_eq!(s.pool.get_staker_yield_owed(&account), 0);
+    }
+
+    #[test]
+    fn solana_backer_takes_yield_home_and_keeps_the_backing() {
+        let env = Env::default();
+        let s = setup_stack(&env);
+        let owner = Owner::sol(0x22);
+        let amount = mid_stake(&s) * 3;
+        let payout = sol_payout_hook(&env, owner.sender32(&env), 255);
+        let account = bridge_with_hook(&env, &s, &s.backer_adapter, owner.domain(), 1, owner.sender32(&env), amount, &payout)
+            .unwrap()
+            .unwrap();
+        let acct = SafuAccountContractClient::new(&env, &account);
+        let matures_at = s.pool.get_backer(&account).unwrap().pending_matures_at;
+        env.ledger().with_mut(|li| li.timestamp = matures_at + 1);
+        s.pool.mature_backing(&account);
+        deploy_and_grow(&env, &s);
+        s.pool.harvest();
+        let owed = s.pool.get_backer_yield_owed(&account);
+        assert!(owed > s.c.scale(), "test is vacuous without bridgeable yield");
+
+        env.set_auths(&[owner_auth(&env, &account, &owner, 1, &account, "claim_backer_yield_home", ().into_val(&env))]);
+        let sent = acct.claim_backer_yield_home();
+        assert_eq!(sent, owed - owed % s.c.scale());
+        assert_eq!(backed(&s, &account), (amount, 0), "backing kept");
+        assert_eq!(s.pool.get_backer_yield_owed(&account), 0);
+    }
+
+    #[test]
+    fn no_yield_means_nothing_moves() {
+        let env = Env::default();
+        let s = setup_stack(&env);
+        let owner = Owner::evm(0x11);
+        let amount = mid_stake(&s);
+        let account = bridge_in(&env, &s, owner.domain(), 1, owner.sender32(&env), amount).unwrap().unwrap();
+        let acct = SafuAccountContractClient::new(&env, &account);
+        env.set_auths(&[owner_auth(&env, &account, &owner, 1, &account, "claim_yield_home", ().into_val(&env))]);
+        assert!(acct.try_claim_yield_home().is_err());
+        assert_eq!(staked(&s, &account), amount);
+        assert_eq!(acct.balance(), 0);
+    }
+
+    #[test]
+    fn forged_signature_cannot_take_yield() {
+        let env = Env::default();
+        let s = setup_stack(&env);
+        let owner = Owner::evm(0x11);
+        let thief = Owner::evm(0x66);
+        let account = bridge_in(&env, &s, owner.domain(), 1, owner.sender32(&env), mid_stake(&s)).unwrap().unwrap();
+        let acct = SafuAccountContractClient::new(&env, &account);
+        deploy_and_grow(&env, &s);
+        s.pool.harvest();
+        let owed = s.pool.get_staker_yield_owed(&account);
+        env.set_auths(&[owner_auth(&env, &account, &thief, 1, &account, "claim_yield_home", ().into_val(&env))]);
+        assert!(acct.try_claim_yield_home().is_err());
+        assert_eq!(s.pool.get_staker_yield_owed(&account), owed);
+    }
+}

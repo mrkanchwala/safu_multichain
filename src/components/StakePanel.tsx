@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { POOL } from "../lib/pool";
 import { useAction, useClient } from "../lib/client";
 import type { AppClient } from "../lib/client";
-import { stake, withdrawStake } from "../lib/actions";
+import { claimStakerYield, stake, withdrawStake } from "../lib/actions";
 import { addCoveredWallet, confirmCoveredWallet } from "../lib/claimApi";
 import type { CoveredWalletResponse } from "../lib/claimApi";
 import {
@@ -123,6 +123,19 @@ export function StakePanel() {
     }
   });
 
+  // r3: take the yield, keep the stake. Stellar: paid to the staking wallet itself (the
+  // beneficiary, stake.rs 2026-09-19). EVM / Solana: claim_yield_home sends it over CCTP.
+  const takeYieldAction = useAction(async () => {
+    if (!client.address || !staker) throw new Error("Connect a wallet first.");
+    try {
+      if (client.kind === "stellar") return await claimStakerYield(client, client.address);
+      return await relayHomeAction(client, staker, "claim_yield_home", {}, setProgress);
+    } finally {
+      setProgress(null);
+      setRefreshKey((k) => k + 1);
+    }
+  });
+
   function registered(r: CoveredWalletResponse) {
     if (!staker) return;
     const row = rememberCoveredWallet(staker, r.chain, r.wallet, r.registered_at ?? Math.floor(Date.now() / 1000));
@@ -234,6 +247,17 @@ export function StakePanel() {
           {withdrawAction.isRunning ? "Withdrawing..." : crossChain ? "Withdraw to my wallet" : "Withdraw principal + yield"}
         </button>
         <TxStatus action={withdrawAction} />
+        {myStake && myStake.yieldOwed > 0n ? (
+          <button
+            className="secondary-action"
+            style={{ width: "100%", marginTop: 8 }}
+            disabled={takeYieldAction.isRunning}
+            onClick={() => takeYieldAction.dispatch()}
+          >
+            {takeYieldAction.isRunning ? "Sending..." : `Take ${fmtUsdc(myStake.yieldOwed)} USDC yield, keep my stake`}
+          </button>
+        ) : null}
+        <TxStatus action={takeYieldAction} />
 
         <div className="field-group" style={{ marginTop: 20 }}>
           <div className="field-label">

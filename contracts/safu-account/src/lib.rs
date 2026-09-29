@@ -173,6 +173,10 @@ pub trait Pool {
     fn cancel_backer_withdrawal(env: Env, backer: Address);
     /// Returns the amount paid to the backer.
     fn complete_backer_withdrawal(env: Env, backer: Address) -> i128;
+    /// r3: a staker's yield, stake kept. Returns the yield paid.
+    fn claim_yield(env: Env, staker: Address, beneficiary: Address) -> i128;
+    /// r3: a backer's yield, backing kept. Returns the yield paid.
+    fn claim_backer_yield(env: Env, backer: Address) -> i128;
 }
 
 #[contract]
@@ -322,6 +326,24 @@ impl SafuAccountContract {
         env.current_contract_address().require_auth();
         let me = env.current_contract_address();
         PoolClient::new(&env, &addr(&env, DataKey::Pool)).claim_stream(&claim_id, &me);
+        Self::send_all(&env)
+    }
+
+    /// r3 (2026-09-29): owner: take the stake's yield, keep the stake, and
+    /// send everything home.
+    pub fn claim_yield_home(env: Env) -> Result<i128, AccountError> {
+        env.current_contract_address().require_auth();
+        let me = env.current_contract_address();
+        PoolClient::new(&env, &addr(&env, DataKey::Pool)).claim_yield(&me, &me);
+        Self::send_all(&env)
+    }
+
+    /// r3 (2026-09-29): owner: take backer yield, keep the backing, and send
+    /// everything home.
+    pub fn claim_backer_yield_home(env: Env) -> Result<i128, AccountError> {
+        env.current_contract_address().require_auth();
+        let me = env.current_contract_address();
+        PoolClient::new(&env, &addr(&env, DataKey::Pool)).claim_backer_yield(&me);
         Self::send_all(&env)
     }
 

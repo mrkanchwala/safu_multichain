@@ -194,6 +194,7 @@ fn owner_may_authorise_every_own_function_and_the_direct_pool_calls() {
     for f in [
         "send_home", "withdraw_home", "exit_home", "claim_home", "stake_held",
         "back_held", "request_back_withdrawal", "cancel_back_withdrawal", "complete_back_withdrawal_home",
+        "claim_yield_home", "claim_backer_yield_home",
     ] {
         c.push_back(ctx(&env, &t.account, f));
     }
@@ -213,6 +214,8 @@ fn owner_signature_cannot_authorise_other_pool_calls() {
     for f in [
         "withdraw", "set_beneficiary", "emergency_exit", "claim_stream", "stake",
         "back", "request_backer_withdrawal", "cancel_backer_withdrawal", "complete_backer_withdrawal",
+        // r3: yield goes home only through the account's own *_home functions.
+        "claim_yield", "claim_backer_yield",
     ] {
         let c = vec![&env, ctx(&env, &t.pool, f)];
         let r = check(&env, &t, &PAYLOAD, evm_sign(&env, &k, &PAYLOAD, EVM_V_OFFSET), c);

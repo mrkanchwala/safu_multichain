@@ -68,6 +68,7 @@ export async function readPoolStats(
 export type MyStake = {
   amount: bigint; // fixed admission-time principal -- the entitlement basis
   withdrawable: bigint; // principal + accrued yield -- get_withdrawable_amount
+  yieldOwed: bigint; // r3: yield takeable now without unstaking -- get_staker_yield_owed
   activeClaimId: string | null;
 };
 
@@ -85,8 +86,9 @@ export async function readMyStake(_rpc: unknown, owner: string): Promise<MyStake
     [addr(owner)],
   );
   if (!record) return null;
-  const withdrawable = await readContract<bigint>(poolId(), "get_withdrawable_amount", [
-    addr(owner),
+  const [withdrawable, yieldOwed] = await Promise.all([
+    readContract<bigint>(poolId(), "get_withdrawable_amount", [addr(owner)]),
+    readContract<bigint>(poolId(), "get_staker_yield_owed", [addr(owner)]),
   ]);
   const claimBytes = (record.active_claim_id ?? record.reserved_claim_id) as
     | Uint8Array
@@ -95,6 +97,7 @@ export async function readMyStake(_rpc: unknown, owner: string): Promise<MyStake
   return {
     amount: record.amount as bigint,
     withdrawable,
+    yieldOwed,
     activeClaimId: claimBytes ? hexFromBytes(claimBytes) : null,
   };
 }
@@ -194,12 +197,16 @@ export type MyBacking = {
   pendingMaturesAt: number; // unix seconds, 0 when nothing pending
   withdrawAmount: bigint; // open withdrawal request, 0 when none
   withdrawReadyAt: number; // unix seconds
+  yieldOwed: bigint; // r3: yield takeable now -- get_backer_yield_owed
 };
 
 /** `get_backer` (lib.rs:277) -> Option<BackerRecord> (types.rs:350). */
 export async function readMyBacking(owner: string): Promise<MyBacking | null> {
   if (!isLive()) return delay(null);
-  const r = await readContract<Record<string, unknown> | null | undefined>(poolId(), "get_backer", [addr(owner)]);
+  const [r, yieldOwed] = await Promise.all([
+    readContract<Record<string, unknown> | null | undefined>(poolId(), "get_backer", [addr(owner)]),
+    readContract<bigint>(poolId(), "get_backer_yield_owed", [addr(owner)]),
+  ]);
   if (!r) return null;
   const n = (k: string) => BigInt((r[k] as bigint | number | undefined) ?? 0);
   return {
@@ -208,5 +215,6 @@ export async function readMyBacking(owner: string): Promise<MyBacking | null> {
     pendingMaturesAt: Number(r.pending_matures_at ?? 0),
     withdrawAmount: n("withdraw_amount"),
     withdrawReadyAt: Number(r.withdraw_ready_at ?? 0),
+    yieldOwed,
   };
 }
