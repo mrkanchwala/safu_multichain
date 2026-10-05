@@ -34,7 +34,7 @@ const GROUPS: { id: string; title: string; items: { q: string; a: ReactNode }[] 
     items: [
       {
         q: "How do I stake?",
-        a: "Connect a Stellar, Ethereum or Solana wallet with the button at the top, open the Stake tab and enter an amount. If you stake from Ethereum or Solana, your USDC travels to the Stellar pool through Circle's CCTP, and SAFU pays the Stellar fees for that step. The Stake tab shows the current minimum and maximum, which scale with the size of the pool.",
+        a: "Connect a Stellar, Ethereum or Solana wallet with the button at the top, open the Stake tab and enter an amount. If you stake from Ethereum or Solana, your USDC travels to the Stellar pool through Circle's CCTP, and SAFU pays the Stellar fees for that step. Each stake is currently 1 to 10 USDC, and the Stake tab shows the limits.",
       },
       {
         q: "Which wallet should I stake from?",
@@ -42,7 +42,7 @@ const GROUPS: { id: string; title: string; items: { q: string; a: ReactNode }[] 
       },
       {
         q: "How do I add the wallets I want covered?",
-        a: "After staking, register up to three wallets on any mix of the three chains. To show a wallet is yours, you send a tiny amount from that wallet to itself and we look for that transaction (on Stellar, a past transfer from it to your staking wallet also works). You never sign a message with the covered wallet. Those three wallets stay tied to your stake for good and can't be swapped later.",
+        a: "After staking, register up to three wallets on any mix of the three chains. To show a wallet is yours, you send a tiny amount from that wallet to itself and we look for that transaction (on Stellar, a past transfer from it to your staking wallet also works). You never sign a message with the covered wallet. Those three wallets stay tied to your stake for good and can't be swapped later. Your staking wallet can't be one of its own covered wallets.",
       },
       {
         q: "Can I withdraw my stake?",
@@ -50,7 +50,17 @@ const GROUPS: { id: string; title: string; items: { q: string; a: ReactNode }[] 
       },
       {
         q: "Is there any yield on my stake?",
-        a: "Yes. The pool puts idle USDC into a yield vault, and by default the yield on your own stake goes to you. You'll see it in the Stake tab, added to what you can withdraw.",
+        a: (
+          <>
+            Yes. The pool keeps some USDC on hand and puts the rest into a{" "}
+            <a href="https://stellar.expert/explorer/public/contract/CCLJT2O4FP7JUB6ITJQRC7CDL6N4K7CN74ALTMFWX232MWHGD47BDAMC" {...EXT}>
+              DeFindex vault
+            </a>{" "}
+            that lends it on Blend's Fixed pool on Stellar. By default the yield on your own stake goes to you, and
+            you'll see it in the Stake tab, added to what you can withdraw. Lending on Blend carries Blend's own
+            smart-contract risk.
+          </>
+        ),
       },
     ],
   },
@@ -108,7 +118,7 @@ const GROUPS: { id: string; title: string; items: { q: string; a: ReactNode }[] 
     items: [
       {
         q: 'What does "Back the pool" mean?',
-        a: "Backers add USDC that helps the pool pay large claims on time, without registering any wallets of their own. Backed money matures after 7 days and can then be withdrawn, and a loss in the yield vault is never charged to backers.",
+        a: "Backers add USDC that helps the pool pay large claims on time, without registering any wallets of their own. Backed money matures after 7 days and can then be withdrawn, and backers always get back exactly what they put in, but they can only take out money that open claims don't need.",
       },
       {
         q: "I run a wallet or platform. Can we use SAFU?",

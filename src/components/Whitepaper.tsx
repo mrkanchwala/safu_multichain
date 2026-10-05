@@ -222,16 +222,17 @@ export function Whitepaper({ onBack }: { onBack: () => void }) {
         <Slide id="wp-backing" title="Backing the pool">
           <p>
             Backers add USDC to help the pool pay large claims on time, without registering any wallets. Backing
-            matures after 7 days and can then be withdrawn, and a loss in the yield vault is never charged to backers.
+            matures after 7 days and can then be withdrawn. Backers always get back exactly what they put in, but they can
+            only take out money that open claims don't need.
             Backers can come in from Ethereum or Solana through CCTP as well.
           </p>
         </Slide>
 
         <Slide id="wp-yield" title="Yield">
           <p>
-            The pool keeps some cash on hand and can put the rest into a yield vault, moving money back automatically
-            when a withdrawal or payout needs it. By default the yield on your own stake goes to you, and yield on
-            backers' money goes to the protocol. 
+            The pool keeps some cash on hand and can put the rest into a yield vault that lends on Blend's Fixed pool on
+            Stellar, moving money back automatically when a withdrawal or payout needs it. By default the yield on your
+            own stake goes to you, and backers get the yield on their matured backing.
           </p>
         </Slide>
 
