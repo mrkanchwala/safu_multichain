@@ -91,5 +91,31 @@ describe("toFriendlyError", () => {
       expect(toFriendlyError(new Error(code)).message).not.toMatch(/[A-Z]{3,}_[A-Z]/);
     }
   });
-});
 
+  // Stellar refusal codes from soroban.ts (2026-10-13): each gets its own message, not the vague one.
+  it.each([
+    ["stake: submission rejected (txTooLate)", "too long to approve"],
+    ["stake: submission rejected (txBadSeq)", "another transaction at the same time"],
+    ["stake: submission rejected (txInsufficientBalance)", "Not enough XLM"],
+    ["stake: submission rejected (txInsufficientFee)", "network is busy"],
+    ["stake: submission rejected (tryAgainLater)", "network is busy"],
+    ["Account not found: GAAFX7CDTF3O5ZLDKL4UAWUEAMDX7ZQ5UXJEIXW7NV66RM7HYIX37USN", "isn't active on Stellar"],
+    ["stake: rejected on chain (txFailed/invokeHostFunctionResourceLimitExceeded)", "fee estimate was too low"],
+    ["stake: rejected on chain (txFailed/invokeHostFunctionTrapped)", "only a tiny network fee"],
+  ])("explains %s", (raw, expected) => {
+    expect(toFriendlyError(new Error(raw)).message).toContain(expected);
+  });
+
+  it("keeps an unknown Stellar refusal on the plain network-refused line", () => {
+    expect(toFriendlyError(new Error("stake: submission rejected (txMalformed)")).message).toBe(
+      "The network turned this transaction down. Nothing was taken. Try again.",
+    );
+  });
+
+  it("reads Stellar's USDC errors by their wording, not their #10/#13 codes", () => {
+    const noTrust = "stake: HostError: Error(Contract, #13)\n data:[\"trustline entry is missing for account\", GA..]";
+    const noFunds = "stake: HostError: Error(Contract, #10)\n data:[\"balance is not sufficient to spend\", 0, 10000000]";
+    expect(toFriendlyError(new Error(noTrust)).message).toContain("isn't set up for USDC");
+    expect(toFriendlyError(new Error(noFunds)).message).toBe("You don't have enough USDC in this wallet.");
+  });
+});

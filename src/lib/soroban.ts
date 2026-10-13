@@ -142,10 +142,30 @@ export async function invokeContract(
     TransactionBuilder.fromXDR(signedTxXdr, NETWORK_PASSPHRASE),
   );
   if (sent.status === "ERROR") {
-    throw new Error(`${method}: submission rejected`);
+    throw new Error(`${method}: submission rejected (${resultCode(sent.errorResult)})`);
+  }
+  if (sent.status === "TRY_AGAIN_LATER") {
+    throw new Error(`${method}: submission rejected (tryAgainLater)`);
   }
 
   return waitForTransaction(sent.hash, method);
+}
+
+/**
+ * Stellar's own reason for refusing or failing a transaction, e.g. "txTooLate" or
+ * "txFailed/invokeHostFunctionTrapped". Kept in the error so friendly-error.ts can
+ * say what actually happened instead of a generic line (added 2026-10-13 after a
+ * staker hit two unexplained refusals that left no trace anywhere).
+ */
+function resultCode(result?: xdr.TransactionResult): string {
+  const r = result?.result;
+  if (!r) return "unknown";
+  if (r.type !== "txFailed") return r.type;
+  const op = r.results[0];
+  if (op?.type === "opInner" && op.tr.type === "invokeHostFunction") {
+    return `txFailed/${op.tr.invokeHostFunctionResult.type}`;
+  }
+  return `txFailed/${op?.type ?? "unknown"}`;
 }
 
 /**
@@ -163,7 +183,7 @@ async function waitForTransaction(hash: string, method: string): Promise<string>
       return hash;
     }
     if (result.status === rpc.Api.GetTransactionStatus.FAILED) {
-      throw new Error(`${method}: rejected on chain`);
+      throw new Error(`${method}: rejected on chain (${resultCode(result.resultXdr)})`);
     }
     await new Promise((resolve) => setTimeout(resolve, 1_000));
   }

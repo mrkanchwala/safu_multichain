@@ -75,6 +75,26 @@ const CONTRACT_ERRORS: Record<number, string> = {
 
 /** Backend reason codes and fixed phrases, matched as substrings. */
 const ACTION_HINTS: Record<string, string> = {
+  // Stellar's own refusal codes, which soroban.ts puts in brackets (2026-10-13). Must stay above
+  // "submission rejected" / "rejected on chain", which match the same errors more vaguely.
+  "(txTooLate)": "This took too long to approve in your wallet, so it expired. Nothing was taken. Try again.",
+  "(txBadSeq)": "Your wallet sent another transaction at the same time. Nothing was taken. Try again.",
+  "(txInsufficientBalance)":
+    "Not enough XLM in the wallet to cover the network fee. Stellar keeps some XLM locked in every wallet, so add a little more and try again.",
+  "(txInsufficientFee)": "The Stellar network is busy right now. Nothing was taken. Try again in a minute.",
+  "(tryAgainLater)": "The Stellar network is busy right now. Nothing was taken. Try again in a minute.",
+  "(txNoAccount)": "This wallet isn't active on Stellar yet. Add some XLM to it first.",
+  "Account not found": "This wallet isn't active on Stellar yet. Add some XLM to it first.",
+  "(txBadAuth)": "Your wallet's signature wasn't accepted. Try again, or use a different wallet.",
+  invokeHostFunctionResourceLimitExceeded:
+    "The network fee estimate was too low this time. Your USDC wasn't moved. Try again.",
+  invokeHostFunctionInsufficientRefundableFee:
+    "The network fee estimate was too low this time. Your USDC wasn't moved. Try again.",
+  invokeHostFunctionEntryArchived: OUR_SIDE,
+  // Stellar's USDC contract, matched by its own wording: its codes #10 (balance) and #13 (trustline)
+  // reuse numbers the pool uses for admin errors, so "#10" alone can't tell them apart.
+  "trustline entry is missing": "This wallet isn't set up for USDC yet. Add USDC to it first, then try again.",
+  "is not sufficient to spend": "You don't have enough USDC in this wallet.",
   // Claim filing (claim.py / liquidation_claim.py / app.py)
   ASSET_CHAIN_REJECTED: "This asset isn't covered on that chain yet.",
   WALLET_NOT_COVERED:
@@ -128,7 +148,8 @@ const ACTION_HINTS: Record<string, string> = {
   "not deployed": `The service is being updated. ${TRY_LATER}`,
   // Direct Stellar calls (soroban.ts)
   "submission rejected": NETWORK_REFUSED,
-  "rejected on chain": NETWORK_REFUSED,
+  // A transaction that failed on chain still paid its small network fee, so "nothing was taken" would be wrong.
+  "rejected on chain": "The network turned this transaction down. Your USDC wasn't moved, only a tiny network fee was used. Try again.",
   "still unconfirmed": NOT_CONFIRMED,
   // Anything else the relayer or claim API refuses is a bug on our side, not something to fix.
   NOT_A_SAFU_ACCOUNT: OUR_SIDE,
