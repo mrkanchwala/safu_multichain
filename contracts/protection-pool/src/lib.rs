@@ -506,7 +506,7 @@ impl ProtectionPool {
                     && !r.withdrawn
                     && !admin::is_suspended(&env, &r)
                     && env.ledger().sequence().saturating_sub(r.staked_at_ledger)
-                        >= crate::types::TIME_GATE_LEDGERS
+                        >= r.time_gate_ledgers
             }
             None => false,
         }

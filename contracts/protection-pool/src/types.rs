@@ -376,6 +376,14 @@ pub struct StakeRecord {
     /// never start earlier than this, so suspended time never counts
     /// against the claimant.
     pub suspended_until: u64,
+    /// 2026-10-16: settings fixed at stake time, part of the promise to this
+    /// staker. Tier ceilings: the higher of these and the live setting
+    /// applies (a cut never reaches an existing stake, a raise does).
+    pub tier_a_ratio: i128,
+    pub tier_b_ratio: i128,
+    pub tier_c_ratio: i128,
+    pub time_gate_ledgers: u32,
+    pub claim_window_secs: u64,
 }
 
 // -----------------------------------------------------------------------
@@ -459,6 +467,10 @@ pub struct Claim {
     /// the window. A suspension pushes the start to its end.
     pub clock_start: u64,
     pub blocked_at_clock_start: u64,
+    /// 2026-10-16: length of the running clock's window, fixed when the
+    /// claim entered its state (approve window, then inactivity limit), so
+    /// a later setting change never shortens a claim already in flight.
+    pub window_secs: u64,
     /// 2026-10-16: place in the claim queue, 0 if never queued. Queued
     /// claims are released strictly in this order.
     pub queue_seq: u64,

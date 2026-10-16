@@ -289,3 +289,154 @@ fn storage_version_is_set_at_deploy_and_migrate_is_a_no_op_twice() {
     assert_eq!(s.client.migrate(), crate::types::STORAGE_VERSION);
     let _ = Address::generate(&env);
 }
+
+// -----------------------------------------------------------------------
+// Settings added 2026-10-16: bounds, order, and what existing stakes keep
+// -----------------------------------------------------------------------
+
+use crate::settings::SettingKey as K;
+
+const DAY_SECS: i128 = crate::types::SECONDS_PER_DAY as i128;
+const DAY_LEDGERS: i128 = crate::types::LEDGERS_PER_DAY as i128;
+const TIER_A: u32 = 1;
+
+fn try_file(
+    env: &Env,
+    s: &Setup<'_>,
+    wallet: &Address,
+    seed: u8,
+    entitlement: i128,
+    tier: u32,
+    hack_ts: u64,
+) -> Result<BytesN<32>, PoolError> {
+    let deadline = default_deadline(env);
+    let sig =
+        sign_approval(env, s, wallet, &tx_hash(env, seed), &entitlement, &tier, &hack_ts, &deadline);
+    match s.client.try_submit_claim(
+        &s.oracle, wallet, &tx_hash(env, seed), &entitlement, &tier, &hack_ts, &deadline, &sig,
+    ) {
+        Ok(Ok(id)) => Ok(id),
+        Err(Ok(e)) => Err(e),
+        other => panic!("unexpected {:?}", other),
+    }
+}
+
+#[test]
+fn new_settings_refuse_values_outside_their_bounds() {
+    let env = new_env();
+    let s = setup(&env);
+    for (key, bad) in [
+        (K::TierARatio, 21),
+        (K::TierCRatio, 0),
+        (K::TimeGateLedgers, 90 * DAY_LEDGERS - 1),
+        (K::ClaimWindowSecs, 14 * DAY_SECS - 1),
+        (K::ClaimWindowSecs, 90 * DAY_SECS + 1),
+        (K::ApproveWindowSecs, 30 * DAY_SECS - 1),
+        (K::InactivitySecs, 365 * DAY_SECS + 1),
+        (K::BackerMaturitySecs, 7 * DAY_SECS + 1),
+    ] {
+        assert_eq!(
+            s.client.try_propose_setting(&key, &bad),
+            Err(Ok(PoolError::SettingOutOfBounds)),
+            "{:?} = {}",
+            key,
+            bad
+        );
+    }
+}
+
+#[test]
+fn tier_ceilings_stay_in_order() {
+    let env = new_env();
+    let s = setup(&env);
+    // C above B (10) is refused at execution.
+    s.client.propose_setting(&K::TierCRatio, &11);
+    s.client.approve_setting(&K::TierCRatio, &11);
+    advance_ledgers(&env, (crate::settings::SETTINGS_TIMELOCK_SECONDS / SECONDS_PER_LEDGER) as u32 + 1);
+    assert_eq!(s.client.try_execute_setting(&K::TierCRatio), Err(Ok(PoolError::SettingOrderInvalid)));
+}
+
+#[test]
+fn a_ceiling_cut_reaches_new_stakes_only() {
+    let env = new_env();
+    let s = setup(&env);
+    let (old, _) = staked_wallet(&env, &s);
+    set_setting_via_timelock(&env, &s, K::TierARatio, 12);
+    let (new, _) = staked_wallet(&env, &s);
+    advance_past_time_gate(&env);
+    let full = MID_STAKE * 15;
+    assert!(try_file(&env, &s, &old, 1, full, TIER_A, now_ts(&env)).is_ok());
+    assert_eq!(
+        try_file(&env, &s, &new, 2, full, TIER_A, now_ts(&env)),
+        Err(PoolError::EntitlementExceedsTierCap)
+    );
+    assert!(try_file(&env, &s, &new, 3, MID_STAKE * 12, TIER_A, now_ts(&env)).is_ok());
+}
+
+#[test]
+fn a_ceiling_raise_reaches_existing_stakes() {
+    let env = new_env();
+    let s = setup(&env);
+    let (old, _) = staked_wallet(&env, &s);
+    set_setting_via_timelock(&env, &s, K::TierCRatio, 8);
+    advance_past_time_gate(&env);
+    assert!(try_file(&env, &s, &old, 1, MID_STAKE * 8, TIER_C, now_ts(&env)).is_ok());
+}
+
+#[test]
+fn a_longer_time_gate_does_not_reach_existing_stakes() {
+    let env = new_env();
+    let s = setup(&env);
+    let (old, _) = staked_wallet(&env, &s);
+    set_setting_via_timelock(&env, &s, K::TimeGateLedgers, 120 * DAY_LEDGERS);
+    let (new, _) = staked_wallet(&env, &s);
+    advance_days(&env, 91);
+    assert!(s.client.is_claim_eligible(&old));
+    assert!(!s.client.is_claim_eligible(&new));
+    advance_days(&env, 30);
+    assert!(s.client.is_claim_eligible(&new));
+}
+
+#[test]
+fn a_shorter_claim_window_does_not_reach_existing_stakes() {
+    let env = new_env();
+    let s = setup(&env);
+    let (old, _) = staked_wallet(&env, &s);
+    set_setting_via_timelock(&env, &s, K::ClaimWindowSecs, 14 * DAY_SECS);
+    let (new, _) = staked_wallet(&env, &s);
+    advance_past_time_gate(&env);
+    let hack = now_ts(&env);
+    advance_days(&env, 20); // past 14, inside 30
+    assert!(try_file(&env, &s, &old, 1, STROOPS_PER_UNIT, TIER_C, hack).is_ok());
+    assert_eq!(
+        try_file(&env, &s, &new, 2, STROOPS_PER_UNIT, TIER_C, hack),
+        Err(PoolError::ClaimWindowExpired)
+    );
+}
+
+#[test]
+fn a_shorter_approve_window_does_not_reach_a_claim_already_waiting() {
+    let env = new_env();
+    let s = setup(&env);
+    let id = awaiting_approval(&env, &s); // entered with the 100-day window
+    set_setting_via_timelock(&env, &s, K::ApproveWindowSecs, 30 * DAY_SECS);
+    advance_days(&env, 50);
+    assert_eq!(
+        s.client.try_expire_pending_approval(&id),
+        Err(Ok(PoolError::ApprovalWindowNotExpired))
+    );
+    assert_eq!(s.client.get_claim(&id).unwrap().window_secs, crate::types::APPROVE_WINDOW_SECONDS);
+}
+
+#[test]
+fn backer_maturity_is_a_setting() {
+    let env = new_env();
+    let s = setup(&env);
+    set_setting_via_timelock(&env, &s, K::BackerMaturitySecs, 0);
+    let backer = Address::generate(&env);
+    s.token_admin.mint(&backer, &MID_STAKE);
+    s.client.back(&backer, &MID_STAKE);
+    // Matures at once, no wait.
+    s.client.mature_backing(&backer);
+    assert_eq!(s.client.get_total_backed(), MID_STAKE);
+}

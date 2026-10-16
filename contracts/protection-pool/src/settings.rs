@@ -24,7 +24,9 @@ use soroban_sdk::{contractevent, contracttype, Address, Env};
 use crate::error::PoolError;
 use crate::storage;
 use crate::types::{
-    COOLDOWN_LEDGERS, LEDGERS_PER_DAY, MAX_STAKE_BPS, MIN_STAKE_BPS, SECONDS_PER_DAY,
+    APPROVE_WINDOW_SECONDS, BACKER_MATURITY_SECONDS, CLAIM_WINDOW_SECONDS,
+    COLLECTION_INACTIVITY_SECONDS, COOLDOWN_LEDGERS, LEDGERS_PER_DAY, MAX_STAKE_BPS,
+    MIN_STAKE_BPS, SECONDS_PER_DAY, TIER_A_RATIO, TIER_B_RATIO, TIER_C_RATIO, TIME_GATE_LEDGERS,
     VESTING_LEDGERS, YIELD_SPLIT_BACKER_BPS, YIELD_SPLIT_BPS_DENOMINATOR, YIELD_SPLIT_STAKER_BPS,
 };
 
@@ -68,6 +70,24 @@ pub enum SettingKey {
     PauseMaxSecs = 14,
     /// 2026-10-16: wait after a pause ends before the next can start.
     PauseGapSecs = 15,
+    /// 2026-10-16: tier coverage ceilings, multiples of the stake. A >= B >= C.
+    /// A cut reaches new stakes only (each stake keeps the ceilings it staked
+    /// under); a raise reaches everyone (the higher of the two applies).
+    TierARatio = 16,
+    TierBRatio = 17,
+    TierCRatio = 18,
+    /// 2026-10-16: no payout on a stake younger than this, in ledgers. Never
+    /// below 90 days. Fixed per stake at stake time.
+    TimeGateLedgers = 19,
+    /// 2026-10-16: a claim must be filed within this long of the hack.
+    /// Fixed per stake at stake time.
+    ClaimWindowSecs = 20,
+    /// 2026-10-16: time to approve a claim, and the no-collection limit.
+    /// Fixed on the claim when it enters that state.
+    ApproveWindowSecs = 21,
+    InactivitySecs = 22,
+    /// 2026-10-16: wait before new backing counts toward capacity.
+    BackerMaturitySecs = 23,
 }
 
 /// A proposed change waiting for co-signer approval and/or its timelock.
@@ -97,6 +117,15 @@ const PAUSE_MAX_MIN: i128 = SECONDS_PER_DAY as i128;
 const PAUSE_MAX_MAX: i128 = 30 * SECONDS_PER_DAY as i128;
 const PAUSE_GAP_MIN: i128 = 30 * SECONDS_PER_DAY as i128;
 const PAUSE_GAP_MAX: i128 = 90 * SECONDS_PER_DAY as i128;
+const TIER_RATIO_MIN: i128 = 1;
+const TIER_RATIO_MAX: i128 = 20;
+const TIME_GATE_MIN: i128 = 90 * LEDGERS_PER_DAY as i128;
+const TIME_GATE_MAX: i128 = 365 * LEDGERS_PER_DAY as i128;
+const CLAIM_WINDOW_MIN: i128 = 14 * SECONDS_PER_DAY as i128;
+const CLAIM_WINDOW_MAX: i128 = 90 * SECONDS_PER_DAY as i128;
+const CLAIM_CLOCK_MIN: i128 = 30 * SECONDS_PER_DAY as i128;
+const CLAIM_CLOCK_MAX: i128 = 365 * SECONDS_PER_DAY as i128;
+const BACKER_MATURITY_MAX: i128 = 7 * SECONDS_PER_DAY as i128;
 
 /// Defaults = the values the pool shipped with, so a fresh deploy behaves
 /// exactly as before until a setting is changed.
@@ -118,6 +147,14 @@ fn default_value(env: &Env, key: SettingKey) -> i128 {
         SettingKey::BackerYieldBps => YIELD_SPLIT_BACKER_BPS,
         SettingKey::PauseMaxSecs => crate::admin::PAUSE_MAX_SECONDS as i128,
         SettingKey::PauseGapSecs => PAUSE_GAP_MIN,
+        SettingKey::TierARatio => TIER_A_RATIO,
+        SettingKey::TierBRatio => TIER_B_RATIO,
+        SettingKey::TierCRatio => TIER_C_RATIO,
+        SettingKey::TimeGateLedgers => TIME_GATE_LEDGERS as i128,
+        SettingKey::ClaimWindowSecs => CLAIM_WINDOW_SECONDS as i128,
+        SettingKey::ApproveWindowSecs => APPROVE_WINDOW_SECONDS as i128,
+        SettingKey::InactivitySecs => COLLECTION_INACTIVITY_SECONDS as i128,
+        SettingKey::BackerMaturitySecs => BACKER_MATURITY_SECONDS as i128,
     }
 }
 
@@ -140,6 +177,15 @@ fn in_bounds(env: &Env, key: SettingKey, value: i128) -> bool {
         SettingKey::BackerYieldBps => (0..=YIELD_BPS_MAX).contains(&value),
         SettingKey::PauseMaxSecs => (PAUSE_MAX_MIN..=PAUSE_MAX_MAX).contains(&value),
         SettingKey::PauseGapSecs => (PAUSE_GAP_MIN..=PAUSE_GAP_MAX).contains(&value),
+        SettingKey::TierARatio | SettingKey::TierBRatio | SettingKey::TierCRatio => {
+            (TIER_RATIO_MIN..=TIER_RATIO_MAX).contains(&value)
+        }
+        SettingKey::TimeGateLedgers => (TIME_GATE_MIN..=TIME_GATE_MAX).contains(&value),
+        SettingKey::ClaimWindowSecs => (CLAIM_WINDOW_MIN..=CLAIM_WINDOW_MAX).contains(&value),
+        SettingKey::ApproveWindowSecs | SettingKey::InactivitySecs => {
+            (CLAIM_CLOCK_MIN..=CLAIM_CLOCK_MAX).contains(&value)
+        }
+        SettingKey::BackerMaturitySecs => (0..=BACKER_MATURITY_MAX).contains(&value),
     }
 }
 
@@ -164,6 +210,11 @@ fn consistent_with_live(env: &Env, key: SettingKey, value: i128) -> bool {
         // A pause can never outlast the gap that follows it.
         SettingKey::PauseMaxSecs => value <= g(SettingKey::PauseGapSecs),
         SettingKey::PauseGapSecs => value >= g(SettingKey::PauseMaxSecs),
+        SettingKey::TierARatio => value >= g(SettingKey::TierBRatio),
+        SettingKey::TierBRatio => {
+            value <= g(SettingKey::TierARatio) && value >= g(SettingKey::TierCRatio)
+        }
+        SettingKey::TierCRatio => value <= g(SettingKey::TierBRatio),
         _ => true,
     }
 }

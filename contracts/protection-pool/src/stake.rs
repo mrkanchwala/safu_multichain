@@ -192,6 +192,13 @@ pub fn stake(
         withdrawn: false,
         suspended: false,
         suspended_until: 0,
+        tier_a_ratio: crate::settings::get(env, crate::settings::SettingKey::TierARatio),
+        tier_b_ratio: crate::settings::get(env, crate::settings::SettingKey::TierBRatio),
+        tier_c_ratio: crate::settings::get(env, crate::settings::SettingKey::TierCRatio),
+        time_gate_ledgers: crate::settings::get(env, crate::settings::SettingKey::TimeGateLedgers)
+            as u32,
+        claim_window_secs: crate::settings::get(env, crate::settings::SettingKey::ClaimWindowSecs)
+            as u64,
         active_claim_id: None,
         reserved_claim_id: None,
         claim_approved: false,

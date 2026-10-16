@@ -37,7 +37,7 @@ use soroban_sdk::{contractevent, token::TokenClient, Address, Env};
 
 use crate::error::PoolError;
 use crate::storage;
-use crate::types::{BackerRecord, BACKER_MATURITY_SECONDS, YIELD_INDEX_PRECISION};
+use crate::types::{BackerRecord, YIELD_INDEX_PRECISION};
 
 #[contractevent]
 pub struct Backed {
@@ -132,7 +132,8 @@ pub fn back(env: &Env, backer: &Address, amount: i128) -> Result<(), PoolError> 
     let mut record = storage::get_backer(env, backer).unwrap_or_else(|| empty_record(env));
     let matured = settle_maturity(env, &mut record);
 
-    let matures_at = env.ledger().timestamp() + BACKER_MATURITY_SECONDS;
+    let matures_at = env.ledger().timestamp()
+        + crate::settings::get(env, crate::settings::SettingKey::BackerMaturitySecs) as u64;
     record.pending_amount += amount;
     record.pending_matures_at = matures_at;
     storage::set_backer(env, backer, &record);

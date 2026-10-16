@@ -48,10 +48,8 @@ use crate::error::PoolError;
 use crate::stake;
 use crate::storage;
 use crate::types::{
-    Claim, ClaimStatus, OverrideRequest, StakeRecord, APPROVE_WINDOW_SECONDS, BPS_DENOMINATOR,
-    CLAIM_WINDOW_SECONDS, COLLECTION_INACTIVITY_SECONDS, SECONDS_PER_LEDGER,
-    MAX_APPROVAL_WINDOW_SECONDS, PENALTY_LOCK_LEDGERS, TIER_A_RATIO, TIER_B_RATIO, TIER_C_RATIO,
-    TIER_BPS_DENOMINATOR, TIER_COVERAGE_BPS, TIME_GATE_LEDGERS,
+    Claim, ClaimStatus, OverrideRequest, StakeRecord, BPS_DENOMINATOR, SECONDS_PER_LEDGER,
+    MAX_APPROVAL_WINDOW_SECONDS, PENALTY_LOCK_LEDGERS, TIER_BPS_DENOMINATOR, TIER_COVERAGE_BPS,
 };
 
 /// Domain separator for the oracle approval payload, deliberately NOT
@@ -188,19 +186,32 @@ pub struct ApprovalRevoked {
 // Helpers: exact formulas, per KB §1b.
 // -----------------------------------------------------------------------
 
-fn tier_ratio(tier: u32) -> Result<i128, PoolError> {
-    match tier {
-        1 => Ok(TIER_A_RATIO),
-        2 => Ok(TIER_B_RATIO),
-        3 => Ok(TIER_C_RATIO),
-        _ => Err(PoolError::InvalidTier),
+/// 2026-10-16: the ceiling multiple for `tier` on this stake: the higher of
+/// what it staked under and the live setting.
+fn tier_ratio(env: &Env, stake_record: &StakeRecord, tier: u32) -> Result<i128, PoolError> {
+    use crate::settings::{get as setting, SettingKey};
+    let (at_stake, key) = match tier {
+        1 => (stake_record.tier_a_ratio, SettingKey::TierARatio),
+        2 => (stake_record.tier_b_ratio, SettingKey::TierBRatio),
+        3 => (stake_record.tier_c_ratio, SettingKey::TierCRatio),
+        _ => return Err(PoolError::InvalidTier),
+    };
+    Ok(at_stake.max(setting(env, key)))
+}
+
+fn check_tier(tier: u32) -> Result<(), PoolError> {
+    if (1..=3).contains(&tier) {
+        Ok(())
+    } else {
+        Err(PoolError::InvalidTier)
     }
 }
 
 /// `stake × tier_ratio × TIER_COVERAGE_BPS / 10_000`, two knobs (ratio,
 /// coverage-bps), not one flat multiplier. Errors on an invalid tier.
-pub fn tier_cap(stake_amount: i128, tier: u32) -> Result<i128, PoolError> {
-    Ok(stake_amount * tier_ratio(tier)? * TIER_COVERAGE_BPS / TIER_BPS_DENOMINATOR)
+pub fn tier_cap(env: &Env, stake_record: &StakeRecord, tier: u32) -> Result<i128, PoolError> {
+    Ok(stake_record.amount * tier_ratio(env, stake_record, tier)? * TIER_COVERAGE_BPS
+        / TIER_BPS_DENOMINATOR)
 }
 
 /// Admission-side daily cap on new-claim entitlement. Separate counter
@@ -264,10 +275,16 @@ pub(crate) fn start_clock(env: &Env, claim: &mut Claim, at: u64) {
 /// couldn't pay (paused, vault short of cash) is added back, and the clock
 /// never starts before the stake's last suspension ended. Errs in the
 /// claimant's favour where those overlap.
-fn clock_expired(env: &Env, claim: &Claim, stake_record: &StakeRecord, window: u64) -> bool {
+fn clock_expired(env: &Env, claim: &Claim, stake_record: &StakeRecord) -> bool {
     let start = claim.clock_start.max(stake_record.suspended_until);
     let blocked = storage::get_blocked_secs(env).saturating_sub(claim.blocked_at_clock_start);
-    env.ledger().timestamp() > start + window + blocked
+    env.ledger().timestamp() > start + claim.window_secs + blocked
+}
+
+/// Fixes the window for the state the claim is entering, from the live
+/// setting.
+fn set_window(env: &Env, claim: &mut Claim, key: crate::settings::SettingKey) {
+    claim.window_secs = crate::settings::get(env, key) as u64;
 }
 
 /// Most dead places skipped per call: bounds the work any one call can be
@@ -534,6 +551,7 @@ fn verify_oracle_signature(
 /// Rule B clock starts at cooldown end (cooldown is in ledgers, the clock in
 /// seconds).
 fn start_cooldown_end_clock(env: &Env, claim: &mut Claim, now_ledger: u32) {
+    set_window(env, claim, crate::settings::SettingKey::InactivitySecs);
     let cooldown_secs =
         claim.cooldown_ends_ledger.saturating_sub(now_ledger) as u64 * SECONDS_PER_LEDGER;
     start_clock(env, claim, env.ledger().timestamp() + cooldown_secs);
@@ -626,7 +644,8 @@ fn admit_claim(
     stake_record.reserved_claim_id = None;
 
     let now_ledger = env.ledger().sequence();
-    let gate_met = now_ledger.saturating_sub(stake_record.staked_at_ledger) >= TIME_GATE_LEDGERS;
+    let gate_met =
+        now_ledger.saturating_sub(stake_record.staked_at_ledger) >= stake_record.time_gate_ledgers;
 
     let mut claim = Claim {
         wallet: wallet.clone(),
@@ -642,6 +661,7 @@ fn admit_claim(
         status: ClaimStatus::PendingTime,
         clock_start: 0,
         blocked_at_clock_start: 0,
+        window_secs: 0,
         queue_seq: 0,
         share_day: 0,
         share_left: 0,
@@ -653,6 +673,7 @@ fn admit_claim(
     // actively call approve_claim themselves (Rule A).
     if gate_met {
         claim.status = ClaimStatus::AwaitingApproval;
+        set_window(env, &mut claim, crate::settings::SettingKey::ApproveWindowSecs);
         start_clock(env, &mut claim, env.ledger().timestamp());
     }
 
@@ -727,7 +748,7 @@ pub fn submit_claim(
     if entitlement <= 0 {
         return Err(PoolError::EntitlementNotPositive);
     }
-    tier_ratio(tier)?; // errors on invalid tier
+    check_tier(tier)?;
 
     // Oracle path only: matches V8's `if (msg.sender == oracle)` at `:413`,
     // and sits at the same point in the validation order: after the caller
@@ -770,7 +791,7 @@ pub fn submit_claim(
         return Err(PoolError::ClaimAlreadyQueued);
     }
 
-    let cap = tier_cap(stake_record.amount, tier)?;
+    let cap = tier_cap(env, &stake_record, tier)?;
     if entitlement > cap {
         return Err(PoolError::EntitlementExceedsTierCap);
     }
@@ -782,7 +803,7 @@ pub fn submit_claim(
     if hack_timestamp < stake_record.staked_at_timestamp {
         return Err(PoolError::HackPredatesStake);
     }
-    if now_ts > hack_timestamp + CLAIM_WINDOW_SECONDS {
+    if now_ts > hack_timestamp + stake_record.claim_window_secs {
         return Err(PoolError::ClaimWindowExpired);
     }
 
@@ -859,6 +880,7 @@ pub fn submit_claim(
             status: ClaimStatus::Reserved,
             clock_start: 0,
             blocked_at_clock_start: 0,
+        window_secs: 0,
             queue_seq: storage::get_queue_tail(env),
             share_day: 0,
             share_left: 0,
@@ -1039,11 +1061,12 @@ pub fn unlock_pending_claim(env: &Env, claim_id: &BytesN<32>) -> Result<(), Pool
     let stake_record: StakeRecord =
         storage::get_stake(env, &claim.wallet).ok_or(PoolError::NoStake)?;
     let now_ledger = env.ledger().sequence();
-    if now_ledger < stake_record.staked_at_ledger + TIME_GATE_LEDGERS {
+    if now_ledger < stake_record.staked_at_ledger + stake_record.time_gate_ledgers {
         return Err(PoolError::TimeGateNotMet);
     }
 
     claim.status = ClaimStatus::AwaitingApproval;
+    set_window(env, &mut claim, crate::settings::SettingKey::ApproveWindowSecs);
     start_clock(env, &mut claim, env.ledger().timestamp());
 
     storage::set_claim(env, claim_id, &claim);
@@ -1080,7 +1103,7 @@ pub fn approve_claim(env: &Env, claim_id: &BytesN<32>) -> Result<(), PoolError> 
 
     let mut stake_record: StakeRecord =
         storage::get_stake(env, &claim.wallet).ok_or(PoolError::NoStake)?;
-    if clock_expired(env, &claim, &stake_record, APPROVE_WINDOW_SECONDS) {
+    if clock_expired(env, &claim, &stake_record) {
         return Err(PoolError::ApprovalWindowExpired);
     }
     if is_suspended(env, &stake_record) {
@@ -1139,7 +1162,7 @@ pub fn expire_pending_approval(env: &Env, claim_id: &BytesN<32>) -> Result<(), P
     if is_suspended(env, &stake_record) {
         return Err(PoolError::StakeSuspended);
     }
-    if !clock_expired(env, &claim, &stake_record, APPROVE_WINDOW_SECONDS) {
+    if !clock_expired(env, &claim, &stake_record) {
         return Err(PoolError::ApprovalWindowNotExpired);
     }
 
@@ -1191,7 +1214,7 @@ pub fn expire_stale_claim(env: &Env, claim_id: &BytesN<32>) -> Result<(), PoolEr
     if is_suspended(env, &stake_record) {
         return Err(PoolError::StakeSuspended);
     }
-    if !clock_expired(env, &claim, &stake_record, COLLECTION_INACTIVITY_SECONDS) {
+    if !clock_expired(env, &claim, &stake_record) {
         return Err(PoolError::ClaimNotStale);
     }
 
@@ -1431,7 +1454,7 @@ pub fn approve_override(
     if entitlement <= 0 {
         return Err(PoolError::EntitlementNotPositive);
     }
-    tier_ratio(tier)?;
+    check_tier(tier)?;
 
     let claim_id = compute_claim_id(env, wallet, tx_hash);
 
@@ -1555,7 +1578,7 @@ fn execute_override(env: &Env, claim_id: &BytesN<32>, req: &OverrideRequest) -> 
         return Err(PoolError::NoStakeAmountForOverride);
     }
 
-    let cap = tier_cap(original_stake_amount, req.tier)?;
+    let cap = tier_cap(env, &stake_record, req.tier)?;
     if req.entitlement > cap {
         return Err(PoolError::EntitlementExceedsTierCap);
     }
@@ -1595,6 +1618,7 @@ fn execute_override(env: &Env, claim_id: &BytesN<32>, req: &OverrideRequest) -> 
         status: ClaimStatus::Active,
         clock_start: 0,
         blocked_at_clock_start: 0,
+        window_secs: 0,
         queue_seq: 0,
         share_day: 0,
         share_left: 0,
