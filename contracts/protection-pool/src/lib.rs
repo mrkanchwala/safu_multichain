@@ -197,16 +197,53 @@ impl ProtectionPool {
         settings::get_pending(&env, key)
     }
 
-    pub fn pause(env: Env) {
-        admin::pause(&env);
+    pub fn pause(env: Env) -> Result<(), PoolError> {
+        admin::pause(&env)
     }
 
     pub fn unpause(env: Env) {
         admin::unpause(&env);
     }
 
+    /// Admin alone, up to 30 days, then it lapses.
     pub fn suspend_stake(env: Env, wallet: Address) -> Result<(), PoolError> {
         admin::suspend_stake(&env, &wallet)
+    }
+
+    /// Admin plus co-signer or guardian: start or extend a suspension for
+    /// 30 days from now.
+    pub fn renew_suspension(env: Env, wallet: Address, approver: Address) -> Result<(), PoolError> {
+        admin::renew_suspension(&env, &wallet, &approver)
+    }
+
+    /// 2026-10-16: after an upgrade, brings stored data up to this code's
+    /// layout. Anyone can call it; it only does the fixed steps for this
+    /// version and does nothing the second time. Returns the version.
+    pub fn migrate(env: Env) -> u32 {
+        let stored = storage::get_storage_version(&env);
+        if stored < types::STORAGE_VERSION {
+            // Version 1 is the first layout: no steps yet. Later versions
+            // add theirs here, oldest first.
+            storage::set_storage_version(&env, types::STORAGE_VERSION);
+            storage::bump_instance_ttl(&env);
+        }
+        types::STORAGE_VERSION
+    }
+
+    pub fn get_storage_version(env: Env) -> u32 {
+        storage::get_storage_version(&env)
+    }
+
+    /// 2026-10-16: seconds the pool couldn't pay, ever (paused, vault
+    /// short of cash). Claim clocks add the part since they started.
+    pub fn get_blocked_secs(env: Env) -> u64 {
+        storage::get_blocked_secs(&env)
+    }
+
+    /// 2026-10-16: (next place to release, next free place) in the claim
+    /// queue. The claim at a place: `get_claim` + its `queue_seq`.
+    pub fn get_queue(env: Env) -> (u64, u64) {
+        (storage::get_queue_head(&env), storage::get_queue_tail(&env))
     }
 
     /// `claim_id` optional: pass the wallet's in-flight claim (if any) so
@@ -455,7 +492,7 @@ impl ProtectionPool {
     /// stake. Does NOT check the time gate, see is_claim_eligible.
     pub fn is_eligible(env: Env, wallet: Address) -> bool {
         match storage::get_stake(&env, &wallet) {
-            Some(r) => r.amount > 0 && !r.withdrawn && !r.suspended,
+            Some(r) => r.amount > 0 && !r.withdrawn && !admin::is_suspended(&env, &r),
             None => false,
         }
     }
@@ -467,7 +504,7 @@ impl ProtectionPool {
             Some(r) => {
                 r.amount > 0
                     && !r.withdrawn
-                    && !r.suspended
+                    && !admin::is_suspended(&env, &r)
                     && env.ledger().sequence().saturating_sub(r.staked_at_ledger)
                         >= crate::types::TIME_GATE_LEDGERS
             }

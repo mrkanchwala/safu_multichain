@@ -116,7 +116,7 @@ fn expire_queued_claim_before_window_fails() {
 }
 
 #[test]
-fn expire_queued_claim_after_window_clears_the_wallet_slot() {
+fn queued_claim_never_expires_on_time() {
     let env = new_env();
     let s = setup(&env);
     let (w1, _b1) = staked_wallet(&env, &s);
@@ -125,23 +125,22 @@ fn expire_queued_claim_after_window_clears_the_wallet_slot() {
     let claim_id = submit_claim_signed(
         &env, &s, &s.oracle, &w1, &tx_hash(&env, 1), &entitlement, &TIER_C, &hack_ts,
     );
-    // Pin the boundary itself: the check is `now <= hack_ts + WINDOW`, so at
-    // EXACTLY the window it must still refuse, and one second later it must
-    // sweep. A `<=` -> `<` mutation flips only in that one-ledger gap.
-    advance_ledgers(&env, (CLAIM_WINDOW_SECONDS / SECONDS_PER_LEDGER) as u32);
-    let now = now_ts(&env);
-    assert_eq!(now, hack_ts + CLAIM_WINDOW_SECONDS, "must sit exactly on the window");
+    // 2026-10-16: days in the queue are days the pool couldn't pay, so a
+    // queued claim never expires on time, however long it waits.
+    advance_ledgers(&env, (CLAIM_WINDOW_SECONDS / SECONDS_PER_LEDGER) as u32 + 1);
+    assert!(now_ts(&env) > hack_ts + CLAIM_WINDOW_SECONDS);
     assert_eq!(
         s.client.try_expire_queued_claim(&claim_id),
         Err(Ok(PoolError::QueueNotYetExpired))
     );
-
-    advance_ledgers(&env, 1); // now strictly past it
-    s.client.expire_queued_claim(&claim_id);
-
+    advance_days(&env, 101);
+    assert_eq!(
+        s.client.try_expire_queued_claim(&claim_id),
+        Err(Ok(PoolError::QueueNotYetExpired))
+    );
     let claim = s.client.get_claim(&claim_id).unwrap();
-    assert_eq!(claim.status, ClaimStatus::Expired);
-    assert!(s.client.get_stake(&w1).unwrap().reserved_claim_id.is_none());
+    assert_eq!(claim.status, ClaimStatus::Reserved);
+    assert_eq!(s.client.get_stake(&w1).unwrap().reserved_claim_id, Some(claim_id));
 }
 
 /// 2-of-2 override, both approvers.
@@ -188,9 +187,11 @@ fn releasing_a_queued_claim_is_refused_when_the_wallet_has_another_active_claim(
     let active_id = s.client.get_stake(&w1).unwrap().active_claim_id.unwrap();
     assert_ne!(active_id, queued_id);
 
-    // Releasing the queued claim must now be refused outright.
+    // Releasing the queued claim must now be refused outright. 2026-10-16: the
+    // override forfeited the stake, so the queued claim has nothing left to
+    // pay against and is refused as dead.
     let result = s.client.try_try_release_queued_claim(&queued_id);
-    assert_eq!(result, Err(Ok(PoolError::WalletHasDifferentActiveClaim)));
+    assert_eq!(result, Err(Ok(PoolError::QueuedClaimStakeChanged)));
     // And it must not have been admitted: still Reserved, still no allocation
     // of its own beyond what the override legitimately took.
     assert_eq!(s.client.get_claim(&queued_id).unwrap().status, ClaimStatus::Reserved);

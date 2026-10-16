@@ -216,17 +216,21 @@ fn recovery_is_for_replacing_another_role_only() {
 // -- pause always ends --
 
 #[test]
-fn pause_ends_on_its_own_and_can_be_renewed() {
+fn pause_ends_on_its_own_and_cannot_be_renewed_back_to_back() {
     let env = new_env();
     let s = setup(&env);
     s.client.pause();
     assert!(s.client.is_paused());
     advance_secs(&env, PAUSE_MAX_SECONDS - SECONDS_PER_LEDGER);
     assert!(s.client.is_paused());
-    s.client.pause(); // renewed: another full window from now
-    advance_secs(&env, PAUSE_MAX_SECONDS - SECONDS_PER_LEDGER);
-    assert!(s.client.is_paused());
+    // 2026-10-16: no renewal while paused...
+    assert_eq!(s.client.try_pause(), Err(Ok(PoolError::AlreadyPaused)));
     advance_secs(&env, SECONDS_PER_LEDGER);
     assert!(!s.client.is_paused());
     staked_wallet(&env, &s); // the pool works again with nobody acting
+    // ...and none right after it ends: the gap (30 days) comes first.
+    assert_eq!(s.client.try_pause(), Err(Ok(PoolError::PauseGapNotMet)));
+    advance_secs(&env, 30 * crate::types::SECONDS_PER_DAY);
+    s.client.pause();
+    assert!(s.client.is_paused());
 }

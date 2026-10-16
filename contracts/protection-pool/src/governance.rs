@@ -1,8 +1,7 @@
 //! Pre-audit hardening (2026-09-23): key-loss-safe governance.
 //!
-//! The pool is never upgraded, so it must survive losing or leaking any key
-//! for its whole life. Design decision, after a scenario sweep (mechanism
-//! review 2026-09-23):
+//! The pool must survive losing or leaking any key for its whole life.
+//! Design decision, after a scenario sweep (mechanism review 2026-09-23):
 //!
 //! - THREE roles: admin, co-signer, guardian. Each is meant to be a 2-of-3
 //!   native Stellar multisig account, so a single lost or leaked key never
@@ -30,9 +29,11 @@
 //!
 //! Changes handled here (everything that grants power or moves where money
 //! goes): the three roles, the oracle (policy address + attestation key
-//! together), the yield vault, the treasury, the vault deploy ceiling, and
-//! the covered-wallet registry's writer key.
-//! Only role replacements can use the recovery path.
+//! together), the yield vault, the treasury, the vault deploy ceiling, the
+//! covered-wallet registry's writer key, and (2026-10-16) a code upgrade.
+//! Only role replacements can use the recovery path: an upgrade always needs
+//! two roles and the full 7 days in public, never the recovery path and
+//! never the before-funding shortcut.
 
 use soroban_sdk::{
     contractevent, contracttype, vec, Address, BytesN, Env, IntoVal, Symbol, Val, Vec,
@@ -60,6 +61,8 @@ pub enum GovKind {
     /// The covered-wallet registry's writer key (the registry obeys only
     /// this pool, so it inherits the same governance and recovery).
     RegistryWriter = 7,
+    /// 2026-10-16: replace the contract code with an installed Wasm hash.
+    Upgrade = 8,
 }
 
 #[contracttype]
@@ -76,6 +79,8 @@ pub enum GovChange {
     DeployBps(i128),
     /// (registry contract, new writer)
     RegistryWriter(Address, Address),
+    /// Hash of Wasm already uploaded to the network.
+    Upgrade(BytesN<32>),
 }
 
 #[contracttype]
@@ -164,6 +169,7 @@ fn kind_of(change: &GovChange) -> GovKind {
         GovChange::Treasury(_) => GovKind::Treasury,
         GovChange::DeployBps(_) => GovKind::DeployBps,
         GovChange::RegistryWriter(_, _) => GovKind::RegistryWriter,
+        GovChange::Upgrade(_) => GovKind::Upgrade,
     }
 }
 
@@ -269,7 +275,9 @@ fn validate(env: &Env, change: &GovChange) -> Result<(), PoolError> {
             }
             return Ok(());
         }
-        GovChange::Treasury(_) | GovChange::RegistryWriter(_, _) => return Ok(()),
+        GovChange::Treasury(_) | GovChange::RegistryWriter(_, _) | GovChange::Upgrade(_) => {
+            return Ok(())
+        }
         GovChange::DeployBps(bps) => {
             if *bps < 0 {
                 return Err(PoolError::AmountNotPositive);
@@ -299,6 +307,11 @@ fn apply(env: &Env, change: &GovChange) {
             // The registry checks that THIS pool is the caller.
             let args: Vec<Val> = vec![env, writer.into_val(env)];
             env.invoke_contract::<()>(registry, &Symbol::new(env, "set_writer"), args);
+        }
+        // Takes effect when this call ends. The new code runs `migrate()`
+        // (lib.rs) if it changes stored shapes.
+        GovChange::Upgrade(wasm_hash) => {
+            env.deployer().update_current_contract_wasm(wasm_hash.clone());
         }
     }
 }

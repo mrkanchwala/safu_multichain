@@ -14,13 +14,16 @@ use soroban_sdk::{contractevent, Address, BytesN, Env};
 
 use crate::error::PoolError;
 use crate::storage;
-use crate::types::{ClaimStatus, StakeRecord, APPROVE_WINDOW_LEDGERS};
+use crate::settings::{get as setting, SettingKey};
+use crate::types::{ClaimStatus, StakeRecord, STORAGE_VERSION, SUSPEND_MAX_SECONDS};
 
 // Pre-audit hardening (2026-09-23, M2): admin actions emit events, so stakers,
 // monitors and the keeper see every one (T3's Repudiate.2 finding).
 
-/// A pause ends on its own after this long; the admin can renew it. So a
+/// A pause ends on its own after this long (default of `PauseMaxSecs`). So a
 /// pause can never freeze staker money for good, even if keys are lost.
+/// 2026-10-16: it can't be renewed back to back either; the next pause
+/// waits `PauseGapSecs` after this one ends.
 pub const PAUSE_MAX_SECONDS: u64 = 30 * crate::types::SECONDS_PER_DAY;
 
 #[contractevent]
@@ -44,6 +47,14 @@ pub struct PoolCapChanged {
 pub struct StakeSuspended {
     #[topic]
     pub wallet: Address,
+}
+
+#[contractevent]
+pub struct SuspensionRenewed {
+    #[topic]
+    pub wallet: Address,
+    pub approver: Address,
+    pub until: u64,
 }
 
 #[contractevent]
@@ -124,6 +135,7 @@ pub fn initialize(
     storage::set_total_allocated(env, 0);
     storage::set_total_stakers(env, 0);
     storage::set_paused_until(env, 0);
+    storage::set_storage_version(env, STORAGE_VERSION);
     storage::bump_instance_ttl(env);
     Ok(())
 }
@@ -133,18 +145,44 @@ pub fn initialize(
 /// approve_override while paused; emergency_exit (stake.rs) remains the
 /// pause-time exit path. Missing entirely from the first two build
 /// passes: found on full source read.
-pub fn pause(env: &Env) {
+///
+/// 2026-10-16: a pause can't follow the last one until
+/// `PauseGapSecs` after it ended, so back-to-back pauses can't hold claims
+/// forever. Paused time is also taken off every claim clock.
+pub fn pause(env: &Env) -> Result<(), PoolError> {
     let admin = storage::get_admin(env);
     admin.require_auth();
-    let until = env.ledger().timestamp() + PAUSE_MAX_SECONDS;
+    if storage::is_paused(env) {
+        return Err(PoolError::AlreadyPaused);
+    }
+    let now = env.ledger().timestamp();
+    let last_start = storage::get_pause_start(env);
+    if last_start > 0 {
+        // The last pause is over: its end is `paused_until` (set to the
+        // unpause time by `unpause`).
+        let last_end = storage::get_paused_until(env);
+        if now < last_end + setting(env, SettingKey::PauseGapSecs) as u64 {
+            return Err(PoolError::PauseGapNotMet);
+        }
+        let settled = storage::get_paused_secs_settled(env);
+        storage::set_paused_secs_settled(env, settled + last_end.saturating_sub(last_start));
+    }
+    let until = now + setting(env, SettingKey::PauseMaxSecs) as u64;
+    storage::set_pause_start(env, now);
     storage::set_paused_until(env, until);
+    storage::bump_instance_ttl(env);
     Paused { by: admin, until }.publish(env);
+    Ok(())
 }
 
+/// Ends the pause now. The end time is kept (not zeroed) so the pause gap
+/// and the paused-time count both see it.
 pub fn unpause(env: &Env) {
     let admin = storage::get_admin(env);
     admin.require_auth();
-    storage::set_paused_until(env, 0);
+    if storage::is_paused(env) {
+        storage::set_paused_until(env, env.ledger().timestamp());
+    }
     Unpaused { by: admin }.publish(env);
 }
 
@@ -171,21 +209,60 @@ pub fn unpause(env: &Env) {
 /// distinguishes them: `Some` means a live claim still exists (still
 /// suspendable), `None` means the wallet is genuinely finished (nothing
 /// left to freeze).
+///
+/// 2026-10-16: the admin alone suspends for at most
+/// `SUSPEND_MAX_SECONDS`, then it lapses. Suspending again while one is in
+/// force, or within that same length after it ends, needs a second role
+/// (`renew_suspension`). So one key can't freeze a claimant for good.
 pub fn suspend_stake(env: &Env, wallet: &Address) -> Result<(), PoolError> {
     let admin = storage::get_admin(env);
     admin.require_auth();
 
-    let mut record: StakeRecord = storage::get_stake(env, wallet).ok_or(PoolError::NoStake)?;
+    let mut record = suspendable(env, wallet)?;
+    let now = env.ledger().timestamp();
+    if record.suspended_until > 0 && now < record.suspended_until + SUSPEND_MAX_SECONDS {
+        return Err(PoolError::SuspendNeedsSecondRole);
+    }
+    record.suspended = true;
+    record.suspended_until = now + SUSPEND_MAX_SECONDS;
+    storage::set_stake(env, wallet, &record);
+    StakeSuspended { wallet: wallet.clone() }.publish(env);
+    Ok(())
+}
+
+/// 2026-10-16: admin plus a second role (co-signer or guardian) start or
+/// extend a suspension: it runs `SUSPEND_MAX_SECONDS` from now.
+pub fn renew_suspension(env: &Env, wallet: &Address, approver: &Address) -> Result<(), PoolError> {
+    let admin = storage::get_admin(env);
+    admin.require_auth();
+    if approver != &storage::get_co_signer(env) && approver != &storage::get_guardian(env) {
+        return Err(PoolError::ApproverNotSecondRole);
+    }
+    approver.require_auth();
+
+    let mut record = suspendable(env, wallet)?;
+    let until = env.ledger().timestamp() + SUSPEND_MAX_SECONDS;
+    record.suspended = true;
+    record.suspended_until = until;
+    storage::set_stake(env, wallet, &record);
+    SuspensionRenewed { wallet: wallet.clone(), approver: approver.clone(), until }.publish(env);
+    Ok(())
+}
+
+fn suspendable(env: &Env, wallet: &Address) -> Result<StakeRecord, PoolError> {
+    let record: StakeRecord = storage::get_stake(env, wallet).ok_or(PoolError::NoStake)?;
     if record.amount <= 0 {
         return Err(PoolError::NoStake);
     }
     if record.withdrawn && record.active_claim_id.is_none() {
         return Err(PoolError::AlreadyWithdrawn);
     }
-    record.suspended = true;
-    storage::set_stake(env, wallet, &record);
-    StakeSuspended { wallet: wallet.clone() }.publish(env);
-    Ok(())
+    Ok(record)
+}
+
+/// 2026-10-16: a suspension is in force only until `suspended_until`.
+pub fn is_suspended(env: &Env, record: &StakeRecord) -> bool {
+    record.suspended && env.ledger().timestamp() < record.suspended_until
 }
 
 /// CHANGED 2026-07-22 (eng review blocker #1): takes an optional
@@ -221,6 +298,12 @@ pub fn unsuspend_stake(
     if record.amount <= 0 {
         return Err(PoolError::NoStake);
     }
+    let now = env.ledger().timestamp();
+    if is_suspended(env, &record) {
+        // Ends now; claim clocks restart from here (they never start
+        // before `suspended_until`).
+        record.suspended_until = now;
+    }
     record.suspended = false;
     storage::set_stake(env, wallet, &record);
     StakeUnsuspended { wallet: wallet.clone() }.publish(env);
@@ -230,17 +313,9 @@ pub fn unsuspend_stake(
             if &claim.wallet != wallet {
                 return Ok(());
             }
-            let now_ledger = env.ledger().sequence();
-            match claim.status {
-                ClaimStatus::AwaitingApproval => {
-                    claim.approve_deadline_ledger = now_ledger + APPROVE_WINDOW_LEDGERS;
-                    storage::set_claim(env, &id, &claim);
-                }
-                ClaimStatus::Active => {
-                    claim.last_collected_ledger = now_ledger;
-                    storage::set_claim(env, &id, &claim);
-                }
-                _ => {}
+            if matches!(claim.status, ClaimStatus::AwaitingApproval | ClaimStatus::Active) {
+                crate::claim::start_clock(env, &mut claim, now);
+                storage::set_claim(env, &id, &claim);
             }
         }
     }

@@ -352,8 +352,8 @@ fn unsuspend_stake_resets_rule_a_deadline_for_awaiting_approval() {
     advance_ledgers(&env, APPROVE_WINDOW_LEDGERS / 2); // partway into the approve window
     s.client.unsuspend_stake(&staker, &Some(claim_id.clone()));
     let claim = s.client.get_claim(&claim_id).unwrap();
-    let expected = env.ledger().sequence() + crate::types::APPROVE_WINDOW_LEDGERS;
-    assert_eq!(claim.approve_deadline_ledger, expected);
+    // 2026-10-16: the approve clock restarts at the unsuspend moment.
+    assert_eq!(claim.clock_start, env.ledger().timestamp());
 }
 
 /// Kills admin.rs:173 (deleted Active match arm), same wallet-ownership
@@ -386,7 +386,7 @@ fn unsuspend_stake_resets_rule_b_clock_for_active_claim() {
     advance_ledgers(&env, VESTING_LEDGERS / 4);
     s.client.unsuspend_stake(&staker, &Some(claim_id.clone()));
     let claim = s.client.get_claim(&claim_id).unwrap();
-    assert_eq!(claim.last_collected_ledger, env.ledger().sequence());
+    assert_eq!(claim.clock_start, env.ledger().timestamp());
 }
 
 #[test]

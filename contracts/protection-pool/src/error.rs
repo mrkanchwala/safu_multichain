@@ -285,4 +285,17 @@ pub enum PoolError {
     // -- r3 yield (128) --
     /// No yield is owed to this staker or backer right now.
     NoYieldOwed = 128,
+
+    // -- 2026-10-16 (129-) --
+    /// A new pause must wait `PauseGapSecs` after the last one ended.
+    PauseGapNotMet = 129,
+    /// The pool is already paused.
+    AlreadyPaused = 130,
+    /// The admin alone can't suspend again this soon after a suspension
+    /// ended; renewing needs a second role.
+    SuspendNeedsSecondRole = 131,
+    /// `renew_suspension`'s approver must be the co-signer or guardian.
+    ApproverNotSecondRole = 132,
+    /// Queued claims are released in line order; this one isn't next.
+    NotFirstInQueue = 133,
 }

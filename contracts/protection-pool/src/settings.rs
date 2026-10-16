@@ -1,9 +1,7 @@
 //! v1 (2026-09-22): adjustable pool settings.
 //!
-//! Design decision: the pool is NOT upgradeable (no WASM swap, which could
-//! change anything, including how funds move). Instead, a fixed list of
-//! numbers can change, each only inside hard bounds written here, and only
-//! through a public three-step path:
+//! A fixed list of numbers can change, each only inside hard bounds written
+//! here, and only through a public three-step path:
 //!
 //!   1. `propose_setting`  admin signs, value must be inside bounds
 //!   2. `approve_setting`  co-signer signs the SAME value, starts a 7-day clock
@@ -14,9 +12,8 @@
 //! (this also closes T3's Repudiate.2 finding for this surface: admin
 //! actions without events).
 //!
-//! What can NEVER change here: the 15/10/5 tier ceilings, the 90-day claim
-//! gate, the 30-day claim window, and every funds-movement path. Those stay
-//! compile-time constants.
+//! What can NEVER change here: every funds-movement path. (Since 2026-10-16
+//! the pool is upgradable through `governance.rs`: two roles plus 7 days.)
 //!
 //! Settings read after a claim activates (cooldown, vesting) are snapshotted
 //! onto the claim at activation (`claim.rs`), so a change only affects
@@ -67,6 +64,10 @@ pub enum SettingKey {
     /// r3 (2026-09-29): share of vault yield on MATURED BACKER capital paid
     /// to backers, bps. The rest goes to the protocol.
     BackerYieldBps = 13,
+    /// 2026-10-16, Solana parity: longest single pause, seconds.
+    PauseMaxSecs = 14,
+    /// 2026-10-16: wait after a pause ends before the next can start.
+    PauseGapSecs = 15,
 }
 
 /// A proposed change waiting for co-signer approval and/or its timelock.
@@ -92,6 +93,10 @@ const ADMIT_BPS_MAX: i128 = 2_500; // 25%/day, today's highest band
 const PAYOUT_BPS_MIN: i128 = 1;
 const PAYOUT_BPS_MAX: i128 = 600; // 6%/day ceiling on money leaving
 const BACKER_NOTICE_MAX: i128 = 90 * SECONDS_PER_DAY as i128;
+const PAUSE_MAX_MIN: i128 = SECONDS_PER_DAY as i128;
+const PAUSE_MAX_MAX: i128 = 30 * SECONDS_PER_DAY as i128;
+const PAUSE_GAP_MIN: i128 = 30 * SECONDS_PER_DAY as i128;
+const PAUSE_GAP_MAX: i128 = 90 * SECONDS_PER_DAY as i128;
 
 /// Defaults = the values the pool shipped with, so a fresh deploy behaves
 /// exactly as before until a setting is changed.
@@ -111,6 +116,8 @@ fn default_value(env: &Env, key: SettingKey) -> i128 {
         SettingKey::BackerNoticeSeconds => 30 * SECONDS_PER_DAY as i128,
         SettingKey::PoolCap => storage::get_pool_cap(env),
         SettingKey::BackerYieldBps => YIELD_SPLIT_BACKER_BPS,
+        SettingKey::PauseMaxSecs => crate::admin::PAUSE_MAX_SECONDS as i128,
+        SettingKey::PauseGapSecs => PAUSE_GAP_MIN,
     }
 }
 
@@ -131,6 +138,8 @@ fn in_bounds(env: &Env, key: SettingKey, value: i128) -> bool {
         SettingKey::BackerNoticeSeconds => (0..=BACKER_NOTICE_MAX).contains(&value),
         SettingKey::PoolCap => value > storage::get_pool_cap(env),
         SettingKey::BackerYieldBps => (0..=YIELD_BPS_MAX).contains(&value),
+        SettingKey::PauseMaxSecs => (PAUSE_MAX_MIN..=PAUSE_MAX_MAX).contains(&value),
+        SettingKey::PauseGapSecs => (PAUSE_GAP_MIN..=PAUSE_GAP_MAX).contains(&value),
     }
 }
 
@@ -152,6 +161,9 @@ fn consistent_with_live(env: &Env, key: SettingKey, value: i128) -> bool {
             value <= g(SettingKey::PayoutLowBps) && value >= g(SettingKey::PayoutHighBps)
         }
         SettingKey::PayoutHighBps => value <= g(SettingKey::PayoutMidBps),
+        // A pause can never outlast the gap that follows it.
+        SettingKey::PauseMaxSecs => value <= g(SettingKey::PauseGapSecs),
+        SettingKey::PauseGapSecs => value >= g(SettingKey::PauseMaxSecs),
         _ => true,
     }
 }

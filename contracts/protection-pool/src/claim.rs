@@ -1,6 +1,7 @@
 //! Claims: submit → activate (7d cooldown, either immediately or via
 //! unlock_pending_claim once the 90-day time gate is met) → claim_stream
-//! (45d vesting, FCFS-per-day daily outflow cap) → completed, or
+//! (45d vesting, each claim a fair pro-rata share of the daily payout cap,
+//! 2026-10-16) → completed, or
 //! cancel_claim (false-positive reversal, 365-day penalty lock only when
 //! the stake had already been forfeited). Also owns the 2-of-2
 //! (admin + coSigner) override request/approval flow, a separate escape
@@ -42,12 +43,13 @@ use soroban_sdk::{contractevent, Address, Bytes, BytesN, Env, Symbol};
 use soroban_sdk::token::TokenClient;
 use soroban_sdk::xdr::ToXdr;
 
+use crate::admin::is_suspended;
 use crate::error::PoolError;
 use crate::stake;
 use crate::storage;
 use crate::types::{
-    Claim, ClaimStatus, OverrideRequest, StakeRecord, APPROVE_WINDOW_LEDGERS, BPS_DENOMINATOR,
-    CLAIM_WINDOW_SECONDS, COLLECTION_INACTIVITY_LEDGERS,
+    Claim, ClaimStatus, OverrideRequest, StakeRecord, APPROVE_WINDOW_SECONDS, BPS_DENOMINATOR,
+    CLAIM_WINDOW_SECONDS, COLLECTION_INACTIVITY_SECONDS, SECONDS_PER_LEDGER,
     MAX_APPROVAL_WINDOW_SECONDS, PENALTY_LOCK_LEDGERS, TIER_A_RATIO, TIER_B_RATIO, TIER_C_RATIO,
     TIER_BPS_DENOMINATOR, TIER_COVERAGE_BPS, TIME_GATE_LEDGERS,
 };
@@ -246,6 +248,135 @@ fn current_day(env: &Env) -> u32 {
     (env.ledger().timestamp() / crate::types::SECONDS_PER_DAY) as u32
 }
 
+// -----------------------------------------------------------------------
+// 2026-10-16: claim clocks, line-order queue and fair daily
+// shares.
+// -----------------------------------------------------------------------
+
+/// Starts (or restarts) a claim's clock at `at`, noting the pool's
+/// blocked-time counter so later blocked time can be taken off.
+pub(crate) fn start_clock(env: &Env, claim: &mut Claim, at: u64) {
+    claim.clock_start = at;
+    claim.blocked_at_clock_start = storage::get_blocked_secs(env);
+}
+
+/// has `window` run out on this claim's clock? Time the pool
+/// couldn't pay (paused, vault short of cash) is added back, and the clock
+/// never starts before the stake's last suspension ended. Errs in the
+/// claimant's favour where those overlap.
+fn clock_expired(env: &Env, claim: &Claim, stake_record: &StakeRecord, window: u64) -> bool {
+    let start = claim.clock_start.max(stake_record.suspended_until);
+    let blocked = storage::get_blocked_secs(env).saturating_sub(claim.blocked_at_clock_start);
+    env.ledger().timestamp() > start + window + blocked
+}
+
+/// Most dead places skipped per call: bounds the work any one call can be
+/// made to do. Dead places are rare (each needs a real stake and a signed
+/// oracle claim), and every later call skips more.
+const QUEUE_SKIP_MAX: u32 = 16;
+
+/// A queued claim that can never be released: no longer Reserved (taken
+/// over by an override), or its stake is gone or forfeited. A different
+/// live claim on the same wallet alone is NOT enough: if that one is later
+/// cancelled, this claim must still be able to go.
+fn queued_claim_dead(env: &Env, claim_id: &BytesN<32>, claim: &Claim) -> bool {
+    if claim.status != ClaimStatus::Reserved {
+        return true;
+    }
+    match storage::get_stake(env, &claim.wallet) {
+        None => true,
+        Some(r) => {
+            r.reserved_claim_id.as_ref() != Some(claim_id) || r.amount <= 0 || r.withdrawn
+        }
+    }
+}
+
+/// Moves the head of the line past dead places (marking a dead Reserved
+/// claim Expired and freeing its wallet's queue slot). Returns the claim id
+/// now first in line, if any.
+fn queue_front(env: &Env) -> Option<BytesN<32>> {
+    let tail = storage::get_queue_tail(env);
+    let mut head = storage::get_queue_head(env);
+    let start = head;
+    let mut front = None;
+    let mut skipped = 0;
+    while head < tail && skipped < QUEUE_SKIP_MAX {
+        let Some(id) = storage::get_queue_at(env, head) else {
+            head += 1;
+            skipped += 1;
+            continue;
+        };
+        match storage::get_claim(env, &id) {
+            Some(mut claim) if queued_claim_dead(env, &id, &claim) => {
+                if claim.status == ClaimStatus::Reserved {
+                    expire_queued(env, &id, &mut claim);
+                }
+            }
+            Some(_) => {
+                front = Some(id);
+                break;
+            }
+            None => {}
+        }
+        storage::remove_queue_at(env, head);
+        head += 1;
+        skipped += 1;
+    }
+    if head != start {
+        storage::set_queue_head(env, head);
+    }
+    front
+}
+
+/// True while anyone is waiting in line: a new claim then joins the back
+/// instead of skipping ahead, even if there is room for it right now.
+fn queue_waiting(env: &Env) -> bool {
+    queue_front(env).is_some() || storage::get_queue_head(env) < storage::get_queue_tail(env)
+}
+
+fn expire_queued(env: &Env, claim_id: &BytesN<32>, claim: &mut Claim) {
+    if let Some(mut r) = storage::get_stake(env, &claim.wallet) {
+        // Clear only this claim's own slot, never another claim's.
+        if r.reserved_claim_id.as_ref() == Some(claim_id) {
+            r.reserved_claim_id = None;
+            storage::set_stake(env, &claim.wallet, &r);
+        }
+    }
+    claim.status = ClaimStatus::Expired;
+    storage::set_claim(env, claim_id, claim);
+    ClaimQueueExpired {
+        wallet: claim.wallet.clone(),
+        claim_id: claim_id.clone(),
+    }
+    .publish(env);
+}
+
+/// this claim's share of today's payout cap, pro-rata to what it
+/// is still owed against everything owed at the day's first collection. The
+/// claim's own activation snapshot still sets its cap base (the
+/// anti-manipulation guarantee: shrinking the pool after a claim activates
+/// can't slow that claim). Rounded up so no claim is ever owed a zero share.
+fn daily_share(env: &Env, claim: &Claim, day: u32) -> i128 {
+    let (capacity, allocated) = match storage::get_payout_snap(env) {
+        Some((d, c, a)) if d == day => (c, a),
+        _ => {
+            let snap = (day, storage::get_capacity(env), storage::get_total_allocated(env));
+            storage::set_payout_snap(env, &snap);
+            (snap.1, snap.2)
+        }
+    };
+    let remaining = claim.entitlement - claim.streamed;
+    let base = capacity.max(claim.total_staked_snapshot);
+    let cap = base * dynamic_outflow_bps(env, base) / BPS_DENOMINATOR;
+    // A claim activated after the snapshot (an override re-execution can
+    // land mid-day) isn't in `allocated`; treat its owed amount as the whole.
+    let owed_all = allocated.max(remaining);
+    if owed_all <= 0 {
+        return 0;
+    }
+    (cap * remaining + owed_all - 1) / owed_all
+}
+
 /// Claim id is derived on-chain from (wallet, tx_hash), never trusted as
 /// a caller-supplied value, including in the override flow.
 fn compute_claim_id(env: &Env, wallet: &Address, tx_hash: &BytesN<32>) -> BytesN<32> {
@@ -400,6 +531,14 @@ fn verify_oracle_signature(
 // cycle's own points would escape the burn.
 // -----------------------------------------------------------------------
 
+/// Rule B clock starts at cooldown end (cooldown is in ledgers, the clock in
+/// seconds).
+fn start_cooldown_end_clock(env: &Env, claim: &mut Claim, now_ledger: u32) {
+    let cooldown_secs =
+        claim.cooldown_ends_ledger.saturating_sub(now_ledger) as u64 * SECONDS_PER_LEDGER;
+    start_clock(env, claim, env.ledger().timestamp() + cooldown_secs);
+}
+
 fn activate_claim(env: &Env, stake_record: &mut StakeRecord, claim: &mut Claim) -> i128 {
     let points = stake::compute_points_for_record(env, stake_record);
     let banked = storage::get_points_balance(env, &claim.wallet);
@@ -438,7 +577,7 @@ fn activate_claim(env: &Env, stake_record: &mut StakeRecord, claim: &mut Claim) 
     // activation moment: eng review blocker #2: the mandatory 7-day
     // cooldown (during which claim_stream is blocked entirely) must never
     // count against the staker as inactivity.
-    claim.last_collected_ledger = claim.cooldown_ends_ledger;
+    start_cooldown_end_clock(env, claim, now_ledger);
     claim.status = ClaimStatus::Active;
 
     lifetime_balance
@@ -501,17 +640,20 @@ fn admit_claim(
         total_staked_snapshot: 0,
         tier,
         status: ClaimStatus::PendingTime,
-        approve_deadline_ledger: 0,
-        last_collected_ledger: 0,
+        clock_start: 0,
+        blocked_at_clock_start: 0,
+        queue_seq: 0,
+        share_day: 0,
+        share_left: 0,
     };
 
     // CHANGED 2026-07-22: meeting the gate no longer auto-activates
     // (forfeits/burns/starts cooldown), it moves the claim to
-    // AwaitingApproval, where the staker has APPROVE_WINDOW_LEDGERS to
+    // AwaitingApproval, where the staker has APPROVE_WINDOW_SECONDS to
     // actively call approve_claim themselves (Rule A).
     if gate_met {
         claim.status = ClaimStatus::AwaitingApproval;
-        claim.approve_deadline_ledger = now_ledger + APPROVE_WINDOW_LEDGERS;
+        start_clock(env, &mut claim, env.ledger().timestamp());
     }
 
     storage::set_stake(env, wallet, stake_record);
@@ -612,7 +754,7 @@ pub fn submit_claim(
     if stake_record.withdrawn {
         return Err(PoolError::AlreadyWithdrawn);
     }
-    if stake_record.suspended {
+    if is_suspended(env, &stake_record) {
         return Err(PoolError::StakeSuspended);
     }
     if stake_record.active_claim_id.is_some() {
@@ -700,7 +842,9 @@ pub fn submit_claim(
     // per day at RELEASE time, the solvency invariant bounds it absolutely,
     // and every submission still needs a valid oracle signature. The counter
     // was always the soft outer layer, never the binding control.
-    if insolvent || stress_capped || oracle_rate_limited {
+    // 2026-10-16: while anyone is in line, a new claim joins the back,
+    // even if there is room for it now. Release order is line order.
+    if insolvent || stress_capped || oracle_rate_limited || queue_waiting(env) {
         let claim = Claim {
             wallet: wallet.clone(),
             tx_hash: tx_hash.clone(),
@@ -713,9 +857,15 @@ pub fn submit_claim(
             total_staked_snapshot: 0,
             tier,
             status: ClaimStatus::Reserved,
-            approve_deadline_ledger: 0,
-            last_collected_ledger: 0,
+            clock_start: 0,
+            blocked_at_clock_start: 0,
+            queue_seq: storage::get_queue_tail(env),
+            share_day: 0,
+            share_left: 0,
         };
+        // join the back of the line.
+        storage::set_queue_at(env, claim.queue_seq, &claim_id);
+        storage::set_queue_tail(env, claim.queue_seq + 1);
         stake_record.reserved_claim_id = Some(claim_id.clone());
         storage::set_stake(env, wallet, &stake_record);
         storage::set_claim(env, &claim_id, &claim);
@@ -769,6 +919,14 @@ pub fn try_release_queued_claim(env: &Env, claim_id: &BytesN<32>) -> Result<(), 
     if claim.status != ClaimStatus::Reserved {
         return Err(PoolError::NoSuchQueuedClaim);
     }
+    if queued_claim_dead(env, claim_id, &claim) {
+        return Err(PoolError::QueuedClaimStakeChanged);
+    }
+    // 2026-10-16: line order. Only the first live claim in line can go;
+    // calling fast buys nothing.
+    if queue_front(env).as_ref() != Some(claim_id) {
+        return Err(PoolError::NotFirstInQueue);
+    }
 
     let mut stake_record: StakeRecord =
         storage::get_stake(env, &claim.wallet).ok_or(PoolError::NoStake)?;
@@ -796,7 +954,7 @@ pub fn try_release_queued_claim(env: &Env, claim_id: &BytesN<32>) -> Result<(), 
     {
         return Err(PoolError::QueuedClaimStakeChanged);
     }
-    if stake_record.suspended {
+    if is_suspended(env, &stake_record) {
         return Err(PoolError::StakeSuspended);
     }
 
@@ -827,6 +985,10 @@ pub fn try_release_queued_claim(env: &Env, claim_id: &BytesN<32>) -> Result<(), 
         // skipped that check entirely by queuing instead of hard-failing.
         false,
     );
+    // Leaves the line; the next claim moves up.
+    storage::remove_queue_at(env, claim.queue_seq);
+    storage::set_queue_head(env, claim.queue_seq + 1);
+    queue_front(env);
 
     ClaimQueueReleased {
         wallet: claim.wallet.clone(),
@@ -836,10 +998,10 @@ pub fn try_release_queued_claim(env: &Env, claim_id: &BytesN<32>) -> Result<(), 
     Ok(())
 }
 
-/// A queued claim whose window ran out before capacity ever freed. Releases
-/// the wallet's reservation slot so a fresh incident can be submitted. No
-/// funds/allocation to release: a Reserved claim never touched
-/// `total_allocated` in the first place.
+/// 2026-10-16: a queued claim never expires on time; days in the queue
+/// are days the pool couldn't pay. This clears a queued claim only once it
+/// can never be released (its stake changed, or an override took it over),
+/// so the line doesn't stall behind it. Permissionless.
 pub fn expire_queued_claim(env: &Env, claim_id: &BytesN<32>) -> Result<(), PoolError> {
     storage::require_not_paused(env)?;
 
@@ -847,29 +1009,12 @@ pub fn expire_queued_claim(env: &Env, claim_id: &BytesN<32>) -> Result<(), PoolE
     if claim.status != ClaimStatus::Reserved {
         return Err(PoolError::NoSuchQueuedClaim);
     }
-
-    let now_ts = env.ledger().timestamp();
-    if now_ts <= claim.hack_timestamp + CLAIM_WINDOW_SECONDS {
+    if !queued_claim_dead(env, claim_id, &claim) {
         return Err(PoolError::QueueNotYetExpired);
     }
-
-    let mut stake_record: StakeRecord =
-        storage::get_stake(env, &claim.wallet).ok_or(PoolError::NoStake)?;
-    // Clear only this claim's own slot, never another claim's.
-    if stake_record.reserved_claim_id.as_ref() == Some(claim_id) {
-        stake_record.reserved_claim_id = None;
-        storage::set_stake(env, &claim.wallet, &stake_record);
-    }
-
-    claim.status = ClaimStatus::Expired;
-    storage::set_claim(env, claim_id, &claim);
+    expire_queued(env, claim_id, &mut claim);
+    queue_front(env);
     storage::bump_instance_ttl(env);
-
-    ClaimQueueExpired {
-        wallet: claim.wallet.clone(),
-        claim_id: claim_id.clone(),
-    }
-    .publish(env);
     Ok(())
 }
 
@@ -899,7 +1044,7 @@ pub fn unlock_pending_claim(env: &Env, claim_id: &BytesN<32>) -> Result<(), Pool
     }
 
     claim.status = ClaimStatus::AwaitingApproval;
-    claim.approve_deadline_ledger = now_ledger + APPROVE_WINDOW_LEDGERS;
+    start_clock(env, &mut claim, env.ledger().timestamp());
 
     storage::set_claim(env, claim_id, &claim);
     storage::bump_instance_ttl(env);
@@ -918,7 +1063,7 @@ pub fn unlock_pending_claim(env: &Env, claim_id: &BytesN<32>) -> Result<(), Pool
 // genuine "walk away or pay the points cost" decision point: burns the
 // wallet's entire lifetime points_balance, then forfeits the stake and
 // starts the cooldown/vesting clock exactly as the old auto-activation
-// used to. Must be called within APPROVE_WINDOW_LEDGERS of entering
+// used to. Must be called within APPROVE_WINDOW_SECONDS of entering
 // AwaitingApproval, or expire_pending_approval sweeps the reservation
 // back to the pool instead.
 // -----------------------------------------------------------------------
@@ -932,14 +1077,13 @@ pub fn approve_claim(env: &Env, claim_id: &BytesN<32>) -> Result<(), PoolError> 
     if claim.status != ClaimStatus::AwaitingApproval {
         return Err(PoolError::ClaimNotAwaitingApproval);
     }
-    let now_ledger = env.ledger().sequence();
-    if now_ledger > claim.approve_deadline_ledger {
-        return Err(PoolError::ApprovalWindowExpired);
-    }
 
     let mut stake_record: StakeRecord =
         storage::get_stake(env, &claim.wallet).ok_or(PoolError::NoStake)?;
-    if stake_record.suspended {
+    if clock_expired(env, &claim, &stake_record, APPROVE_WINDOW_SECONDS) {
+        return Err(PoolError::ApprovalWindowExpired);
+    }
+    if is_suspended(env, &stake_record) {
         return Err(PoolError::StakeSuspended);
     }
     // Pre-audit hardening (H1): the stake must still be the live one this
@@ -975,6 +1119,8 @@ pub fn approve_claim(env: &Env, claim_id: &BytesN<32>) -> Result<(), PoolError> 
 // -----------------------------------------------------------------------
 
 pub fn expire_pending_approval(env: &Env, claim_id: &BytesN<32>) -> Result<(), PoolError> {
+    // 2026-10-16: nothing expires while the pool is paused.
+    storage::require_not_paused(env)?;
     let mut claim: Claim = storage::get_claim(env, claim_id).ok_or(PoolError::NoSuchClaim)?;
     if claim.status != ClaimStatus::AwaitingApproval {
         return Err(PoolError::ClaimNotAwaitingApproval);
@@ -990,11 +1136,10 @@ pub fn expire_pending_approval(env: &Env, claim_id: &BytesN<32>) -> Result<(), P
     // meant to prevent. Blocking the sweep entirely while suspended closes
     // this: it can only ever expire after an explicit unsuspend, which
     // itself grants a fresh full window.
-    if stake_record.suspended {
+    if is_suspended(env, &stake_record) {
         return Err(PoolError::StakeSuspended);
     }
-    let now_ledger = env.ledger().sequence();
-    if now_ledger <= claim.approve_deadline_ledger {
+    if !clock_expired(env, &claim, &stake_record, APPROVE_WINDOW_SECONDS) {
         return Err(PoolError::ApprovalWindowNotExpired);
     }
 
@@ -1020,7 +1165,7 @@ pub fn expire_pending_approval(env: &Env, claim_id: &BytesN<32>) -> Result<(), P
 // -----------------------------------------------------------------------
 // expire_stale_claim: NEW 2026-07-22, Rule B sweep. Permissionless, same
 // operational caveat as expire_pending_approval above. Releases whatever
-// entitlement remains uncollected after COLLECTION_INACTIVITY_LEDGERS of
+// entitlement remains uncollected after COLLECTION_INACTIVITY_SECONDS of
 // zero claim_stream activity. Forfeiture already happened at approval, so
 // (unlike expire_pending_approval) there's no stake_record to unblock,
 // active_claim_id is cleared for storage hygiene only, harmless either
@@ -1028,6 +1173,8 @@ pub fn expire_pending_approval(env: &Env, claim_id: &BytesN<32>) -> Result<(), P
 // -----------------------------------------------------------------------
 
 pub fn expire_stale_claim(env: &Env, claim_id: &BytesN<32>) -> Result<(), PoolError> {
+    // 2026-10-16: nothing expires while the pool is paused.
+    storage::require_not_paused(env)?;
     let mut claim: Claim = storage::get_claim(env, claim_id).ok_or(PoolError::NoSuchClaim)?;
     if claim.status != ClaimStatus::Active {
         return Err(PoolError::ClaimNotActive);
@@ -1041,11 +1188,10 @@ pub fn expire_stale_claim(env: &Env, claim_id: &BytesN<32>) -> Result<(), PoolEr
     // same adversarial re-review: a suspended staker's Rule B clock must
     // not be allowed to expire while they're still frozen out of
     // collecting.
-    if stake_record.suspended {
+    if is_suspended(env, &stake_record) {
         return Err(PoolError::StakeSuspended);
     }
-    let now_ledger = env.ledger().sequence();
-    if now_ledger.saturating_sub(claim.last_collected_ledger) <= COLLECTION_INACTIVITY_LEDGERS {
+    if !clock_expired(env, &claim, &stake_record, COLLECTION_INACTIVITY_SECONDS) {
         return Err(PoolError::ClaimNotStale);
     }
 
@@ -1098,7 +1244,7 @@ pub fn claim_stream(
 
     let stake_record: StakeRecord =
         storage::get_stake(env, &claim.wallet).ok_or(PoolError::NoStake)?;
-    if stake_record.suspended {
+    if is_suspended(env, &stake_record) {
         return Err(PoolError::StakeSuspended);
     }
     let expected_hash = env.crypto().sha256(&beneficiary.to_xdr(env)).to_bytes();
@@ -1123,39 +1269,43 @@ pub fn claim_stream(
         return Err(PoolError::NothingVested);
     }
 
+    // 2026-10-16: each claim gets its own fair share of today's cap, set
+    // at its first collection today; anything not taken stays vested and
+    // carries to later days. Order of calls doesn't matter.
     let day = current_day(env);
     let daily_outflow_so_far = storage::get_daily_outflow(env, day);
-    let cap_base = storage::get_capacity(env).max(claim.total_staked_snapshot);
-    let bps = dynamic_outflow_bps(env, cap_base);
-    let cap = cap_base * bps / BPS_DENOMINATOR;
-    // Bug 4 fix (eng review 2026-07-22): was `(cap - daily_outflow_so_far)
-    // .max(0)`: under this workspace's `overflow-checks = true`, the
-    // subtraction itself panics before `.max(0)` ever runs if
-    // daily_outflow_so_far > cap (a real, reachable case, the cap can
-    // shrink mid-day as utilization rises from other claims), crashing a
-    // legitimate staker's routine call instead of gracefully returning
-    // "try again tomorrow." saturating_sub clamps within the subtraction
-    // itself, so there's nothing left for a stale `.max(0)` to (fail to) do.
-    let available_today = cap.saturating_sub(daily_outflow_so_far);
-    let transfer_amount = claimable.min(available_today);
+    if claim.share_day != day {
+        claim.share_day = day;
+        claim.share_left = daily_share(env, &claim, day);
+    }
+    let transfer_amount = claimable.min(claim.share_left);
     if transfer_amount <= 0 {
         return Err(PoolError::DailyOutflowCapReached);
     }
 
-    // D2: the solvency gate (`submit_claim`) and the outflow cap above both
-    // reason over `total_staked` / `total_allocated`, accounting figures
-    // that stay correct while XLM sits in the yield vault, which is exactly
-    // why D2 required no change to either. The question they cannot answer
-    // is whether the contract physically holds the XLM right now. That is a
-    // liquidity question, not a solvency one, and it gets its own check
-    // here so a short balance reports as a typed error a staker can act on
-    // rather than an opaque trap. Checked before any state mutation.
-    // v1: `pull_for_payment` redeems from the vault first if cash is short.
-    crate::vault::pull_for_payment(env, transfer_amount)?;
+    // D2: solvency and the cap reason over accounting figures; whether the
+    // contract physically holds the cash right now is a separate liquidity
+    // check. v1: `pull_for_payment` redeems from the vault first if short.
+    // 2026-10-16: if the vault still can't pay, that's the pool's
+    // fault, not the claimant's: the day counts as blocked, the attempt
+    // counts as activity, and the call succeeds with 0 paid (an error would
+    // roll back both). A successful partial redeem inside it is kept.
+    match crate::vault::pull_for_payment(env, transfer_amount) {
+        Ok(()) => {}
+        Err(PoolError::InsufficientLiquidity) => {
+            storage::mark_cash_short_day(env, day);
+            start_clock(env, &mut claim, env.ledger().timestamp());
+            storage::set_claim(env, claim_id, &claim);
+            storage::bump_instance_ttl(env);
+            return Ok(0);
+        }
+        Err(e) => return Err(e),
+    }
 
     claim.streamed += transfer_amount;
-    // Rule B: any successful collection resets the inactivity clock.
-    claim.last_collected_ledger = now_ledger;
+    claim.share_left -= transfer_amount;
+    // Rule B: any collection resets the inactivity clock.
+    start_clock(env, &mut claim, env.ledger().timestamp());
     if claim.streamed >= claim.entitlement {
         claim.status = ClaimStatus::Completed;
     }
@@ -1443,8 +1593,11 @@ fn execute_override(env: &Env, claim_id: &BytesN<32>, req: &OverrideRequest) -> 
         total_staked_snapshot: 0,
         tier: req.tier,
         status: ClaimStatus::Active,
-        approve_deadline_ledger: 0,
-        last_collected_ledger: 0,
+        clock_start: 0,
+        blocked_at_clock_start: 0,
+        queue_seq: 0,
+        share_day: 0,
+        share_left: 0,
     };
 
     // The 2-of-2 override bypasses the oracle/time-gate path entirely, AND
@@ -1465,7 +1618,7 @@ fn execute_override(env: &Env, claim_id: &BytesN<32>, req: &OverrideRequest) -> 
         claim.cooldown_ends_ledger = now_ledger + crate::settings::get(env, crate::settings::SettingKey::CooldownLedgers) as u32;
         claim.vesting_ends_ledger = claim.cooldown_ends_ledger + crate::settings::get(env, crate::settings::SettingKey::VestingLedgers) as u32;
         claim.total_staked_snapshot = storage::get_capacity(env);
-        claim.last_collected_ledger = claim.cooldown_ends_ledger;
+        start_cooldown_end_clock(env, &mut claim, now_ledger);
         0
     };
     stake_record.active_claim_id = Some(claim_id.clone());

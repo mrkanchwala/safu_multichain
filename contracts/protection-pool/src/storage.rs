@@ -158,6 +158,24 @@ pub enum DataKey {
     EverFunded,
     /// r3 (CSO M2): time of the last successful harvest (the growth limit's clock).
     LastHarvestAt,
+    /// 2026-10-16: start of the current/last pause (0 = never paused).
+    PauseStart,
+    /// 2026-10-16: paused seconds of every earlier pause, summed.
+    PausedSecsSettled,
+    /// 2026-10-16: days on which a payout found the vault short of cash.
+    CashShortDays,
+    LastCashShortDay,
+    /// 2026-10-16: claim queue, a line: `QueueHead` is the next to go,
+    /// `QueueTail` the next free number. `QueueAt(n)` = claim id at place n.
+    QueueHead,
+    QueueTail,
+    QueueAt(u64),
+    /// 2026-10-16: the day's payout snapshot (day, capacity, allocated),
+    /// taken at the day's first collection. Every claim's share that day is
+    /// cut from it.
+    PayoutSnap,
+    /// 2026-10-16: storage layout version.
+    StorageVersion,
 }
 
 // -----------------------------------------------------------------------
@@ -714,4 +732,99 @@ pub fn set_ever_funded(env: &Env) {
     }
     env.storage().instance().set(&DataKey::EverFunded, &true);
     crate::governance::end_instant_setup(env);
+}
+
+// -----------------------------------------------------------------------
+// 2026-10-16: pool-blocked time, claim queue, payout snapshot,
+// storage version.
+// -----------------------------------------------------------------------
+
+pub fn get_pause_start(env: &Env) -> u64 {
+    env.storage().instance().get(&DataKey::PauseStart).unwrap_or(0)
+}
+
+pub fn set_pause_start(env: &Env, value: u64) {
+    env.storage().instance().set(&DataKey::PauseStart, &value);
+}
+
+pub fn get_paused_secs_settled(env: &Env) -> u64 {
+    env.storage().instance().get(&DataKey::PausedSecsSettled).unwrap_or(0)
+}
+
+pub fn set_paused_secs_settled(env: &Env, value: u64) {
+    env.storage().instance().set(&DataKey::PausedSecsSettled, &value);
+}
+
+/// seconds the pool could not pay, ever. Paused time (a pause that
+/// runs out on its own counts up to its end, no call needed) plus whole days
+/// on which a payout found the vault short of cash. Only differences of this
+/// number are used, so it never needs resetting.
+pub fn get_blocked_secs(env: &Env) -> u64 {
+    let now = env.ledger().timestamp();
+    let start = get_pause_start(env);
+    let current = if start > 0 {
+        get_paused_until(env).min(now).saturating_sub(start)
+    } else {
+        0
+    };
+    let cash_days: u32 = env.storage().instance().get(&DataKey::CashShortDays).unwrap_or(0);
+    get_paused_secs_settled(env) + current + cash_days as u64 * crate::types::SECONDS_PER_DAY
+}
+
+/// marks today as a day the vault was short of cash (once per day).
+pub fn mark_cash_short_day(env: &Env, day: u32) {
+    let last: Option<u32> = env.storage().instance().get(&DataKey::LastCashShortDay);
+    if last == Some(day) {
+        return;
+    }
+    let days: u32 = env.storage().instance().get(&DataKey::CashShortDays).unwrap_or(0);
+    env.storage().instance().set(&DataKey::CashShortDays, &(days + 1));
+    env.storage().instance().set(&DataKey::LastCashShortDay, &day);
+}
+
+pub fn get_queue_head(env: &Env) -> u64 {
+    env.storage().instance().get(&DataKey::QueueHead).unwrap_or(1)
+}
+
+pub fn set_queue_head(env: &Env, value: u64) {
+    env.storage().instance().set(&DataKey::QueueHead, &value);
+}
+
+pub fn get_queue_tail(env: &Env) -> u64 {
+    env.storage().instance().get(&DataKey::QueueTail).unwrap_or(1)
+}
+
+pub fn set_queue_tail(env: &Env, value: u64) {
+    env.storage().instance().set(&DataKey::QueueTail, &value);
+}
+
+pub fn get_queue_at(env: &Env, seq: u64) -> Option<BytesN<32>> {
+    env.storage().persistent().get(&DataKey::QueueAt(seq))
+}
+
+pub fn set_queue_at(env: &Env, seq: u64, claim_id: &BytesN<32>) {
+    let key = DataKey::QueueAt(seq);
+    env.storage().persistent().set(&key, claim_id);
+    env.storage().persistent().extend_ttl(&key, BUMP_THRESHOLD, BUMP_TO);
+}
+
+pub fn remove_queue_at(env: &Env, seq: u64) {
+    env.storage().persistent().remove(&DataKey::QueueAt(seq));
+}
+
+/// (day, capacity, total_allocated) at the day's first collection.
+pub fn get_payout_snap(env: &Env) -> Option<(u32, i128, i128)> {
+    env.storage().instance().get(&DataKey::PayoutSnap)
+}
+
+pub fn set_payout_snap(env: &Env, snap: &(u32, i128, i128)) {
+    env.storage().instance().set(&DataKey::PayoutSnap, snap);
+}
+
+pub fn get_storage_version(env: &Env) -> u32 {
+    env.storage().instance().get(&DataKey::StorageVersion).unwrap_or(0)
+}
+
+pub fn set_storage_version(env: &Env, value: u32) {
+    env.storage().instance().set(&DataKey::StorageVersion, &value);
 }

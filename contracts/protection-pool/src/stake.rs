@@ -191,6 +191,7 @@ pub fn stake(
         penalty_locked_until_ledger: 0,
         withdrawn: false,
         suspended: false,
+        suspended_until: 0,
         active_claim_id: None,
         reserved_claim_id: None,
         claim_approved: false,

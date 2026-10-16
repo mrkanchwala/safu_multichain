@@ -69,7 +69,7 @@ fn submit_claim_awaiting_approval_when_gate_already_met() {
     );
     let claim = s.client.get_claim(&claim_id).unwrap();
     assert_eq!(claim.status, ClaimStatus::AwaitingApproval);
-    assert!(claim.approve_deadline_ledger > 0);
+    assert!(claim.clock_start > 0);
     // Nothing forfeited yet: total_staked/stakers unchanged.
     assert_eq!(s.client.get_total_staked(), MID_STAKE);
     assert_eq!(s.client.get_total_stakers(), 1);
@@ -94,7 +94,10 @@ fn approve_claim_forfeits_and_activates() {
     assert_eq!(s.client.get_total_staked(), 0);
     assert_eq!(s.client.get_total_stakers(), 0);
     // Rule B's clock anchors at cooldown end, not the approval ledger.
-    assert_eq!(claim.last_collected_ledger, claim.cooldown_ends_ledger);
+    assert_eq!(
+        claim.clock_start,
+        env.ledger().timestamp() + COOLDOWN_LEDGERS as u64 * SECONDS_PER_LEDGER
+    );
 }
 
 #[test]
@@ -246,9 +249,16 @@ fn expire_pending_approval_blocked_while_suspended() {
         &now_ts(&env),
     );
     s.client.suspend_stake(&staker);
-    advance_ledgers(&env, APPROVE_WINDOW_LEDGERS + 1); // deadline genuinely passed
+    advance_days(&env, 29); // still inside the 30-day suspension
     let result = s.client.try_expire_pending_approval(&claim_id);
     assert_eq!(result, Err(Ok(PoolError::StakeSuspended)));
+    // 2026-10-16: the suspension lapses on its own after 30 days, and the
+    // approve window restarts from its end, so suspended time never counts.
+    advance_ledgers(&env, APPROVE_WINDOW_LEDGERS + 1); // window passed since the claim opened
+    let result = s.client.try_expire_pending_approval(&claim_id);
+    assert_eq!(result, Err(Ok(PoolError::ApprovalWindowNotExpired)));
+    advance_days(&env, 31); // now a full window past the suspension's end
+    s.client.expire_pending_approval(&claim_id);
 }
 
 #[test]
@@ -314,9 +324,15 @@ fn expire_stale_claim_blocked_while_suspended() {
     advance_ledgers(&env, COOLDOWN_LEDGERS + VESTING_LEDGERS / 4); // cooldown, then a quarter of vesting
     s.client.claim_stream(&claim_id, &ben);
     s.client.suspend_stake(&staker);
-    advance_ledgers(&env, COLLECTION_INACTIVITY_LEDGERS + 1); // genuinely stale now
+    advance_days(&env, 29); // still inside the 30-day suspension
     let result = s.client.try_expire_stale_claim(&claim_id);
     assert_eq!(result, Err(Ok(PoolError::StakeSuspended)));
+    // 2026-10-16: lapses after 30 days; the inactivity clock restarts at its end.
+    advance_ledgers(&env, COLLECTION_INACTIVITY_LEDGERS + 1);
+    let result = s.client.try_expire_stale_claim(&claim_id);
+    assert_eq!(result, Err(Ok(PoolError::ClaimNotStale)));
+    advance_days(&env, 31);
+    s.client.expire_stale_claim(&claim_id);
 }
 
 #[test]
@@ -791,7 +807,7 @@ fn unlock_pending_claim_moves_to_awaiting_approval_after_gate() {
     s.client.unlock_pending_claim(&claim_id);
     let claim = s.client.get_claim(&claim_id).unwrap();
     assert_eq!(claim.status, ClaimStatus::AwaitingApproval);
-    assert!(claim.approve_deadline_ledger > 0);
+    assert!(claim.clock_start > 0);
     assert_eq!(s.client.get_total_staked(), MID_STAKE);
 
     // And approving from here works exactly like the submit_claim path.

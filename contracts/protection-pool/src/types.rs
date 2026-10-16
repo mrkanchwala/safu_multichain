@@ -121,6 +121,23 @@ pub const APPROVE_WINDOW_LEDGERS: u32 = 100 * LEDGERS_PER_DAY;
 /// (eng review blocker #2).
 pub const COLLECTION_INACTIVITY_LEDGERS: u32 = 100 * LEDGERS_PER_DAY;
 
+/// 2026-10-16: the approve window and the inactivity clock run on
+/// timestamps, so pool-blocked time (pause, vault short of cash) and
+/// suspension can be taken off them in one unit. Same lengths as above.
+pub const SECONDS_PER_LEDGER: u64 = SECONDS_PER_DAY / LEDGERS_PER_DAY as u64;
+pub const APPROVE_WINDOW_SECONDS: u64 = APPROVE_WINDOW_LEDGERS as u64 * SECONDS_PER_LEDGER;
+pub const COLLECTION_INACTIVITY_SECONDS: u64 =
+    COLLECTION_INACTIVITY_LEDGERS as u64 * SECONDS_PER_LEDGER;
+
+/// 2026-10-16: a suspension by the admin alone ends on its own after this long.
+/// Renewing it, or suspending again within the same length after it ends,
+/// needs a second role.
+pub const SUSPEND_MAX_SECONDS: u64 = 30 * SECONDS_PER_DAY;
+
+/// 2026-10-16: storage layout version, written at deploy and bumped by `migrate()`
+/// after an upgrade that changes stored shapes.
+pub const STORAGE_VERSION: u32 = 1;
+
 // -----------------------------------------------------------------------
 // D2 (Tranche 2), DeFindex vault yield deployment.
 //
@@ -331,6 +348,7 @@ pub struct StakeRecord {
     pub penalty_locked_until_ledger: u32,
     pub withdrawn: bool,
     /// Admin can block payout eligibility; does NOT block principal withdrawal.
+    /// 2026-10-16: only in force while `now < suspended_until` (see `suspended_until`).
     pub suspended: bool,
     /// CHANGED 2026-07-22 (eng review, bug 2 fix): was a bare `claim_active:
     /// bool`. A bool alone can't distinguish "re-executing/correcting THIS
@@ -353,6 +371,11 @@ pub struct StakeRecord {
     /// approved (the stake is forfeited). The address can never stake again
     /// (pool rule). Cleared only by `cancel_claim` undoing that claim.
     pub claim_approved: bool,
+    /// 2026-10-16: when the current or last suspension ends (0 = never
+    /// suspended). A suspension lapses on its own at this time. Claim clocks
+    /// never start earlier than this, so suspended time never counts
+    /// against the claimant.
+    pub suspended_until: u64,
 }
 
 // -----------------------------------------------------------------------
@@ -423,18 +446,27 @@ pub struct Claim {
     /// verdict: never re-derivable/forgeable client-side.
     pub tier: u32,
     pub status: ClaimStatus,
-    /// NEW 2026-07-22 (Rule A): set when entering `AwaitingApproval`
-    /// (`now + APPROVE_WINDOW_LEDGERS`). Checked by both `approve_claim`
-    /// (must call before this) and the permissionless `expire_pending_approval`
-    /// (may sweep after this). Unused (0) before that state is reached.
-    pub approve_deadline_ledger: u32,
-    /// NEW 2026-07-22 (Rule B): set to `cooldown_ends_ledger`, not the
-    /// approval ledger: the moment a claim activates (eng review blocker
-    /// #2: the mandatory 7-day cooldown must never count as staker
-    /// inactivity). Updated to `now` on every successful `claim_stream`.
-    /// Checked by the permissionless `expire_stale_claim`. Unused (0)
-    /// before activation.
-    pub last_collected_ledger: u32,
+    /// 2026-10-16: replaces `approve_deadline_ledger` and
+    /// `last_collected_ledger`. One running clock per claim, in seconds:
+    /// - AwaitingApproval: started on entry; `APPROVE_WINDOW_SECONDS` to
+    ///   call `approve_claim` (Rule A).
+    /// - Active: started at cooldown end, restarted on every collection
+    ///   attempt; `COLLECTION_INACTIVITY_SECONDS` of no attempt and the
+    ///   rest can be swept (Rule B).
+    /// time the pool couldn't pay (paused, vault short of cash)
+    /// never counts. `blocked_at_clock_start` is the pool's blocked-time
+    /// counter when the clock started; the difference to now is added to
+    /// the window. A suspension pushes the start to its end.
+    pub clock_start: u64,
+    pub blocked_at_clock_start: u64,
+    /// 2026-10-16: place in the claim queue, 0 if never queued. Queued
+    /// claims are released strictly in this order.
+    pub queue_seq: u64,
+    /// 2026-10-16: this claim's fair share of the day's payout cap, set
+    /// at its first collection of `share_day`, then used down. Pro-rata to
+    /// what it is still owed, so calling early in the day buys nothing.
+    pub share_day: u32,
+    pub share_left: i128,
 }
 
 // -----------------------------------------------------------------------

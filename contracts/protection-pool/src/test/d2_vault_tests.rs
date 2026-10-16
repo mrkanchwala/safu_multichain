@@ -576,12 +576,16 @@ fn claim_stream_pulls_from_the_vault_when_liquidity_is_short() {
 
     advance_ledgers(&env, COOLDOWN_LEDGERS + 10 * LEDGERS_PER_DAY);
 
-    // The vault refusing is the only way the stream fails now.
+    // The vault refusing is the only way the stream can't pay now.
+    // 2026-10-16: that's the pool's fault, not the claimant's: the call
+    // succeeds with 0 paid, the day counts as blocked, the try counts as
+    // activity.
     mock.set_fail_withdraw(&true);
-    assert_eq!(
-        s.client.try_claim_stream(&claim_id, &beneficiary),
-        Err(Ok(PoolError::InsufficientLiquidity))
-    );
+    let blocked_before = s.client.get_blocked_secs();
+    assert_eq!(s.client.claim_stream(&claim_id, &beneficiary), 0);
+    assert_eq!(s.client.get_blocked_secs(), blocked_before + crate::types::SECONDS_PER_DAY);
+    assert_eq!(s.client.get_claim(&claim_id).unwrap().clock_start, now_ts(&env));
+    assert_eq!(s.client.get_claim(&claim_id).unwrap().streamed, 0);
 
     // Vault back: the stream pulls what it needs itself, no admin call.
     mock.set_fail_withdraw(&false);

@@ -491,6 +491,7 @@ pub fn gov_apply(env: &Env, s: &Setup<'_>, change: crate::GovChange) {
         GovChange::Treasury(_) => (GovKind::Treasury, admin, co),
         GovChange::DeployBps(_) => (GovKind::DeployBps, admin, co),
         GovChange::RegistryWriter(_, _) => (GovKind::RegistryWriter, admin, co),
+        GovChange::Upgrade(_) => (GovKind::Upgrade, admin, co),
     };
     s.client.propose_change(&a, &change);
     s.client.approve_change(&b, &change);
