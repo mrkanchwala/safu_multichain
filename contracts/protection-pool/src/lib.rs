@@ -72,6 +72,17 @@ use crate::types::{BackerRecord, Claim, StakeRecord};
 #[contract]
 pub struct ProtectionPool;
 
+/// B1 rule 24: after a user call succeeds, do a small, capped amount of
+/// pool upkeep (release the next queued claim, check watched claims). No
+/// keeper needed. A failed call rolls back anyway, so upkeep runs only on
+/// success.
+fn with_upkeep<T>(env: &Env, r: Result<T, PoolError>) -> Result<T, PoolError> {
+    if r.is_ok() {
+        claim::upkeep(env);
+    }
+    r
+}
+
 #[contractimpl]
 impl ProtectionPool {
     /// Deploy-time initialization.
@@ -265,11 +276,11 @@ impl ProtectionPool {
         amount: i128,
         beneficiary: Address,
     ) -> Result<(), PoolError> {
-        stake::stake(&env, &staker, amount, &beneficiary)
+        with_upkeep(&env, stake::stake(&env, &staker, amount, &beneficiary))
     }
 
     pub fn withdraw(env: Env, staker: Address, beneficiary: Address) -> Result<(), PoolError> {
-        stake::withdraw(&env, &staker, &beneficiary)
+        with_upkeep(&env, stake::withdraw(&env, &staker, &beneficiary))
     }
 
     pub fn set_beneficiary(
@@ -289,28 +300,28 @@ impl ProtectionPool {
     /// Deposit backer money. Counts toward capacity after `BackerMaturitySecs`
     /// (default 0: at once).
     pub fn back(env: Env, backer: Address, amount: i128) -> Result<(), PoolError> {
-        backer::back(&env, &backer, amount)
+        with_upkeep(&env, backer::back(&env, &backer, amount))
     }
 
     /// Permissionless: start counting a matured deposit toward capacity.
     pub fn mature_backing(env: Env, backer: Address) -> Result<i128, PoolError> {
-        backer::mature_backing(&env, &backer)
+        with_upkeep(&env, backer::mature_backing(&env, &backer))
     }
 
     /// Open a withdrawal request; it drips out daily (7 to 90 days by
     /// utilisation). Returns an estimate of the last drip day.
     pub fn request_backer_withdrawal(env: Env, backer: Address, amount: i128) -> Result<u64, PoolError> {
-        backer::request_withdrawal(&env, &backer, amount)
+        with_upkeep(&env, backer::request_withdrawal(&env, &backer, amount))
     }
 
     pub fn cancel_backer_withdrawal(env: Env, backer: Address) -> Result<(), PoolError> {
-        backer::cancel_withdrawal(&env, &backer)
+        with_upkeep(&env, backer::cancel_withdrawal(&env, &backer))
     }
 
     /// Collect what the drip has unlocked, to the backer's own address, only
     /// from capital open claims don't need. Returns the principal paid now.
     pub fn complete_backer_withdrawal(env: Env, backer: Address) -> Result<i128, PoolError> {
-        backer::complete_withdrawal(&env, &backer)
+        with_upkeep(&env, backer::complete_withdrawal(&env, &backer))
     }
 
     /// What `complete_backer_withdrawal` would pay right now (0 if nothing).
@@ -354,7 +365,7 @@ impl ProtectionPool {
         deadline: u64,
         signature: BytesN<64>,
     ) -> Result<BytesN<32>, PoolError> {
-        claim::submit_claim(
+        let r = claim::submit_claim(
             &env,
             &caller,
             &wallet,
@@ -364,7 +375,8 @@ impl ProtectionPool {
             hack_timestamp,
             deadline,
             &signature,
-        )
+        );
+        with_upkeep(&env, r)
     }
 
     /// T2/D1: admin-only. Cancels a signed-but-not-yet-submitted oracle
@@ -394,7 +406,7 @@ impl ProtectionPool {
     }
 
     pub fn unlock_pending_claim(env: Env, claim_id: BytesN<32>) -> Result<(), PoolError> {
-        claim::unlock_pending_claim(&env, &claim_id)
+        with_upkeep(&env, claim::unlock_pending_claim(&env, &claim_id))
     }
 
     /// T3 (2026-08-24), permissionless. Re-checks a queued claim's original
@@ -402,13 +414,13 @@ impl ProtectionPool {
     /// admits it for real if that now passes, otherwise returns
     /// `QueueReleaseNotYetEligible` and it stays `Reserved`.
     pub fn try_release_queued_claim(env: Env, claim_id: BytesN<32>) -> Result<(), PoolError> {
-        claim::try_release_queued_claim(&env, &claim_id)
+        with_upkeep(&env, claim::try_release_queued_claim(&env, &claim_id))
     }
 
     /// T3 (2026-08-24), permissionless. Sweeps a queued claim whose claim
     /// window ran out before capacity ever freed.
     pub fn expire_queued_claim(env: Env, claim_id: BytesN<32>) -> Result<(), PoolError> {
-        claim::expire_queued_claim(&env, &claim_id)
+        with_upkeep(&env, claim::expire_queued_claim(&env, &claim_id))
     }
 
     /// NEW 2026-07-22 (Rule A), staker-authorized. Burns the wallet's
@@ -416,21 +428,21 @@ impl ProtectionPool {
     /// cooldown/vesting. Must be called within `APPROVE_WINDOW_LEDGERS` of
     /// the claim entering `AwaitingApproval`.
     pub fn approve_claim(env: Env, claim_id: BytesN<32>) -> Result<(), PoolError> {
-        claim::approve_claim(&env, &claim_id)
+        with_upkeep(&env, claim::approve_claim(&env, &claim_id))
     }
 
     /// NEW 2026-07-22 (Rule A sweep), permissionless, mirrors
     /// `unlock_pending_claim`. Releases the reservation back to the pool
     /// if the staker never approved within the window.
     pub fn expire_pending_approval(env: Env, claim_id: BytesN<32>) -> Result<(), PoolError> {
-        claim::expire_pending_approval(&env, &claim_id)
+        with_upkeep(&env, claim::expire_pending_approval(&env, &claim_id))
     }
 
     /// NEW 2026-07-22 (Rule B sweep), permissionless. Releases whatever's
     /// left uncollected if the staker goes `COLLECTION_INACTIVITY_LEDGERS`
     /// with zero `claim_stream` activity.
     pub fn expire_stale_claim(env: Env, claim_id: BytesN<32>) -> Result<(), PoolError> {
-        claim::expire_stale_claim(&env, &claim_id)
+        with_upkeep(&env, claim::expire_stale_claim(&env, &claim_id))
     }
 
     pub fn claim_stream(
@@ -438,7 +450,7 @@ impl ProtectionPool {
         claim_id: BytesN<32>,
         beneficiary: Address,
     ) -> Result<i128, PoolError> {
-        claim::claim_stream(&env, &claim_id, &beneficiary)
+        with_upkeep(&env, claim::claim_stream(&env, &claim_id, &beneficiary))
     }
 
     pub fn cancel_claim(env: Env, claim_id: BytesN<32>) -> Result<(), PoolError> {
@@ -579,12 +591,12 @@ impl ProtectionPool {
     /// r3: a staker takes their yield without unstaking. Paid to the
     /// beneficiary (hash-checked as in `withdraw`).
     pub fn claim_yield(env: Env, staker: Address, beneficiary: Address) -> Result<i128, PoolError> {
-        stake::claim_yield(&env, &staker, &beneficiary)
+        with_upkeep(&env, stake::claim_yield(&env, &staker, &beneficiary))
     }
 
     /// r3: a backer takes their yield, principal untouched. Paid to the backer.
     pub fn claim_backer_yield(env: Env, backer: Address) -> Result<i128, PoolError> {
-        backer::claim_yield(&env, &backer)
+        with_upkeep(&env, backer::claim_yield(&env, &backer))
     }
 
     /// Send already-liquid excess above staker principal to treasury.

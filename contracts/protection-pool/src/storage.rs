@@ -181,6 +181,12 @@ pub enum DataKey {
     /// B1: the day's drip snapshot (day, free capital, open requests,
     /// utilisation bps), taken at the day's first backer collection.
     DripSnap,
+    /// B1 rule 24: the watch list, every live claim with a clock, checked a
+    /// few at a time by every user transaction (`claim::upkeep`). A ring:
+    /// `WatchHead` is the next to check, `WatchTail` the next free number.
+    WatchHead,
+    WatchTail,
+    WatchAt(u64),
 }
 
 // -----------------------------------------------------------------------
@@ -841,6 +847,36 @@ pub fn get_drip_snap(env: &Env) -> Option<(u32, i128, i128, i128)> {
 
 pub fn set_drip_snap(env: &Env, snap: &(u32, i128, i128, i128)) {
     env.storage().instance().set(&DataKey::DripSnap, snap);
+}
+
+pub fn get_watch_head(env: &Env) -> u64 {
+    env.storage().instance().get(&DataKey::WatchHead).unwrap_or(0)
+}
+
+pub fn set_watch_head(env: &Env, value: u64) {
+    env.storage().instance().set(&DataKey::WatchHead, &value);
+}
+
+pub fn get_watch_tail(env: &Env) -> u64 {
+    env.storage().instance().get(&DataKey::WatchTail).unwrap_or(0)
+}
+
+pub fn set_watch_tail(env: &Env, value: u64) {
+    env.storage().instance().set(&DataKey::WatchTail, &value);
+}
+
+pub fn get_watch_at(env: &Env, seq: u64) -> Option<BytesN<32>> {
+    env.storage().persistent().get(&DataKey::WatchAt(seq))
+}
+
+pub fn set_watch_at(env: &Env, seq: u64, claim_id: &BytesN<32>) {
+    let key = DataKey::WatchAt(seq);
+    env.storage().persistent().set(&key, claim_id);
+    env.storage().persistent().extend_ttl(&key, BUMP_THRESHOLD, BUMP_TO);
+}
+
+pub fn remove_watch_at(env: &Env, seq: u64) {
+    env.storage().persistent().remove(&DataKey::WatchAt(seq));
 }
 
 pub fn get_storage_version(env: &Env) -> u32 {

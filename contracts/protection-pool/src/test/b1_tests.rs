@@ -4,13 +4,19 @@
 //! - no expiry clock runs while the pool can't pay.
 //! - pause gap, and a suspension by the admin alone lapses.
 //! - upgrade needs two roles and 7 days; storage version + migrate.
+//! - 2026-10-19 rules 24-25: no keeper. Approve is one click after day 90,
+//!   the approve window starts at day 90 by itself, and every user call
+//!   releases the line and clears dead claims.
 
 use soroban_sdk::testutils::Address as _;
 use soroban_sdk::{Address, BytesN, Env};
 
 use super::common::*;
 use crate::error::PoolError;
-use crate::types::{ClaimStatus, APPROVE_WINDOW_LEDGERS, COOLDOWN_LEDGERS, VESTING_LEDGERS};
+use crate::types::{
+    ClaimStatus, APPROVE_WINDOW_LEDGERS, COLLECTION_INACTIVITY_LEDGERS, COOLDOWN_LEDGERS, LEDGERS_PER_DAY,
+    VESTING_LEDGERS,
+};
 use crate::{GovChange, GovKind};
 
 const TIER_C: u32 = 3;
@@ -37,19 +43,18 @@ fn queued_claims_release_in_line_order_only() {
     assert_eq!(s.client.get_claim(&first).unwrap().status, ClaimStatus::Reserved);
     assert_eq!(s.client.get_claim(&second).unwrap().status, ClaimStatus::Reserved);
 
-    // Grow the pool until both fit. The second in line still can't go first.
-    while expected_stress_cap(&s) < over_cap * 2 {
+    // Grow the pool until both fit. Each new stake releases the first in line
+    // by itself (rule 24); the second never goes while the first waits.
+    let mut stakes = 0;
+    while s.client.get_claim(&second).unwrap().status == ClaimStatus::Reserved {
         staked_wallet(&env, &s);
+        stakes += 1;
+        assert!(stakes < 200, "line never cleared");
+        if s.client.get_claim(&first).unwrap().status == ClaimStatus::Reserved {
+            assert_eq!(s.client.get_claim(&second).unwrap().status, ClaimStatus::Reserved);
+        }
     }
-    assert_eq!(
-        s.client.try_try_release_queued_claim(&second),
-        Err(Ok(PoolError::NotFirstInQueue))
-    );
-    s.client.try_release_queued_claim(&first);
     assert_ne!(s.client.get_claim(&first).unwrap().status, ClaimStatus::Reserved);
-    // Now it is next.
-    s.client.try_release_queued_claim(&second);
-    assert_ne!(s.client.get_claim(&second).unwrap().status, ClaimStatus::Reserved);
     assert_eq!(s.client.get_queue(), (3, 3));
 }
 
@@ -92,7 +97,6 @@ fn a_dead_claim_at_the_front_does_not_stall_the_line() {
     s.client.approve_override(&s.co_signer, &w1, &tx_hash(&env, 9), &MIN_STAKE, &TIER_C);
     s.client.expire_queued_claim(&first);
     assert_eq!(s.client.get_claim(&first).unwrap().status, ClaimStatus::Expired);
-    s.client.try_release_queued_claim(&second);
     assert_ne!(s.client.get_claim(&second).unwrap().status, ClaimStatus::Reserved);
 }
 
@@ -535,4 +539,98 @@ fn drip_settings_have_bounds_and_order() {
     s.client.approve_setting(&K::DripMinSecs, &(90 * DAY_SECS));
     set_setting_via_timelock(&env, &s, K::DripMaxSecs, 30 * DAY_SECS);
     assert_eq!(s.client.try_execute_setting(&K::DripMinSecs), Err(Ok(PoolError::SettingOrderInvalid)));
+}
+
+// -----------------------------------------------------------------------
+// 2026-10-19 rules 24-25: no keeper
+// -----------------------------------------------------------------------
+
+/// A claim filed before day 90 for `w`, small enough to be admitted.
+fn early_claim(env: &Env, s: &Setup<'_>, w: &Address, seed: u8) -> BytesN<32> {
+    let id = file(env, s, w, seed, STROOPS_PER_UNIT);
+    assert_eq!(s.client.get_claim(&id).unwrap().status, ClaimStatus::PendingTime);
+    id
+}
+
+#[test]
+fn approve_is_one_click_after_day_90() {
+    let env = new_env();
+    let s = setup(&env);
+    let (w, _) = staked_wallet(&env, &s);
+    let id = early_claim(&env, &s, &w, 1);
+    advance_past_time_gate(&env);
+    // Nobody called unlock: the staker's approve does it.
+    s.client.approve_claim(&id);
+    assert_eq!(s.client.get_claim(&id).unwrap().status, ClaimStatus::Active);
+}
+
+#[test]
+fn the_approve_window_starts_at_day_90_by_itself() {
+    let env = new_env();
+    let s = setup(&env);
+    let (w, _) = staked_wallet(&env, &s);
+    let id = early_claim(&env, &s, &w, 1);
+    // 99 days after day 90: still inside the window counted from day 90.
+    advance_past_time_gate(&env);
+    advance_days(&env, 99);
+    s.client.approve_claim(&id);
+    assert_eq!(s.client.get_claim(&id).unwrap().status, ClaimStatus::Active);
+
+    let (w2, _) = staked_wallet(&env, &s);
+    let id2 = early_claim(&env, &s, &w2, 2);
+    // 101 days after day 90, nobody ever unlocked it: the window ran out.
+    advance_past_time_gate(&env);
+    advance_ledgers(&env, APPROVE_WINDOW_LEDGERS + LEDGERS_PER_DAY);
+    assert_eq!(s.client.try_approve_claim(&id2), Err(Ok(PoolError::ApprovalWindowExpired)));
+}
+
+#[test]
+fn an_unapproved_claim_is_cleared_by_anyone_elses_call() {
+    let env = new_env();
+    let s = setup(&env);
+    let (w, _) = staked_wallet(&env, &s);
+    let id = early_claim(&env, &s, &w, 1);
+    assert_eq!(s.client.get_total_allocated(), STROOPS_PER_UNIT);
+    advance_past_time_gate(&env);
+    advance_ledgers(&env, APPROVE_WINDOW_LEDGERS + LEDGERS_PER_DAY);
+    // An unrelated staker joins; their call clears the dead claim.
+    staked_wallet(&env, &s);
+    assert_eq!(s.client.get_claim(&id).unwrap().status, ClaimStatus::Expired);
+    assert_eq!(s.client.get_total_allocated(), 0);
+    assert!(s.client.get_stake(&w).unwrap().active_claim_id.is_none());
+}
+
+#[test]
+fn an_uncollected_claim_is_cleared_by_anyone_elses_call() {
+    let env = new_env();
+    let s = setup(&env);
+    let (w, _) = staked_wallet(&env, &s);
+    staked_wallet(&env, &s);
+    advance_past_time_gate(&env);
+    let id = file(&env, &s, &w, 1, STROOPS_PER_UNIT);
+    s.client.approve_claim(&id);
+    assert_eq!(s.client.get_total_allocated(), STROOPS_PER_UNIT);
+    // Never collected: the inactivity clock starts at cooldown end.
+    advance_ledgers(&env, COOLDOWN_LEDGERS + COLLECTION_INACTIVITY_LEDGERS + LEDGERS_PER_DAY);
+    staked_wallet(&env, &s);
+    assert_eq!(s.client.get_claim(&id).unwrap().status, ClaimStatus::Expired);
+    assert_eq!(s.client.get_total_allocated(), 0);
+}
+
+#[test]
+fn a_live_claim_is_never_cleared_early() {
+    let env = new_env();
+    let s = setup(&env);
+    let (w, _) = staked_wallet(&env, &s);
+    let id = early_claim(&env, &s, &w, 1);
+    advance_past_time_gate(&env);
+    advance_days(&env, 50);
+    // Many unrelated calls: the claim is checked again and again, and kept.
+    for _ in 0..6 {
+        staked_wallet(&env, &s);
+    }
+    assert_eq!(s.client.get_claim(&id).unwrap().status, ClaimStatus::AwaitingApproval);
+    assert_eq!(s.client.get_total_allocated(), STROOPS_PER_UNIT);
+    s.client.approve_claim(&id);
+    assert_eq!(s.client.get_claim(&id).unwrap().status, ClaimStatus::Active);
 }

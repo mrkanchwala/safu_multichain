@@ -142,9 +142,9 @@ fn approve_claim_before_gate_panics() {
         &TIER_C,
         &now_ts(&env),
     );
-    // Still PendingTime: gate not met, never transitioned to AwaitingApproval.
+    // Still PendingTime: gate not met (rule 25: past it, approve would work).
     let result = s.client.try_approve_claim(&claim_id);
-    assert_eq!(result, Err(Ok(PoolError::ClaimNotAwaitingApproval)));
+    assert_eq!(result, Err(Ok(PoolError::TimeGateNotMet)));
 }
 
 #[test]
@@ -685,12 +685,17 @@ fn submit_claim_oracle_rate_limit_queues() {
     );
     let claim_id = result.unwrap().unwrap();
     let claim = s.client.get_claim(&claim_id).unwrap();
-    assert_eq!(claim.status, ClaimStatus::Reserved);
     assert_eq!(claim.entitlement, ENTITLEMENT);
-    // The throttle still does its job: nothing extra was admitted, so no
-    // capacity was consumed by the queued claim.
-    assert_eq!(s.client.get_total_allocated(), allocated_after_first);
-    assert!(s.client.get_stake(&staker2).unwrap().reserved_claim_id.is_some());
+    // The count limit only queues it. B1 rule 24: the same call's upkeep
+    // then releases it, since release never counted toward the oracle's
+    // limit (anyone could always release it at once). The binding limits,
+    // the daily stress cap and solvency, are applied at release.
+    let (head, tail) = s.client.get_queue();
+    assert!(tail > 0 && head == tail, "joined the line, then left it");
+    assert_eq!(claim.status, ClaimStatus::PendingTime);
+    assert_eq!(s.client.get_total_allocated(), allocated_after_first + ENTITLEMENT);
+    let r = s.client.get_stake(&staker2).unwrap();
+    assert!(r.reserved_claim_id.is_none() && r.active_claim_id == Some(claim_id));
 }
 
 #[test]

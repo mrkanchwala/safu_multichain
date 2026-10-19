@@ -368,6 +368,103 @@ fn expire_queued(env: &Env, claim_id: &BytesN<32>, claim: &mut Claim) {
     .publish(env);
 }
 
+// -----------------------------------------------------------------------
+// B1 rules 24-25 (founder 2026-10-19): no keeper. Nothing waits on a
+// separate call: a claim past day 90 promotes itself, and every user
+// transaction does a small, capped amount of upkeep (`upkeep`).
+// -----------------------------------------------------------------------
+
+/// Watch-list entries each `upkeep` checks. Bounds the work any one user
+/// transaction pays for.
+const UPKEEP_WATCH_PER_CALL: u32 = 2;
+
+fn gate_met(env: &Env, r: &StakeRecord) -> bool {
+    env.ledger().sequence().saturating_sub(r.staked_at_ledger) >= r.time_gate_ledgers
+}
+
+/// Rule 25: a `PendingTime` claim whose stake has passed the time gate is
+/// `AwaitingApproval` from the gate moment on, whether or not anyone called
+/// anything. Its approve clock starts at the gate, worked back from the
+/// ledger count at 5 s per ledger. Real ledgers are slower, so that lands
+/// AFTER the true gate moment: the error is in the claimant's favour. Pool-
+/// blocked time since the claim was filed is added back (snapshot taken at
+/// filing). In memory only; the caller persists. Returns true if promoted.
+fn promote_if_due(env: &Env, claim: &mut Claim, r: &StakeRecord) -> bool {
+    if claim.status != ClaimStatus::PendingTime || !gate_met(env, r) {
+        return false;
+    }
+    let gate_ledger = r.staked_at_ledger + r.time_gate_ledgers;
+    let since_gate = env.ledger().sequence().saturating_sub(gate_ledger) as u64;
+    claim.status = ClaimStatus::AwaitingApproval;
+    set_window(env, claim, crate::settings::SettingKey::ApproveWindowSecs);
+    claim.clock_start = env
+        .ledger()
+        .timestamp()
+        .saturating_sub(since_gate * crate::types::SECONDS_PER_LEDGER);
+    true
+}
+
+/// Adds a claim to the back of the watch list.
+fn watch(env: &Env, claim_id: &BytesN<32>) {
+    let tail = storage::get_watch_tail(env);
+    storage::set_watch_at(env, tail, claim_id);
+    storage::set_watch_tail(env, tail + 1);
+}
+
+/// Checks the claim at the front of the watch list: promotes it if due,
+/// expires it if its clock ran out, drops it once it is finished, and
+/// otherwise moves it to the back. Returns false when the list is empty.
+fn watch_step(env: &Env) -> bool {
+    let head = storage::get_watch_head(env);
+    if head >= storage::get_watch_tail(env) {
+        return false;
+    }
+    let id = storage::get_watch_at(env, head);
+    storage::remove_watch_at(env, head);
+    storage::set_watch_head(env, head + 1);
+    let Some(id) = id else { return true };
+    let Some(mut claim) = storage::get_claim(env, &id) else { return true };
+    let keep = match claim.status {
+        ClaimStatus::PendingTime | ClaimStatus::AwaitingApproval => {
+            if let Some(r) = storage::get_stake(env, &claim.wallet) {
+                if promote_if_due(env, &mut claim, &r) {
+                    storage::set_claim(env, &id, &claim);
+                    ClaimUnlocked { wallet: claim.wallet.clone(), claim_id: id.clone() }.publish(env);
+                }
+            }
+            claim.status == ClaimStatus::PendingTime || expire_pending_approval(env, &id).is_err()
+        }
+        // Err = not stale yet (or suspended, or fully streamed and about to
+        // complete): keep watching.
+        ClaimStatus::Active => expire_stale_claim(env, &id).is_err(),
+        // Finished, or back in the line (the line has its own cleanup).
+        _ => false,
+    };
+    if keep {
+        watch(env, &id);
+    }
+    true
+}
+
+/// Rule 24: run at the end of every user transaction. Releases the first
+/// claim in line if there is room now, then checks a couple of watched
+/// claims. Never fails the caller: each step validates before it writes,
+/// and a step that can't run is simply skipped. No token transfers. Skipped
+/// while paused (nothing moves or expires then).
+pub(crate) fn upkeep(env: &Env) {
+    if storage::is_paused(env) {
+        return;
+    }
+    if let Some(id) = queue_front(env) {
+        let _ = try_release_queued_claim(env, &id);
+    }
+    for _ in 0..UPKEEP_WATCH_PER_CALL {
+        if !watch_step(env) {
+            break;
+        }
+    }
+}
+
 /// this claim's share of today's payout cap, pro-rata to what it
 /// is still owed against everything owed at the day's first collection. The
 /// claim's own activation snapshot still sets its cap base (the
@@ -675,10 +772,15 @@ fn admit_claim(
         claim.status = ClaimStatus::AwaitingApproval;
         set_window(env, &mut claim, crate::settings::SettingKey::ApproveWindowSecs);
         start_clock(env, &mut claim, env.ledger().timestamp());
+    } else {
+        // Rule 25: the approve clock will start at the gate by itself; time
+        // the pool can't pay from now on is added back to it.
+        claim.blocked_at_clock_start = storage::get_blocked_secs(env);
     }
 
     storage::set_stake(env, wallet, stake_record);
     storage::set_claim(env, claim_id, &claim);
+    watch(env, claim_id);
     storage::bump_instance_ttl(env);
 }
 
@@ -1060,14 +1162,12 @@ pub fn unlock_pending_claim(env: &Env, claim_id: &BytesN<32>) -> Result<(), Pool
 
     let stake_record: StakeRecord =
         storage::get_stake(env, &claim.wallet).ok_or(PoolError::NoStake)?;
-    let now_ledger = env.ledger().sequence();
-    if now_ledger < stake_record.staked_at_ledger + stake_record.time_gate_ledgers {
+    // B1 rule 25: kept for callers that want it, but no longer needed:
+    // `approve_claim` and the upkeep promote a due claim themselves, with
+    // the clock starting at the gate either way.
+    if !promote_if_due(env, &mut claim, &stake_record) {
         return Err(PoolError::TimeGateNotMet);
     }
-
-    claim.status = ClaimStatus::AwaitingApproval;
-    set_window(env, &mut claim, crate::settings::SettingKey::ApproveWindowSecs);
-    start_clock(env, &mut claim, env.ledger().timestamp());
 
     storage::set_claim(env, claim_id, &claim);
     storage::bump_instance_ttl(env);
@@ -1097,12 +1197,15 @@ pub fn approve_claim(env: &Env, claim_id: &BytesN<32>) -> Result<(), PoolError> 
     let mut claim: Claim = storage::get_claim(env, claim_id).ok_or(PoolError::NoSuchClaim)?;
     claim.wallet.require_auth();
 
+    let mut stake_record: StakeRecord =
+        storage::get_stake(env, &claim.wallet).ok_or(PoolError::NoStake)?;
+    // B1 rule 25: one click. A claim past the gate approves directly.
+    if claim.status == ClaimStatus::PendingTime && !promote_if_due(env, &mut claim, &stake_record) {
+        return Err(PoolError::TimeGateNotMet);
+    }
     if claim.status != ClaimStatus::AwaitingApproval {
         return Err(PoolError::ClaimNotAwaitingApproval);
     }
-
-    let mut stake_record: StakeRecord =
-        storage::get_stake(env, &claim.wallet).ok_or(PoolError::NoStake)?;
     if clock_expired(env, &claim, &stake_record) {
         return Err(PoolError::ApprovalWindowExpired);
     }
@@ -1145,11 +1248,14 @@ pub fn expire_pending_approval(env: &Env, claim_id: &BytesN<32>) -> Result<(), P
     // 2026-10-16: nothing expires while the pool is paused.
     storage::require_not_paused(env)?;
     let mut claim: Claim = storage::get_claim(env, claim_id).ok_or(PoolError::NoSuchClaim)?;
+    let mut stake_record: StakeRecord =
+        storage::get_stake(env, &claim.wallet).ok_or(PoolError::NoStake)?;
+    // B1 rule 25: a claim past the gate is awaiting approval even if nobody
+    // promoted it, so its window can run out without anyone calling unlock.
+    promote_if_due(env, &mut claim, &stake_record);
     if claim.status != ClaimStatus::AwaitingApproval {
         return Err(PoolError::ClaimNotAwaitingApproval);
     }
-    let mut stake_record: StakeRecord =
-        storage::get_stake(env, &claim.wallet).ok_or(PoolError::NoStake)?;
     // Found in adversarial re-review 2026-07-22, after the initial
     // implementation: blocker #1's fix only reset the clock on unsuspend.
     // It never stopped a suspended staker's deadline from expiring
@@ -1660,6 +1766,7 @@ fn execute_override(env: &Env, claim_id: &BytesN<32>, req: &OverrideRequest) -> 
 
     storage::set_stake(env, &req.wallet, &stake_record);
     storage::set_claim(env, claim_id, &claim);
+    watch(env, claim_id);
     storage::bump_instance_ttl(env);
 
     OverrideExecuted {
