@@ -15,7 +15,7 @@ use soroban_sdk::Address;
 use super::common::*;
 use super::d2_vault_tests::{assert_invariant, with_vault};
 use crate::error::PoolError;
-use crate::types::{AUTO_PUSH_MIN_BPS, MAX_DEPLOY_BPS};
+use crate::types::{AUTO_PUSH_MIN_BPS, MAX_DEPLOY_BPS, MAX_ROUNDING_DRAW};
 
 const TIER_C: u32 = 3;
 const BPS: i128 = 10_000;
@@ -142,6 +142,72 @@ fn rounding_never_leaves_a_payment_short() {
     mock.set_rate_bps(&16_675); // redemption at the matching odd rate
     s.client.withdraw(&a.0, &a.1);
     assert_invariant(&s);
+}
+
+// -----------------------------------------------------------------------
+// B1 rule 20: rounding reserve (last-out withdraw)
+// -----------------------------------------------------------------------
+
+/// One max staker, 80% in the vault, and the vault hands back `BPS - lost_bps`
+/// of book on redeem. Returns the staker and the units the vault keeps.
+fn last_staker_with_vault_loss(env: &soroban_sdk::Env, s: &Setup<'_>, lost_bps: i128) -> ((Address, Address), i128) {
+    let a = staked_wallet_amount(env, s, MAX_STAKE);
+    let (_v, mock) = with_vault(env, s, MAX_DEPLOY_BPS);
+    let deployed = bps_of(MAX_STAKE, MAX_DEPLOY_BPS);
+    s.client.deploy_to_vault(&deployed, &0);
+    mock.set_rate_bps(&(BPS - lost_bps));
+    (a, deployed - deployed * (BPS - lost_bps) / BPS)
+}
+
+#[test]
+fn the_last_exit_short_by_rounding_is_paid_from_the_reserve() {
+    let env = new_env();
+    let s = setup(&env);
+    let (a, gap) = last_staker_with_vault_loss(&env, &s, 1);
+    assert!(gap > 0 && gap <= MAX_ROUNDING_DRAW);
+    // Without a reserve the last staker is stuck (the 2026-10-01 error 80).
+    assert_eq!(s.client.try_withdraw(&a.0, &a.1), Err(Ok(PoolError::InsufficientLiquidity)));
+
+    let founder = new_funded_address(&env, &s, MAX_ROUNDING_DRAW);
+    s.client.fund_rounding_reserve(&founder, &MAX_ROUNDING_DRAW);
+    let before = balance(&env, &s, &a.1);
+    s.client.withdraw(&a.0, &a.1);
+    assert_eq!(balance(&env, &s, &a.1) - before, MAX_STAKE);
+    assert_eq!(s.client.get_rounding_reserve(), MAX_ROUNDING_DRAW - gap);
+    assert_eq!(s.client.get_liquid_balance(), MAX_ROUNDING_DRAW - gap);
+}
+
+#[test]
+fn a_gap_bigger_than_the_draw_cap_still_refuses() {
+    let env = new_env();
+    let s = setup(&env);
+    let (a, gap) = last_staker_with_vault_loss(&env, &s, 10);
+    assert!(gap > MAX_ROUNDING_DRAW);
+    let reserve = 100 * MAX_ROUNDING_DRAW;
+    let founder = new_funded_address(&env, &s, reserve);
+    s.client.fund_rounding_reserve(&founder, &reserve);
+    assert_eq!(s.client.try_withdraw(&a.0, &a.1), Err(Ok(PoolError::InsufficientLiquidity)));
+    assert_eq!(s.client.get_rounding_reserve(), reserve);
+}
+
+#[test]
+fn the_reserve_is_never_pool_money() {
+    let env = new_env();
+    let s = setup(&env);
+    let founder = new_funded_address(&env, &s, MAX_ROUNDING_DRAW);
+    assert_eq!(
+        s.client.try_fund_rounding_reserve(&founder, &0),
+        Err(Ok(PoolError::AmountNotPositive))
+    );
+    s.client.fund_rounding_reserve(&founder, &MAX_ROUNDING_DRAW);
+    assert_eq!(s.client.get_capacity(), 0);
+    assert_eq!(s.client.get_yield_balance(), 0);
+
+    // A normal stake and exit with cash on hand never touches it.
+    let a = staked_wallet_amount(&env, &s, MAX_STAKE);
+    s.client.withdraw(&a.0, &a.1);
+    assert_eq!(s.client.get_rounding_reserve(), MAX_ROUNDING_DRAW);
+    assert_eq!(s.client.get_liquid_balance(), MAX_ROUNDING_DRAW);
 }
 
 // -----------------------------------------------------------------------

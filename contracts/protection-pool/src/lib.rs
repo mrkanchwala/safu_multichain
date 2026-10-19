@@ -607,6 +607,16 @@ impl ProtectionPool {
         vault::withdraw_yield(&env, amount)
     }
 
+    /// B1 rule 20: add to the rounding reserve (covers a few units of vault
+    /// rounding on the last exit). One-way: nothing can take it back out.
+    pub fn fund_rounding_reserve(env: Env, from: Address, amount: i128) -> Result<(), PoolError> {
+        vault::fund_rounding_reserve(&env, &from, amount)
+    }
+
+    pub fn get_rounding_reserve(env: Env) -> i128 {
+        storage::get_rounding_reserve(&env)
+    }
+
     // -- D2 views --
 
     /// Real liquid XLM held by the contract, distinct from

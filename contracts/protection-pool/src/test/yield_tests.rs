@@ -532,6 +532,38 @@ fn treasury_takes_only_what_is_left_after_everyone_is_covered() {
     assert_full_invariant(&s);
 }
 
+/// B1 rule 20: the rounding reserve is not surplus. With an open claim
+/// owing everything else, the treasury still gets nothing, reserve or not.
+#[test]
+fn treasury_never_takes_the_rounding_reserve() {
+    let env = new_env();
+    let s = setup(&env);
+    set_setting_via_timelock(&env, &s, SettingKey::StakerYieldBps, 5_000);
+    let (staker, _) = staked_wallet(&env, &s);
+    staked_wallet(&env, &s);
+    matured_backer(&env, &s, 20 * MID_STAKE);
+    let (vault_id, mock, _) = deployed(&env, &s);
+    gov_apply(&env, &s, GovChange::Treasury(Address::generate(&env)));
+    grow(&s, &vault_id, &mock, 10_000 + GAIN_BPS);
+    s.client.harvest();
+    advance_past_time_gate(&env);
+    let id = submit_claim_signed(
+        &env, &s, &s.oracle, &staker, &tx_hash(&env, 1), &(5 * MID_STAKE), &TIER_C, &now_ts(&env),
+    );
+    s.client.approve_claim(&id);
+    let counter = s.client.get_yield_balance();
+    assert!(counter > 0);
+
+    // Bigger than what the open claim leaves uncovered, so a surplus that
+    // counted the reserve would show room.
+    let reserve = 20 * MID_STAKE;
+    let founder = new_funded_address(&env, &s, reserve);
+    s.client.fund_rounding_reserve(&founder, &reserve);
+    assert_eq!(s.client.try_withdraw_yield(&counter), Err(Ok(PoolError::ExceedsYieldBalance)));
+    assert_eq!(s.client.try_withdraw_yield(&1), Err(Ok(PoolError::ExceedsYieldBalance)));
+    assert_eq!(s.client.get_rounding_reserve(), reserve);
+}
+
 #[test]
 fn treasury_still_takes_its_full_share_when_nothing_else_is_owed_from_it() {
     let env = new_env();

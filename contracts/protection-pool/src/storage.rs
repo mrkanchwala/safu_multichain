@@ -192,6 +192,9 @@ pub enum DataKey {
     /// B1 rule 17: points index per side (0 stakers, 1 backers): the value
     /// and the timestamp it was stored at.
     PointsIndex(u32),
+    /// B1 rule 20: units set aside to cover a few units of vault rounding on
+    /// the last exit. Funded by anyone, never swept, never capacity.
+    RoundingReserve,
 }
 
 // -----------------------------------------------------------------------
@@ -306,6 +309,17 @@ pub fn set_protocol_yield_balance(env: &Env, value: i128) {
     env.storage()
         .instance()
         .set(&DataKey::ProtocolYieldBalance, &value);
+}
+
+pub fn get_rounding_reserve(env: &Env) -> i128 {
+    env.storage()
+        .instance()
+        .get(&DataKey::RoundingReserve)
+        .unwrap_or(0)
+}
+
+pub fn set_rounding_reserve(env: &Env, value: i128) {
+    env.storage().instance().set(&DataKey::RoundingReserve, &value);
 }
 
 pub fn get_total_stakers(env: &Env) -> u32 {

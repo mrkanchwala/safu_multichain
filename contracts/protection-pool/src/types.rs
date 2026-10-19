@@ -194,6 +194,11 @@ pub const MAX_REBALANCE_SLIPPAGE_BPS: i128 = 500;
 /// vault call, and the pull/push lines can't bounce off each other.
 pub const AUTO_PUSH_MIN_BPS: i128 = 100;
 
+/// B1 rule 20: the most one payment may take from the rounding reserve
+/// (10_000 units = 0.001 of a 7-decimal asset). Covers vault/Blend rounding
+/// of a few units; a bigger gap is a real loss and still refuses.
+pub const MAX_ROUNDING_DRAW: i128 = 10_000;
+
 // -----------------------------------------------------------------------
 // Yield split: added 2026-09-18 (design
 // decision). `extract_yield` used to send 100% of realised yield to

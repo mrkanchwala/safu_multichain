@@ -61,7 +61,7 @@ use crate::error::PoolError;
 use crate::storage;
 use crate::types::{
     AUTO_PUSH_MIN_BPS, BPS_DENOMINATOR, DEPLOY_BPS_DENOMINATOR, HARVEST_MAX_GROWTH_BPS_PER_DAY,
-    HARVEST_SLIPPAGE_BPS, MAX_REBALANCE_SLIPPAGE_BPS, SECONDS_PER_DAY, YIELD_INDEX_PRECISION,
+    HARVEST_SLIPPAGE_BPS, MAX_REBALANCE_SLIPPAGE_BPS, MAX_ROUNDING_DRAW, SECONDS_PER_DAY, YIELD_INDEX_PRECISION,
     YIELD_SPLIT_BPS_DENOMINATOR,
 };
 
@@ -184,6 +184,20 @@ pub struct YieldWithdrawn {
     pub amount: i128,
 }
 
+/// B1 rule 20: units added to the rounding reserve.
+#[contractevent]
+pub struct RoundingReserveFunded {
+    #[topic]
+    pub from: Address,
+    pub amount: i128,
+}
+
+/// B1 rule 20: a payment took `amount` from the rounding reserve.
+#[contractevent]
+pub struct RoundingReserveUsed {
+    pub amount: i128,
+}
+
 /// Emitted when a redemption returns LESS XLM than the proportional
 /// principal that was deployed: i.e. the venue lost money (Blend bad debt
 /// or an adverse share-price move).
@@ -247,8 +261,11 @@ pub fn require_liquidity(env: &Env, amount: i128) -> Result<(), PoolError> {
 /// owed in full (the set-aside counters track what is owed; every payout,
 /// yield included, goes through `pull_for_payment`). It counts as
 /// liquidity, never as capacity. Replaces r3's set-aside cash.
+///
+/// B1 rule 20: the rounding reserve is not pool cash. It is only reached
+/// through the capped draw in `pull_for_payment`.
 pub fn free_liquid(env: &Env) -> i128 {
-    liquid_balance(env)
+    (liquid_balance(env) - storage::get_rounding_reserve(env)).max(0)
 }
 
 // -----------------------------------------------------------------------
@@ -260,6 +277,13 @@ pub fn free_liquid(env: &Env) -> i128 {
 /// (`capacity × (1 − deploy_bps)`); if the vault can't give that much, try
 /// the shortfall alone. Then the usual check: pay, or `InsufficientLiquidity`.
 pub fn pull_for_payment(env: &Env, amount: i128) -> Result<(), PoolError> {
+    pull_cash(env, amount);
+    draw_rounding_reserve(env, amount);
+    require_liquidity(env, amount)
+}
+
+/// The vault side of `pull_for_payment`, without the rounding reserve.
+fn pull_cash(env: &Env, amount: i128) {
     let liquid = free_liquid(env);
     if liquid < amount {
         let shortfall = amount - liquid;
@@ -270,7 +294,40 @@ pub fn pull_for_payment(env: &Env, amount: i128) -> Result<(), PoolError> {
             try_pull(env, shortfall);
         }
     }
-    require_liquidity(env, amount)
+}
+
+/// B1 rule 20: after the vault has given what it can, a payment still short
+/// by at most `MAX_ROUNDING_DRAW` takes the gap from the rounding reserve.
+/// This is the last staker's exit when vault/Blend rounding left the pool a
+/// few units below its book. A bigger gap, or an empty reserve, still
+/// refuses with `InsufficientLiquidity`.
+fn draw_rounding_reserve(env: &Env, amount: i128) {
+    let shortfall = amount - free_liquid(env);
+    if shortfall <= 0 || shortfall > MAX_ROUNDING_DRAW {
+        return;
+    }
+    let reserve = storage::get_rounding_reserve(env);
+    if shortfall > reserve {
+        return;
+    }
+    storage::set_rounding_reserve(env, reserve - shortfall);
+    RoundingReserveUsed { amount: shortfall }.publish(env);
+}
+
+/// B1 rule 20: anyone (in practice the founder at deploy) adds to the
+/// rounding reserve. There is no way to take it back out: `withdraw_yield`
+/// can't reach it and it never counts as capacity.
+pub fn fund_rounding_reserve(env: &Env, from: &Address, amount: i128) -> Result<(), PoolError> {
+    from.require_auth();
+    if amount <= 0 {
+        return Err(PoolError::AmountNotPositive);
+    }
+    let token = TokenClient::new(env, &storage::get_asset_token(env));
+    token.transfer(from, env.current_contract_address(), &amount);
+    storage::set_rounding_reserve(env, storage::get_rounding_reserve(env) + amount);
+    storage::bump_instance_ttl(env);
+    RoundingReserveFunded { from: from.clone(), amount }.publish(env);
+    Ok(())
 }
 
 /// Redeem enough shares for `target` XLM (rounded up, capped at the whole
@@ -1134,7 +1191,7 @@ pub(crate) fn settle_staker_yield(env: &Env, record: &mut crate::types::StakeRec
 /// stakes, counted and pending backing, set-aside yield, and the unpaid part
 /// of open claims. The most `withdraw_yield` may ever send (code review W2).
 pub(crate) fn protocol_surplus(env: &Env) -> i128 {
-    let held = liquid_balance(env) + storage::get_total_deployed_asset(env);
+    let held = free_liquid(env) + storage::get_total_deployed_asset(env);
     let owed = storage::get_total_staked(env)
         + storage::get_total_backed(env)
         + storage::get_total_backed_pending(env)
@@ -1174,8 +1231,9 @@ pub fn withdraw_yield(env: &Env, amount: i128) -> Result<(), PoolError> {
         return Err(PoolError::ExceedsYieldBalance);
     }
     // r3: never touches staker/backer set-aside yield; pulls from the vault
-    // if cash is short, like every other payment.
-    pull_for_payment(env, amount)?;
+    // if cash is short. B1 rule 20: never from the rounding reserve.
+    pull_cash(env, amount);
+    require_liquidity(env, amount)?;
 
     // NOTE 2026-09-18: total_extracted_yield is NOT incremented here.
     // credit_yield already counts the full realised amount the moment it
