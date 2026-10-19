@@ -234,3 +234,62 @@ fn pause_ends_on_its_own_and_cannot_be_renewed_back_to_back() {
     s.client.pause();
     assert!(s.client.is_paused());
 }
+
+// -----------------------------------------------------------------------
+// A new role key must sign its own installation
+// -----------------------------------------------------------------------
+
+/// Proposes and approves `change` with the right two roles, then waits out
+/// the delay, so only the execute step is left.
+fn ready_to_execute(env: &soroban_sdk::Env, s: &Setup<'_>, change: &GovChange, kind: GovKind) -> GovKind {
+    let (admin, co, guardian) = (s.client.get_admin(), s.client.get_co_signer(), s.client.get_guardian());
+    let (a, b) = match kind {
+        GovKind::Admin => (co, guardian),
+        GovKind::CoSigner => (admin, guardian),
+        _ => (admin, co),
+    };
+    s.client.propose_change(&a, change);
+    s.client.approve_change(&b, change);
+    advance_secs(env, GOV_DELAY_SECONDS + 1);
+    kind
+}
+
+#[test]
+fn a_new_admin_is_installed_only_with_its_own_signature() {
+    let env = new_env();
+    let s = setup(&env);
+    let new_admin = Address::generate(&env);
+    let change = GovChange::Admin(new_admin.clone());
+    let kind = ready_to_execute(&env, &s, &change, GovKind::Admin);
+
+    // Without the new key's signature the change cannot be executed.
+    env.set_auths(&[]);
+    assert!(s.client.try_execute_change(&kind).is_err());
+    assert_ne!(s.client.get_admin(), new_admin);
+
+    // With it, the change goes through and the new key's signature was used.
+    env.mock_all_auths();
+    s.client.execute_change(&kind);
+    assert!(env.auths().iter().any(|(who, _)| *who == new_admin));
+    assert_eq!(s.client.get_admin(), new_admin);
+}
+
+#[test]
+fn every_role_key_signs_its_own_installation() {
+    for kind in [GovKind::CoSigner, GovKind::Guardian, GovKind::Oracle] {
+        let env = new_env();
+        let s = setup(&env);
+        let key = Address::generate(&env);
+        let change = match kind {
+            GovKind::CoSigner => GovChange::CoSigner(key.clone()),
+            GovKind::Guardian => GovChange::Guardian(key.clone()),
+            _ => GovChange::Oracle(key.clone(), verifying_key_bytes(&env, &other_signing_key())),
+        };
+        let kind = ready_to_execute(&env, &s, &change, kind);
+        env.set_auths(&[]);
+        assert!(s.client.try_execute_change(&kind).is_err(), "{:?} installed without its signature", kind);
+        env.mock_all_auths();
+        s.client.execute_change(&kind);
+        assert!(env.auths().iter().any(|(who, _)| *who == key), "{:?} key did not sign", kind);
+    }
+}

@@ -291,12 +291,25 @@ fn validate(env: &Env, change: &GovChange) -> Result<(), PoolError> {
     check_roles_distinct(&admin, &co, &guardian, &oracle)
 }
 
+/// A role key is only installed with its own signature, so a role can never
+/// move to a mistyped or unusable address. The signature is required when the
+/// change is executed (the executor can be anyone; the new key signs too).
 fn apply(env: &Env, change: &GovChange) {
     match change {
-        GovChange::Admin(a) => storage::set_admin(env, a),
-        GovChange::CoSigner(c) => storage::set_co_signer(env, c),
-        GovChange::Guardian(g) => storage::set_guardian(env, g),
+        GovChange::Admin(a) => {
+            a.require_auth();
+            storage::set_admin(env, a)
+        }
+        GovChange::CoSigner(c) => {
+            c.require_auth();
+            storage::set_co_signer(env, c)
+        }
+        GovChange::Guardian(g) => {
+            g.require_auth();
+            storage::set_guardian(env, g)
+        }
         GovChange::Oracle(o, key) => {
+            o.require_auth();
             storage::set_oracle(env, o);
             storage::set_oracle_pubkey(env, key);
         }
