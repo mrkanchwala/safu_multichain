@@ -145,7 +145,7 @@ fn rounding_never_leaves_a_payment_short() {
 }
 
 // -----------------------------------------------------------------------
-// B1 rule 20: rounding reserve (last-out withdraw)
+// Rounding reserve (last-out withdraw)
 // -----------------------------------------------------------------------
 
 /// One max staker, 80% in the vault, and the vault hands back `BPS - lost_bps`
@@ -168,8 +168,8 @@ fn the_last_exit_short_by_rounding_is_paid_from_the_reserve() {
     // Without a reserve the last staker is stuck (the 2026-10-01 error 80).
     assert_eq!(s.client.try_withdraw(&a.0, &a.1), Err(Ok(PoolError::InsufficientLiquidity)));
 
-    let founder = new_funded_address(&env, &s, MAX_ROUNDING_DRAW);
-    s.client.fund_rounding_reserve(&founder, &MAX_ROUNDING_DRAW);
+    let funder = new_funded_address(&env, &s, MAX_ROUNDING_DRAW);
+    s.client.fund_rounding_reserve(&funder, &MAX_ROUNDING_DRAW);
     let before = balance(&env, &s, &a.1);
     s.client.withdraw(&a.0, &a.1);
     assert_eq!(balance(&env, &s, &a.1) - before, MAX_STAKE);
@@ -184,8 +184,8 @@ fn a_gap_bigger_than_the_draw_cap_still_refuses() {
     let (a, gap) = last_staker_with_vault_loss(&env, &s, 10);
     assert!(gap > MAX_ROUNDING_DRAW);
     let reserve = 100 * MAX_ROUNDING_DRAW;
-    let founder = new_funded_address(&env, &s, reserve);
-    s.client.fund_rounding_reserve(&founder, &reserve);
+    let funder = new_funded_address(&env, &s, reserve);
+    s.client.fund_rounding_reserve(&funder, &reserve);
     assert_eq!(s.client.try_withdraw(&a.0, &a.1), Err(Ok(PoolError::InsufficientLiquidity)));
     assert_eq!(s.client.get_rounding_reserve(), reserve);
 }
@@ -194,12 +194,12 @@ fn a_gap_bigger_than_the_draw_cap_still_refuses() {
 fn the_reserve_is_never_pool_money() {
     let env = new_env();
     let s = setup(&env);
-    let founder = new_funded_address(&env, &s, MAX_ROUNDING_DRAW);
+    let funder = new_funded_address(&env, &s, MAX_ROUNDING_DRAW);
     assert_eq!(
-        s.client.try_fund_rounding_reserve(&founder, &0),
+        s.client.try_fund_rounding_reserve(&funder, &0),
         Err(Ok(PoolError::AmountNotPositive))
     );
-    s.client.fund_rounding_reserve(&founder, &MAX_ROUNDING_DRAW);
+    s.client.fund_rounding_reserve(&funder, &MAX_ROUNDING_DRAW);
     assert_eq!(s.client.get_capacity(), 0);
     assert_eq!(s.client.get_yield_balance(), 0);
 
@@ -245,7 +245,7 @@ fn no_push_below_the_threshold() {
 fn backing_is_pushed_once_it_counts_toward_capacity() {
     let env = new_env();
     let s = setup(&env);
-    // B1 step 3: maturity defaults to 0; this test needs the wait on.
+    // Maturity defaults to 0; this test needs the wait on.
     set_setting_via_timelock(&env, &s, crate::settings::SettingKey::BackerMaturitySecs, 7 * 86_400);
     let (_a, _b, _m) = pool_at_ceiling(&env, &s);
     let deployed = s.client.get_total_deployed_asset();

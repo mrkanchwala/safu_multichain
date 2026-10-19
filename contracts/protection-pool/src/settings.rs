@@ -58,7 +58,7 @@ pub enum SettingKey {
     PayoutLowBps = 8,
     PayoutMidBps = 9,
     PayoutHighBps = 10,
-    /// Backer withdrawal notice period, seconds. UNUSED since B1 step 3: the
+    /// Backer withdrawal notice period, seconds. UNUSED since the
     /// daily drip (`DripMinSecs`/`DripMaxSecs`) replaced the notice. Kept so
     /// the numbering never shifts.
     BackerNoticeSeconds = 11,
@@ -90,11 +90,11 @@ pub enum SettingKey {
     InactivitySecs = 22,
     /// 2026-10-16: wait before new backing counts toward capacity. Default 0.
     BackerMaturitySecs = 23,
-    /// B1 (rule 12): backer exit drip, seconds. Length runs from `DripMinSecs`
+    /// Backer exit drip, seconds. Length runs from `DripMinSecs`
     /// (idle pool) to `DripMaxSecs` (>= 50% utilisation). Min <= max.
     DripMinSecs = 24,
     DripMaxSecs = 25,
-    /// B1 rule 17: points per unit per day, x10_000 (10_000 = 1 point).
+    /// Points per unit per day, x10_000 (10_000 = 1 point).
     PointsRateStaker = 26,
     PointsRateBacker = 27,
 }
@@ -342,7 +342,7 @@ pub fn execute_setting(env: &Env, key: SettingKey) -> Result<(), PoolError> {
         return Err(PoolError::SettingOrderInvalid);
     }
     let old_value = get(env, key);
-    // Rule 17: points earned so far stay at the old rate.
+    // Points earned so far stay at the old rate.
     if let Some(side) = crate::points::side_of(key) {
         crate::points::checkpoint(env, side);
     }

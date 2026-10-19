@@ -176,12 +176,12 @@ pub enum DataKey {
     PayoutSnap,
     /// 2026-10-16: storage layout version.
     StorageVersion,
-    /// B1 (rule 12): unpaid total of every open backer withdrawal request.
+    /// Unpaid total of every open backer withdrawal request.
     TotalBackerOpen,
-    /// B1: the day's drip snapshot (day, free capital, open requests,
+    /// The day's drip snapshot (day, free capital, open requests,
     /// utilisation bps), taken at the day's first backer collection.
     DripSnap,
-    /// B1 rule 24: the watch list, every live claim with a clock, checked a
+    /// The watch list, every live claim with a clock, checked a
     /// few at a time by every user transaction (`claim::upkeep`). A ring:
     /// `WatchHead` is the next to check, `WatchTail` the next free number.
     WatchHead,
@@ -189,10 +189,10 @@ pub enum DataKey {
     /// The next watch-list place to check; walks head..tail and wraps.
     WatchCursor,
     WatchAt(u64),
-    /// B1 rule 17: points index per side (0 stakers, 1 backers): the value
+    /// Points index per side (0 stakers, 1 backers): the value
     /// and the timestamp it was stored at.
     PointsIndex(u32),
-    /// B1 rule 20: units set aside to cover a few units of vault rounding on
+    /// Units set aside to cover a few units of vault rounding on
     /// the last exit. Funded by anyone, never swept, never capacity.
     RoundingReserve,
 }

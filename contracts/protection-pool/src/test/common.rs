@@ -387,7 +387,7 @@ pub fn outflow_cap_oracle(base: i128, total_allocated: i128) -> i128 {
 /// points balance stake for the first points tier (in days), which is
 /// unrelated to the claim time gate.
 pub const POINTS_TIER_1_DAYS: u32 = 90;
-/// B1 rule 17: points for `amount` held `days` at the default rate
+/// Points for `amount` held `days` at the default rate
 /// (1 point per whole unit per day).
 pub fn dollar_day_points(amount: i128, days: u32) -> i128 {
     amount * i128::from(days) / STROOPS_PER_UNIT

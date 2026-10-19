@@ -41,7 +41,7 @@ fn stake_below_min_panics() {
 
 #[test]
 fn stake_above_max_overflows_into_backing() {
-    // B1 rule 4 (2026-10-16): was `stake_above_max_panics`.
+    // Was `stake_above_max_panics`.
     let env = new_env();
     let s = setup(&env);
     let amount = MAX_STAKE + 1;

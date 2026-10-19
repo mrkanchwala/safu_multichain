@@ -184,7 +184,7 @@ pub struct YieldWithdrawn {
     pub amount: i128,
 }
 
-/// B1 rule 20: units added to the rounding reserve.
+/// Units added to the rounding reserve.
 #[contractevent]
 pub struct RoundingReserveFunded {
     #[topic]
@@ -192,7 +192,7 @@ pub struct RoundingReserveFunded {
     pub amount: i128,
 }
 
-/// B1 rule 20: a payment took `amount` from the rounding reserve.
+/// A payment took `amount` from the rounding reserve.
 #[contractevent]
 pub struct RoundingReserveUsed {
     pub amount: i128,
@@ -256,13 +256,13 @@ pub fn require_liquidity(env: &Env, amount: i128) -> Result<(), PoolError> {
     Ok(())
 }
 
-/// Cash the pool can spend. B1 rule 14 (founder 2026-10-16): unpaid yield
+/// Cash the pool can spend. Unpaid yield
 /// is pool cash: it may be deployed and used to pay claims, and is still
 /// owed in full (the set-aside counters track what is owed; every payout,
 /// yield included, goes through `pull_for_payment`). It counts as
 /// liquidity, never as capacity. Replaces r3's set-aside cash.
 ///
-/// B1 rule 20: the rounding reserve is not pool cash. It is only reached
+/// The rounding reserve is not pool cash. It is only reached
 /// through the capped draw in `pull_for_payment`.
 pub fn free_liquid(env: &Env) -> i128 {
     (liquid_balance(env) - storage::get_rounding_reserve(env)).max(0)
@@ -296,7 +296,7 @@ fn pull_cash(env: &Env, amount: i128) {
     }
 }
 
-/// B1 rule 20: after the vault has given what it can, a payment still short
+/// After the vault has given what it can, a payment still short
 /// by at most `MAX_ROUNDING_DRAW` takes the gap from the rounding reserve.
 /// This is the last staker's exit when vault/Blend rounding left the pool a
 /// few units below its book. A bigger gap, or an empty reserve, still
@@ -314,7 +314,7 @@ fn draw_rounding_reserve(env: &Env, amount: i128) {
     RoundingReserveUsed { amount: shortfall }.publish(env);
 }
 
-/// B1 rule 20: anyone (in practice the founder at deploy) adds to the
+/// Anyone (in practice the deployer) adds to the
 /// rounding reserve. There is no way to take it back out: `withdraw_yield`
 /// can't reach it and it never counts as capacity.
 pub fn fund_rounding_reserve(env: &Env, from: &Address, amount: i128) -> Result<(), PoolError> {
@@ -984,7 +984,7 @@ pub fn ensure_liquidity(env: &Env) -> Result<i128, PoolError> {
 /// How far `amount` of growth moves the staker and backer yield indexes.
 /// Each side gets its yield setting's share of the growth earned on its
 /// principal; the rest (including all growth on unpaid yield and on SAFU's
-/// own balance, rule 16) is the protocol's. Read-only.
+/// own balance) is the protocol's. Read-only.
 pub(crate) fn index_bumps(env: &Env, amount: i128) -> (i128, i128) {
     let total_staked = storage::get_total_staked(env);
     let total_backed = storage::get_total_backed(env);
@@ -1102,7 +1102,7 @@ pub fn harvest(env: &Env) -> i128 {
 
 /// Growth `harvest` would book right now, under the same daily limit,
 /// without booking it. 0 while paused or before the first harvest clock.
-/// Read-only (rule 22).
+/// Read-only.
 pub(crate) fn harvestable(env: &Env) -> i128 {
     if storage::is_paused(env) {
         return 0;
@@ -1126,7 +1126,7 @@ pub(crate) fn harvestable(env: &Env) -> i128 {
     growth.min(limit).max(0)
 }
 
-/// Rule 22: yield `owner` could collect right now, as staker and as
+/// Yield `owner` could collect right now, as staker and as
 /// backer, counting growth not yet harvested. What the site shows.
 pub fn pending_yield(env: &Env, owner: &Address) -> (i128, i128) {
     let (sb, bb) = index_bumps(env, harvestable(env));
@@ -1155,7 +1155,7 @@ pub fn pending_yield(env: &Env, owner: &Address) -> (i128, i128) {
 pub(crate) fn staker_yield_owed(env: &Env, record: &crate::types::StakeRecord) -> i128 {
     let delta = storage::get_yield_index(env) - record.yield_index_at_stake;
     // A forfeited stake keeps `amount` but is out of `total_staked`: it
-    // earns nothing after the approval (rule 15 settled what it had).
+    // earns nothing after the approval (approval settled what it had).
     if delta <= 0 || record.amount <= 0 || record.withdrawn {
         return 0;
     }
@@ -1180,7 +1180,7 @@ pub(crate) fn take_backer_yield(env: &Env, owed: i128) -> i128 {
     paid
 }
 
-/// B1 rule 15: settles the stake's unpaid yield into `yield_owed` when a
+/// Settles the stake's unpaid yield into `yield_owed` when a
 /// claim is approved. The claimant keeps it; the stake earns nothing more.
 pub(crate) fn settle_staker_yield(env: &Env, record: &mut crate::types::StakeRecord) {
     record.yield_owed += staker_yield_owed(env, record);
@@ -1231,7 +1231,7 @@ pub fn withdraw_yield(env: &Env, amount: i128) -> Result<(), PoolError> {
         return Err(PoolError::ExceedsYieldBalance);
     }
     // r3: never touches staker/backer set-aside yield; pulls from the vault
-    // if cash is short. B1 rule 20: never from the rounding reserve.
+    // if cash is short. Never from the rounding reserve.
     pull_cash(env, amount);
     require_liquidity(env, amount)?;
 

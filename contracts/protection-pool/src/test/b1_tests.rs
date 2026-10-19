@@ -4,7 +4,7 @@
 //! - no expiry clock runs while the pool can't pay.
 //! - pause gap, and a suspension by the admin alone lapses.
 //! - upgrade needs two roles and 7 days; storage version + migrate.
-//! - 2026-10-19 rules 24-25: no keeper. Approve is one click after day 90,
+//! - No keeper. Approve is one click after day 90,
 //!   the approve window starts at day 90 by itself, and every user call
 //!   releases the line and clears dead claims.
 
@@ -44,7 +44,7 @@ fn queued_claims_release_in_line_order_only() {
     assert_eq!(s.client.get_claim(&second).unwrap().status, ClaimStatus::Reserved);
 
     // Grow the pool until both fit. Each new stake releases the first in line
-    // by itself (rule 24); the second never goes while the first waits.
+    // by itself; the second never goes while the first waits.
     let mut stakes = 0;
     while s.client.get_claim(&second).unwrap().status == ClaimStatus::Reserved {
         staked_wallet(&env, &s);
@@ -436,7 +436,7 @@ fn a_shorter_approve_window_does_not_reach_a_claim_already_waiting() {
 fn backer_maturity_is_a_setting() {
     let env = new_env();
     let s = setup(&env);
-    // B1 step 3 (rule 11): default 0, counts at once.
+    // Default 0: counts at once.
     let backer = Address::generate(&env);
     s.token_admin.mint(&backer, &(2 * MID_STAKE));
     s.client.back(&backer, &MID_STAKE);
@@ -448,7 +448,7 @@ fn backer_maturity_is_a_setting() {
     assert_eq!(s.client.try_mature_backing(&backer), Err(Ok(PoolError::BackingNotMature)));
 }
 
-// -- B1 step 3: stake overflow (rule 4), re-stake (rule 9), drip settings ----
+// -- Stake overflow, re-stake, drip settings ----
 
 #[test]
 fn a_deposit_above_the_max_stakes_the_max_and_backs_the_rest() {
@@ -504,7 +504,7 @@ fn no_top_ups_even_above_the_max() {
 
 #[test]
 fn restake_rule_new_address_after_a_paid_claim_same_address_otherwise() {
-    // Rule 9 (founder 2026-10-19): after an approved claim the address never
+    // After an approved claim the address never
     // stakes again (the registry keeps its wallets bound to it, so a fresh
     // address with new wallets is the only way back in). Without a paid
     // claim, withdraw + stake again works.
@@ -542,7 +542,7 @@ fn drip_settings_have_bounds_and_order() {
 }
 
 // -----------------------------------------------------------------------
-// 2026-10-19 rules 24-25: no keeper
+// No keeper
 // -----------------------------------------------------------------------
 
 /// A claim filed before day 90 for `w`, small enough to be admitted.
@@ -636,7 +636,7 @@ fn a_live_claim_is_never_cleared_early() {
 }
 
 // -----------------------------------------------------------------------
-// rule 17: points are dollar-days
+// Points are dollar-days
 // -----------------------------------------------------------------------
 
 #[test]
@@ -668,7 +668,7 @@ fn backers_earn_points_on_their_own_rate() {
 }
 
 // -----------------------------------------------------------------------
-// rule 24: what the upkeep costs the user (run with --nocapture to print)
+// What the upkeep costs the user (run with --nocapture to print)
 // -----------------------------------------------------------------------
 
 /// Fee estimate of the last call, in stroops: (total, rent, everything

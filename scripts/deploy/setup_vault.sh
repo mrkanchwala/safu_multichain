@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Set up the pool's DeFindex yield vault so the last staker can always leave
-# and the money actually earns (B1 rules 20 and 21, eng review D1 + D2).
+# and the money actually earns.
 #
 # Usage: scripts/deploy/setup_vault.sh <vault.env>
 #   config keys: see scripts/deploy/vault.env.example
@@ -21,7 +21,7 @@
 #
 # BLND rewards: the strategy's harvest is run by DeFindex's own keeper, shared by every vault on
 # that strategy (get_keeper, checked 2026-10-19). Blend's interest needs no harvest. Nothing here
-# or in the pool calls it (B1 rule 24: no keeper of ours).
+# or in the pool calls it (SAFU runs no keeper).
 set -euo pipefail
 
 CONFIG=${1:?usage: setup_vault.sh <vault.env>}

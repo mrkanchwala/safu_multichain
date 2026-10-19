@@ -1,9 +1,9 @@
 #![cfg(test)]
 //! v1 (2026-09-22): backers. One test per locked rule ("test
-//! everything"). B1 step 3 (2026-10-19) rewrote the deposit and withdrawal
+//! everything"). The 2026-10-19 rework rewrote the deposit and withdrawal
 //! halves: backing counts from day 1 by default with a clock per deposit
-//! when maturity is set (rule 11), and the notice became a daily drip with a
-//! fair share of each day's free capital (rule 12). Unchanged: only free
+//! when maturity is set, and the notice became a daily drip with a
+//! fair share of each day's free capital. Unchanged: only free
 //! capital leaves (rule 3), own address + own signature only (rule 1), full
 //! amount back, pause behaviour, and every capacity site that reads
 //! `total_staked + total_backed`.
@@ -34,7 +34,7 @@ fn matured_backer(env: &Env, s: &Setup<'_>, amount: i128) -> Address {
     b
 }
 
-/// Turns the 7-day maturity on (it is off by default since B1).
+/// Turns the 7-day maturity on (it is off by default since 2026-10-16).
 fn with_week_maturity(env: &Env, s: &Setup<'_>) {
     set_setting_via_timelock(env, s, SettingKey::BackerMaturitySecs, WEEK_SECS as i128);
 }
@@ -70,7 +70,7 @@ fn drip_to_the_end(env: &Env, s: &Setup<'_>, b: &Address) -> u32 {
     days
 }
 
-// -- deposit: counts from day 1 by default (rule 11) ---------------------
+// -- deposit: counts from day 1 by default ---------------------
 
 #[test]
 fn backing_counts_and_earns_at_once_by_default() {
@@ -194,7 +194,7 @@ fn only_counted_money_can_be_requested() {
     assert_eq!(s.client.get_total_backed(), BACKING);
 }
 
-// -- request + drip (rules 2 and 12) --------------------------------------
+// -- request + drip (rule 2) --------------------------------------
 
 #[test]
 fn request_opens_a_drip_and_money_still_counts() {

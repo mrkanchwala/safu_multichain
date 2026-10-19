@@ -142,7 +142,7 @@ fn approve_claim_before_gate_panics() {
         &TIER_C,
         &now_ts(&env),
     );
-    // Still PendingTime: gate not met (rule 25: past it, approve would work).
+    // Still PendingTime: gate not met (past it, approve would work).
     let result = s.client.try_approve_claim(&claim_id);
     assert_eq!(result, Err(Ok(PoolError::TimeGateNotMet)));
 }
@@ -686,7 +686,7 @@ fn submit_claim_oracle_rate_limit_queues() {
     let claim_id = result.unwrap().unwrap();
     let claim = s.client.get_claim(&claim_id).unwrap();
     assert_eq!(claim.entitlement, ENTITLEMENT);
-    // The count limit only queues it. B1 rule 24: the same call's upkeep
+    // The count limit only queues it. The same call's upkeep
     // then releases it, since release never counted toward the oracle's
     // limit (anyone could always release it at once). The binding limits,
     // the daily stress cap and solvency, are applied at release.

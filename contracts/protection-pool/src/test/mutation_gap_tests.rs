@@ -71,7 +71,7 @@ fn do_override(
 
 #[test]
 fn points_are_dollar_days_at_any_age() {
-    // B1 rule 17: flat 1 point per unit per day, no age bands, and no
+    // Flat 1 point per unit per day, no age bands, and no
     // division by the live max stake.
     for days in [1u32, 45, 90, 91, 180, 181, 365, 366, 400] {
         let env = new_env();

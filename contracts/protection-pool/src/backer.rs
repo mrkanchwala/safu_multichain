@@ -2,7 +2,7 @@
 //!
 //! A backer deposits money that adds to the pool's capacity and liquidity
 //! (a confidence signal for stakers). Anyone can back. A staker's deposit
-//! above the max stake also lands here (B1 rule 4, `stake.rs`).
+//! above the max stake also lands here.
 //!
 //! r3 (2026-09-29, design decision): backers earn yield on COUNTED money
 //! (`BackerYieldBps`, default 100%; the rest goes to the protocol). Money
@@ -16,15 +16,15 @@
 //! liquidity check, a backer can only take out capital that open claims do
 //! not need.
 //!
-//! The withdrawal-safety rules (locked 2026-09-22, B1 2026-10-16):
+//! The withdrawal-safety rules (locked 2026-09-22, revised 2026-10-16):
 //!   1. Money returns only to the depositing address, only with that
 //!      address's signature. No admin function touches backer money.
 //!   2. Money requested out keeps counting toward capacity until it is paid.
 //!   3. Only free capital can leave: after a payment,
 //!      `total_allocated <= capacity`.
-//!   4. New money counts after `BackerMaturitySecs` (default 0: from day 1,
-//!      locked rule 11). Each deposit keeps its own clock.
-//!   5. B1 (locked rule 12): a withdrawal drips out daily instead of waiting
+//!   4. New money counts after `BackerMaturitySecs` (default 0: from day 1).
+//!      Each deposit keeps its own clock.
+//!   5. A withdrawal drips out daily instead of waiting
 //!      out a notice. The drip takes `DripMinSecs` (7 d) on an idle pool up to
 //!      `DripMaxSecs` (90 d) at >= 50% utilisation, recomputed each day.
 //!      Each day every open request gets a pro-rata share (by what it is still
@@ -115,7 +115,7 @@ fn accrue_yield(env: &Env, record: &mut BackerRecord) {
         record.yield_owed += record.amount * delta / YIELD_INDEX_PRECISION;
     }
     record.yield_index_at = index;
-    // Rule 17: points on the counted balance, settled the same way.
+    // Points on the counted balance, settled the same way.
     let p = crate::points::index(env, crate::points::BACKER);
     record.points += crate::points::earned(record.amount, record.points_index_at, p);
     record.points_index_at = p;
@@ -223,7 +223,7 @@ pub fn mature_backing(env: &Env, backer: &Address) -> Result<i128, PoolError> {
 }
 
 // -----------------------------------------------------------------------
-// B1 (rule 12): the daily drip
+// The daily drip
 // -----------------------------------------------------------------------
 
 /// (free capital, open requests, utilisation bps) from live state.
@@ -371,7 +371,7 @@ pub fn complete_withdrawal(env: &Env, backer: &Address) -> Result<i128, PoolErro
     crate::vault::harvest(env);
 
     let matured = settle_maturity(env, &mut record);
-    // Unpaid yield goes out with the principal. Rule 14: it is pool cash
+    // Unpaid yield goes out with the principal. It is pool cash
     // until paid, so it may need pulling from the vault too.
     let paid_yield = crate::vault::take_backer_yield(env, record.yield_owed);
     crate::vault::pull_for_payment(env, pay + paid_yield)?;

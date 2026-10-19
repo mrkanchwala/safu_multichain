@@ -73,7 +73,7 @@ use crate::types::{BackerRecord, Claim, StakeRecord};
 #[contract]
 pub struct ProtectionPool;
 
-/// B1 rule 24: after a user call succeeds, do a small, capped amount of
+/// After a user call succeeds, do a small, capped amount of
 /// pool upkeep (release the next queued claim, check watched claims). No
 /// keeper needed. A failed call rolls back anyway, so upkeep runs only on
 /// success.
@@ -493,7 +493,7 @@ impl ProtectionPool {
         storage::get_stake(&env, &wallet)
     }
 
-    /// A claim past day 90 reads as `AwaitingApproval` (rule 25), whether
+    /// A claim past day 90 reads as `AwaitingApproval`, whether
     /// or not anything has saved that yet.
     pub fn get_claim(env: Env, claim_id: BytesN<32>) -> Option<Claim> {
         claim::view_claim(&env, &claim_id)
@@ -607,7 +607,7 @@ impl ProtectionPool {
         vault::withdraw_yield(&env, amount)
     }
 
-    /// B1 rule 20: add to the rounding reserve (covers a few units of vault
+    /// Add to the rounding reserve (covers a few units of vault
     /// rounding on the last exit). One-way: nothing can take it back out.
     pub fn fund_rounding_reserve(env: Env, from: Address, amount: i128) -> Result<(), PoolError> {
         vault::fund_rounding_reserve(&env, &from, amount)
@@ -668,13 +668,13 @@ impl ProtectionPool {
         }
     }
 
-    /// B1 rule 22: yield `owner` could collect right now (as staker, as
+    /// Yield `owner` could collect right now (as staker, as
     /// backer), including vault growth not yet harvested. For the site.
     pub fn get_pending_yield(env: Env, owner: Address) -> (i128, i128) {
         vault::pending_yield(&env, &owner)
     }
 
-    /// B1 rule 17: a backer's points so far (kept on withdrawal).
+    /// A backer's points so far (kept on withdrawal).
     pub fn get_backer_points(env: Env, backer: Address) -> i128 {
         backer::points_view(&env, &backer)
     }
@@ -688,7 +688,7 @@ impl ProtectionPool {
         storage::get_backer_yield_index(&env)
     }
 
-    /// Yield owed (stakers, backers). B1 rule 14: owed in full, but the cash
+    /// Yield owed (stakers, backers). Owed in full, but the cash
     /// is pool cash until paid.
     pub fn get_yield_reserved(env: Env) -> (i128, i128) {
         (storage::get_staker_yield_reserved(&env), storage::get_backer_yield_reserved(&env))

@@ -194,7 +194,7 @@ pub const MAX_REBALANCE_SLIPPAGE_BPS: i128 = 500;
 /// vault call, and the pull/push lines can't bounce off each other.
 pub const AUTO_PUSH_MIN_BPS: i128 = 100;
 
-/// B1 rule 20: the most one payment may take from the rounding reserve
+/// The most one payment may take from the rounding reserve
 /// (10_000 units = 0.001 of a 7-decimal asset). Covers vault/Blend rounding
 /// of a few units; a bigger gap is a real loss and still refuses.
 pub const MAX_ROUNDING_DRAW: i128 = 10_000;
@@ -389,9 +389,9 @@ pub struct StakeRecord {
     pub tier_c_ratio: i128,
     pub time_gate_ledgers: u32,
     pub claim_window_secs: u64,
-    /// B1 rule 17: staker points index when this stake was made.
+    /// Staker points index when this stake was made.
     pub points_index_at: i128,
-    /// B1 rule 15: yield settled to this stake and not yet paid. Set when
+    /// Yield settled to this stake and not yet paid. Set when
     /// a claim is approved: the claimant keeps the yield earned so far.
     pub yield_owed: i128,
 }
@@ -401,16 +401,16 @@ pub struct StakeRecord {
 // -----------------------------------------------------------------------
 
 /// Default wait before new backer money counts toward capacity
-/// (`SettingKey::BackerMaturitySecs`, 0-7 days). B1 (locked rule 11,
-/// 2026-10-16): 0, backing counts from day 1. The drip exit and the
+/// (`SettingKey::BackerMaturitySecs`, 0-7 days). Default
+/// 0 (2026-10-16): backing counts from day 1. The drip exit and the
 /// free-capital rule already block deposit spike -> admit claims -> pull out.
 pub const BACKER_MATURITY_SECONDS: u64 = 0;
 
-/// B1 (rule 11): each deposit waiting to mature keeps its own clock. At most
+/// Each deposit waiting to mature keeps its own clock. At most
 /// this many can wait at once per backer (only matters if maturity > 0).
 pub const MAX_PENDING_DEPOSITS: u32 = 8;
 
-/// B1 (rule 12): backer exit drip length, from 7 days when the pool is idle
+/// Backer exit drip length, from 7 days when the pool is idle
 /// to 90 days at >= 50% utilisation (`SettingKey::DripMinSecs/DripMaxSecs`).
 pub const DRIP_MIN_SECONDS: u64 = 7 * SECONDS_PER_DAY;
 pub const DRIP_MAX_SECONDS: u64 = 90 * SECONDS_PER_DAY;
@@ -430,10 +430,10 @@ pub struct PendingDeposit {
 pub struct BackerRecord {
     /// Counted money: backs claims, can be requested out.
     pub amount: i128,
-    /// B1 (rule 11): deposits still waiting to count, each with its own
+    /// Deposits still waiting to count, each with its own
     /// clock (a new deposit never restarts an older one). Empty at maturity 0.
     pub pending: Vec<PendingDeposit>,
-    /// B1 (rule 12): open withdrawal request, the total asked for (0 = none).
+    /// Open withdrawal request, the total asked for (0 = none).
     /// The unpaid part keeps counting toward capacity (rule 2).
     pub withdraw_amount: i128,
     /// Paid out of `withdraw_amount` so far.
@@ -448,7 +448,7 @@ pub struct BackerRecord {
     pub yield_index_at: i128,
     /// r3: yield settled to this backer and not yet paid.
     pub yield_owed: i128,
-    /// B1 rule 17: backer points index at the last settlement, and points
+    /// Backer points index at the last settlement, and points
     /// settled so far. Kept on withdrawal.
     pub points_index_at: i128,
     pub points: i128,

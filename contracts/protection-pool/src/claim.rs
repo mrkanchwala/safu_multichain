@@ -369,7 +369,7 @@ fn expire_queued(env: &Env, claim_id: &BytesN<32>, claim: &mut Claim) {
 }
 
 // -----------------------------------------------------------------------
-// B1 rules 24-25 (founder 2026-10-19): no keeper. Nothing waits on a
+// No keeper. Nothing waits on a
 // separate call: a claim past day 90 promotes itself, and every user
 // transaction does a small, capped amount of upkeep (`upkeep`).
 // -----------------------------------------------------------------------
@@ -382,7 +382,7 @@ fn gate_met(env: &Env, r: &StakeRecord) -> bool {
     env.ledger().sequence().saturating_sub(r.staked_at_ledger) >= r.time_gate_ledgers
 }
 
-/// Rule 25: a `PendingTime` claim whose stake has passed the time gate is
+/// A `PendingTime` claim whose stake has passed the time gate is
 /// `AwaitingApproval` from the gate moment on, whether or not anyone called
 /// anything. Its approve clock starts at the gate, worked back from the
 /// ledger count at 5 s per ledger. Real ledgers are slower, so that lands
@@ -404,7 +404,7 @@ fn promote_if_due(env: &Env, claim: &mut Claim, r: &StakeRecord) -> bool {
     true
 }
 
-/// Read-only: the claim as it stands now, with rule 25's promotion applied.
+/// Read-only: the claim as it stands now, with the day-90 promotion applied.
 pub fn view_claim(env: &Env, claim_id: &BytesN<32>) -> Option<Claim> {
     let mut claim = storage::get_claim(env, claim_id)?;
     if let Some(r) = storage::get_stake(env, &claim.wallet) {
@@ -429,7 +429,7 @@ fn watch_done(env: &Env, id: &BytesN<32>) -> bool {
     let Some(claim) = storage::get_claim(env, id) else { return true };
     match claim.status {
         // `expire_pending_approval` treats a claim past day 90 as awaiting
-        // approval (rule 25) without saving that, so a check that finds
+        // approval without saving that, so a check that finds
         // nothing to do writes nothing.
         ClaimStatus::PendingTime | ClaimStatus::AwaitingApproval => {
             expire_pending_approval(env, id).is_ok()
@@ -481,7 +481,7 @@ fn watch_step(env: &Env) -> bool {
     true
 }
 
-/// Rule 24: run at the end of every user transaction. Releases the first
+/// Run at the end of every user transaction. Releases the first
 /// claim in line if there is room now, then checks a couple of watched
 /// claims. Never fails the caller: each step validates before it writes,
 /// and a step that can't run is simply skipped. No token transfers. Skipped
@@ -696,7 +696,7 @@ fn activate_claim(env: &Env, stake_record: &mut StakeRecord, claim: &mut Claim) 
     storage::set_points_balance(env, &claim.wallet, 0);
 
     let stake_amount = stake_record.amount;
-    // B1 rule 15: the claimant keeps the yield earned so far (settled into
+    // The claimant keeps the yield earned so far (settled into
     // `yield_owed`, paid on request). Settled BEFORE `total_staked` drops.
     crate::vault::settle_staker_yield(env, stake_record);
     stake_record.withdrawn = true;
@@ -808,7 +808,7 @@ fn admit_claim(
         set_window(env, &mut claim, crate::settings::SettingKey::ApproveWindowSecs);
         start_clock(env, &mut claim, env.ledger().timestamp());
     } else {
-        // Rule 25: the approve clock will start at the gate by itself; time
+        // The approve clock will start at the gate by itself; time
         // the pool can't pay from now on is added back to it.
         claim.blocked_at_clock_start = storage::get_blocked_secs(env);
     }
@@ -1197,7 +1197,7 @@ pub fn unlock_pending_claim(env: &Env, claim_id: &BytesN<32>) -> Result<(), Pool
 
     let stake_record: StakeRecord =
         storage::get_stake(env, &claim.wallet).ok_or(PoolError::NoStake)?;
-    // B1 rule 25: kept for callers that want it, but no longer needed:
+    // Kept for callers that want it, but no longer needed:
     // `approve_claim` and the upkeep promote a due claim themselves, with
     // the clock starting at the gate either way.
     if !promote_if_due(env, &mut claim, &stake_record) {
@@ -1234,7 +1234,7 @@ pub fn approve_claim(env: &Env, claim_id: &BytesN<32>) -> Result<(), PoolError> 
 
     let mut stake_record: StakeRecord =
         storage::get_stake(env, &claim.wallet).ok_or(PoolError::NoStake)?;
-    // B1 rule 25: one click. A claim past the gate approves directly.
+    // One click. A claim past the gate approves directly.
     if claim.status == ClaimStatus::PendingTime && !promote_if_due(env, &mut claim, &stake_record) {
         return Err(PoolError::TimeGateNotMet);
     }
@@ -1285,7 +1285,7 @@ pub fn expire_pending_approval(env: &Env, claim_id: &BytesN<32>) -> Result<(), P
     let mut claim: Claim = storage::get_claim(env, claim_id).ok_or(PoolError::NoSuchClaim)?;
     let mut stake_record: StakeRecord =
         storage::get_stake(env, &claim.wallet).ok_or(PoolError::NoStake)?;
-    // B1 rule 25: a claim past the gate is awaiting approval even if nobody
+    // A claim past the gate is awaiting approval even if nobody
     // promoted it, so its window can run out without anyone calling unlock.
     promote_if_due(env, &mut claim, &stake_record);
     if claim.status != ClaimStatus::AwaitingApproval {

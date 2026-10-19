@@ -24,7 +24,7 @@ use crate::settings::SettingKey;
 use crate::types::{HARVEST_MAX_GROWTH_BPS_PER_DAY, YIELD_INDEX_PRECISION};
 use crate::{GovChange, GovKind};
 
-// B1 step 3: maturity is 0 by default; the tests of "waiting money earns nothing"
+// Maturity is 0 by default; the tests of "waiting money earns nothing"
 // turn the 7-day setting on first. The notice became a drip (7 days on an idle pool).
 const MATURITY_LEDGERS: u32 = (7 * 86_400 / SECONDS_PER_LEDGER) as u32;
 const DRIP_IDLE_LEDGERS: u32 = (7 * 86_400 / SECONDS_PER_LEDGER) as u32;
@@ -372,7 +372,7 @@ fn instant_setup_stays_closed_after_the_pool_empties() {
 
 #[test]
 fn a_claim_keeps_the_claimants_yield() {
-    // B1 rule 15: approval forfeits the stake, never the yield earned on it.
+    // Approval forfeits the stake, never the yield earned on it.
     let env = new_env();
     let s = setup(&env);
     let (staker, ben) = staked_wallet(&env, &s);
@@ -412,7 +412,7 @@ fn a_claim_keeps_the_claimants_yield() {
 
 #[test]
 fn pending_yield_shows_growth_before_any_harvest() {
-    // B1 rule 22: the site's number includes growth still in the vault.
+    // The site's number includes growth still in the vault.
     let env = new_env();
     let s = setup(&env);
     let (staker, _) = staked_wallet(&env, &s);
@@ -532,7 +532,7 @@ fn treasury_takes_only_what_is_left_after_everyone_is_covered() {
     assert_full_invariant(&s);
 }
 
-/// B1 rule 20: the rounding reserve is not surplus. With an open claim
+/// The rounding reserve is not surplus. With an open claim
 /// owing everything else, the treasury still gets nothing, reserve or not.
 #[test]
 fn treasury_never_takes_the_rounding_reserve() {
@@ -557,8 +557,8 @@ fn treasury_never_takes_the_rounding_reserve() {
     // Bigger than what the open claim leaves uncovered, so a surplus that
     // counted the reserve would show room.
     let reserve = 20 * MID_STAKE;
-    let founder = new_funded_address(&env, &s, reserve);
-    s.client.fund_rounding_reserve(&founder, &reserve);
+    let funder = new_funded_address(&env, &s, reserve);
+    s.client.fund_rounding_reserve(&funder, &reserve);
     assert_eq!(s.client.try_withdraw_yield(&counter), Err(Ok(PoolError::ExceedsYieldBalance)));
     assert_eq!(s.client.try_withdraw_yield(&1), Err(Ok(PoolError::ExceedsYieldBalance)));
     assert_eq!(s.client.get_rounding_reserve(), reserve);

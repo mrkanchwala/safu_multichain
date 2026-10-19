@@ -1,4 +1,4 @@
-//! B1 rule 17 (founder 2026-10-16): points are dollar-days. 1 point per
+//! Points are dollar-days. 1 point per
 //! whole unit per day at the default rate, with separate staker and backer
 //! rate settings. Each side keeps a points index (points per unit so far),
 //! so a rate change applies from that moment on and never rescales points

@@ -69,7 +69,7 @@ fn queued_claim_releases_once_capacity_frees() {
         staked_wallet(&env, &s);
     }
 
-    // Released by the stake that made room (rule 24): no separate call.
+    // Released by the stake that made room: no separate call.
     let claim = s.client.get_claim(&claim_id).unwrap();
     assert_ne!(claim.status, ClaimStatus::Reserved);
     assert_eq!(s.client.get_total_allocated(), entitlement);
@@ -340,7 +340,7 @@ fn queued_claim_releases_when_both_arms_sit_exactly_on_their_boundary() {
     //   solvency: allocated + entitlement == staked     (exact fill)
     //   stress:   entitlement == stress cap             (exact fill)
     assert_eq!(allocated + entitlement, restored_staked);
-    // Released by the stake that made room (rule 24): no separate call.
+    // Released by the stake that made room: no separate call.
 
     let claim = s.client.get_claim(&claim_id).unwrap();
     assert_ne!(
@@ -377,7 +377,7 @@ fn queued_claim_releases_at_the_exact_stress_cap_boundary() {
     // At zero utilisation the doubled pool's cap is exactly the entitlement:
     // entitlement > cap is false under strict `>`, so the stake that doubled
     // the pool releases it. `>=` would refuse.
-    // Released by the stake that made room (rule 24): no separate call.
+    // Released by the stake that made room: no separate call.
     assert_ne!(s.client.get_claim(&claim_id).unwrap().status, ClaimStatus::Reserved);
     assert_eq!(s.client.get_total_allocated(), entitlement);
 }
@@ -641,7 +641,7 @@ fn queued_claim_releases_when_entitlement_exactly_fills_solvency_headroom() {
     while expected_stress_cap(&s) < entitlement {
         staked_wallet_amount(&env, &s, MAX_STAKE);
     }
-    // Released by the stake that made room (rule 24): no separate call.
+    // Released by the stake that made room: no separate call.
 
     let claim = s.client.get_claim(&claim_id).unwrap();
     assert_ne!(claim.status, ClaimStatus::Reserved);

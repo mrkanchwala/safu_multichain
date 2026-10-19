@@ -152,7 +152,7 @@ fn points_accrue_tenure_banded_and_bank_on_withdraw() {
     let ben = Address::generate(&env);
     s.client.stake(&staker, &MID_STAKE, &ben);
 
-    // B1 rule 17: 30 days x the stake in whole units.
+    // 30 days x the stake in whole units.
     advance_days(&env, 30);
     s.client.withdraw(&staker, &ben);
 
@@ -167,7 +167,7 @@ fn points_stay_flat_past_the_old_age_bands() {
     let ben = Address::generate(&env);
     s.client.stake(&staker, &MID_STAKE, &ben);
 
-    // B1 rule 17: no bands. Day 91-100 earn the same as day 1-90.
+    // No bands. Day 91-100 earn the same as day 1-90.
     advance_days(&env, 100);
     s.client.withdraw(&staker, &ben);
     assert_eq!(s.client.get_points_balance(&staker), dollar_day_points(MID_STAKE, 100));

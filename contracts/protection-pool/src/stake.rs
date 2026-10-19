@@ -78,7 +78,7 @@ pub fn compute_points_for_record(env: &Env, record: &StakeRecord) -> i128 {
     if record.amount <= 0 || record.withdrawn {
         return 0;
     }
-    // B1 rule 17: dollar-days via the staker points index.
+    // Dollar-days via the staker points index.
     crate::points::earned(
         record.amount,
         record.points_index_at,
@@ -117,7 +117,7 @@ pub fn stake(
     }
     // V8: require(msg.value >= STAKE_MIN && msg.value <= STAKE_MAX, "stake out of range")
     // Here the bounds are basis points of pool_cap instead of fixed amounts.
-    // B1 (locked rule 4, 2026-10-16): above the max is no longer refused.
+    // Above the max is no longer refused.
     // The max is staked and the rest becomes backing (never forfeited by a
     // claim), all in one transfer.
     if amount < min_stake(env) {
@@ -143,7 +143,7 @@ pub fn stake(
     let total_staked = storage::get_total_staked(env);
     let pool_cap = storage::get_pool_cap(env);
     // V8: totalStaked + msg.value <= MAX_POOL_ETH && <= maxPoolSize.
-    // Rule 4: a pool full for stakes refuses the WHOLE deposit (the overflow
+    // A pool full for stakes refuses the WHOLE deposit (the overflow
     // never turns a refused stake into backing).
     if total_staked + staked > pool_cap {
         return Err(PoolError::PoolCapExceeded);
@@ -310,7 +310,7 @@ pub fn withdraw(env: &Env, staker: &Address, beneficiary: &Address) -> Result<()
     // as an opaque SAC host trap. Checked before any state mutation so the
     // typed error is the only outcome; principal is never at risk, it is in
     // the vault. v1: `pull_for_payment` redeems from the vault first if cash
-    // is short. B1 rule 14: the yield part is pool cash until paid, so it
+    // is short. The yield part is pool cash until paid, so it
     // is pulled too.
     let paid_yield = crate::vault::take_staker_yield(env, owed);
     let payout = amount + paid_yield;
@@ -410,8 +410,8 @@ pub fn emergency_exit(env: &Env, staker: &Address) -> Result<(), PoolError> {
 /// are untouched (coverage is principal only). Works while paused (the
 /// harvest is skipped then, already-credited yield is still paid).
 ///
-/// Paid to the beneficiary, hash-checked exactly as in `withdraw`. B1 rule
-/// 15: a claim never takes the claimant's yield, so this works with a claim
+/// Paid to the beneficiary, hash-checked exactly as in `withdraw`. A
+/// claim never takes the claimant's yield, so this works with a claim
 /// open or queued, and after one is approved (the yield earned up to the
 /// approval was settled into `yield_owed` then).
 pub fn claim_yield(env: &Env, staker: &Address, beneficiary: &Address) -> Result<i128, PoolError> {
