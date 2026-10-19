@@ -6,9 +6,12 @@
 //!      pool records for them == what they were funded with. Nothing can move
 //!      backer money anywhere except back to the backer (rule 1), and nothing
 //!      is ever deducted (full-amount return).
-//!   2. Totals match the sum of records: total_backed == sum(amount),
-//!      total_backed_pending == sum(pending_amount). All non-negative.
-//!   3. An open request never exceeds the matured balance.
+//!   2. Totals match the sum of records over every address that can hold
+//!      backing (backers, and stakers whose deposit above the max stake
+//!      became backing): total_backed == sum(amount), total_backed_pending
+//!      == sum of each record's waiting deposits. All non-negative.
+//!   3. The unpaid part of an open request never exceeds the matured
+//!      balance (the drip pays a request out in parts).
 //!   4. Rule 3: every SUCCESSFUL backer withdrawal leaves
 //!      total_allocated <= capacity.
 //!
@@ -166,8 +169,13 @@ fuzz_target!(|ops: Vec<Op>| {
                     );
                 }
             }
-            Op::Pause => client.pause(),
-            Op::Unpause => client.unpause(),
+            // Pause can be refused now (already paused, or inside the pause gap).
+            Op::Pause => {
+                let _ = client.try_pause();
+            }
+            Op::Unpause => {
+                let _ = client.try_unpause();
+            }
             Op::AdvanceDays { days } => {
                 let d = 1u32 + (days as u32 % 100);
                 env.ledger().with_mut(|li| {
@@ -179,18 +187,28 @@ fuzz_target!(|ops: Vec<Op>| {
 
         let mut sum_amount = 0i128;
         let mut sum_pending = 0i128;
+        let record = |a: &Address| match client.get_backer(a) {
+            Some(r) => {
+                let pending: i128 = r.pending.iter().map(|d| d.amount).sum();
+                (r.amount, pending, r.withdraw_amount - r.withdraw_paid)
+            }
+            None => (0, 0, 0),
+        };
         for b in &backers {
-            let (amount, pending, requested) = match client.get_backer(b) {
-                Some(r) => (r.amount, r.pending_amount, r.withdraw_amount),
-                None => (0, 0, 0),
-            };
-            assert!(amount >= 0 && pending >= 0 && requested >= 0, "negative backer field");
-            assert!(requested <= amount, "request {} exceeds matured {}", requested, amount);
+            let (amount, pending, unpaid) = record(b);
+            assert!(amount >= 0 && pending >= 0 && unpaid >= 0, "negative backer field");
+            assert!(unpaid <= amount, "unpaid request {} exceeds matured {}", unpaid, amount);
             assert_eq!(
                 token.balance(b) + amount + pending,
                 BACKER_FUNDING,
                 "BACKER CONSERVATION VIOLATED: money moved or was deducted"
             );
+            sum_amount += amount;
+            sum_pending += pending;
+        }
+        for w in &wallets {
+            let (amount, pending, unpaid) = record(w);
+            assert!(amount >= 0 && pending >= 0 && unpaid >= 0, "negative backer field");
             sum_amount += amount;
             sum_pending += pending;
         }
