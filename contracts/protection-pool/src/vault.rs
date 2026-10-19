@@ -242,13 +242,13 @@ pub fn require_liquidity(env: &Env, amount: i128) -> Result<(), PoolError> {
     Ok(())
 }
 
-/// r3 (2026-09-29): liquid cash minus yield owed to stakers and backers.
-/// Every payment other than a yield payout, and every push into the vault,
-/// is bounded by this, so set-aside yield is never spent on anything else.
-/// The protocol's own yield share is NOT set aside (design decision
-/// 2026-09-29): it is pool cash, usable for claims until withdrawn.
+/// Cash the pool can spend. B1 rule 14 (founder 2026-10-16): unpaid yield
+/// is pool cash: it may be deployed and used to pay claims, and is still
+/// owed in full (the set-aside counters track what is owed; every payout,
+/// yield included, goes through `pull_for_payment`). It counts as
+/// liquidity, never as capacity. Replaces r3's set-aside cash.
 pub fn free_liquid(env: &Env) -> i128 {
-    liquid_balance(env) - storage::get_yield_reserved(env)
+    liquid_balance(env)
 }
 
 // -----------------------------------------------------------------------
@@ -924,6 +924,30 @@ pub fn ensure_liquidity(env: &Env) -> Result<i128, PoolError> {
 // Replaces the admin-only `extract_yield`.
 // -----------------------------------------------------------------------
 
+/// How far `amount` of growth moves the staker and backer yield indexes.
+/// Each side gets its yield setting's share of the growth earned on its
+/// principal; the rest (including all growth on unpaid yield and on SAFU's
+/// own balance, rule 16) is the protocol's. Read-only.
+pub(crate) fn index_bumps(env: &Env, amount: i128) -> (i128, i128) {
+    let total_staked = storage::get_total_staked(env);
+    let total_backed = storage::get_total_backed(env);
+    let capacity = total_staked + total_backed;
+    if amount <= 0 || capacity <= 0 {
+        return (0, 0);
+    }
+    let bump = |total: i128, key| {
+        if total <= 0 {
+            return 0;
+        }
+        let part = amount * total / capacity * crate::settings::get(env, key) / YIELD_SPLIT_BPS_DENOMINATOR;
+        part * YIELD_INDEX_PRECISION / total
+    };
+    (
+        bump(total_staked, crate::settings::SettingKey::StakerYieldBps),
+        bump(total_backed, crate::settings::SettingKey::BackerYieldBps),
+    )
+}
+
 /// The one place yield is split. Called for every unit of growth that
 /// comes back from the vault (`record_redeem` and `harvest`). Each side's
 /// index moves by what it can represent exactly; rounding dust goes to the
@@ -933,41 +957,18 @@ pub(crate) fn credit_yield(env: &Env, amount: i128) {
     if amount <= 0 {
         return;
     }
-    let total_staked = storage::get_total_staked(env);
-    let total_backed = storage::get_total_backed(env);
-    let capacity = total_staked + total_backed;
-
+    let (staker_bump, backer_bump) = index_bumps(env, amount);
     let mut staker_share: i128 = 0;
     let mut backer_share: i128 = 0;
-    if capacity > 0 {
-        if total_staked > 0 {
-            let part = amount * total_staked / capacity
-                * crate::settings::get(env, crate::settings::SettingKey::StakerYieldBps)
-                / YIELD_SPLIT_BPS_DENOMINATOR;
-            let bump = part * YIELD_INDEX_PRECISION / total_staked;
-            if bump > 0 {
-                storage::set_yield_index(env, storage::get_yield_index(env) + bump);
-                staker_share = bump * total_staked / YIELD_INDEX_PRECISION;
-                storage::set_staker_yield_reserved(
-                    env,
-                    storage::get_staker_yield_reserved(env) + staker_share,
-                );
-            }
-        }
-        if total_backed > 0 {
-            let part = amount * total_backed / capacity
-                * crate::settings::get(env, crate::settings::SettingKey::BackerYieldBps)
-                / YIELD_SPLIT_BPS_DENOMINATOR;
-            let bump = part * YIELD_INDEX_PRECISION / total_backed;
-            if bump > 0 {
-                storage::set_backer_yield_index(env, storage::get_backer_yield_index(env) + bump);
-                backer_share = bump * total_backed / YIELD_INDEX_PRECISION;
-                storage::set_backer_yield_reserved(
-                    env,
-                    storage::get_backer_yield_reserved(env) + backer_share,
-                );
-            }
-        }
+    if staker_bump > 0 {
+        storage::set_yield_index(env, storage::get_yield_index(env) + staker_bump);
+        staker_share = staker_bump * storage::get_total_staked(env) / YIELD_INDEX_PRECISION;
+        storage::set_staker_yield_reserved(env, storage::get_staker_yield_reserved(env) + staker_share);
+    }
+    if backer_bump > 0 {
+        storage::set_backer_yield_index(env, storage::get_backer_yield_index(env) + backer_bump);
+        backer_share = backer_bump * storage::get_total_backed(env) / YIELD_INDEX_PRECISION;
+        storage::set_backer_yield_reserved(env, storage::get_backer_yield_reserved(env) + backer_share);
     }
     let protocol_share = amount - staker_share - backer_share;
     storage::set_protocol_yield_balance(
@@ -1042,10 +1043,63 @@ pub fn harvest(env: &Env) -> i128 {
     received
 }
 
+/// Growth `harvest` would book right now, under the same daily limit,
+/// without booking it. 0 while paused or before the first harvest clock.
+/// Read-only (rule 22).
+pub(crate) fn harvestable(env: &Env) -> i128 {
+    if storage::is_paused(env) {
+        return 0;
+    }
+    let Some(vault_addr) = storage::get_vault(env) else {
+        return 0;
+    };
+    let deployed_shares = storage::get_total_deployed_shares(env);
+    let deployed_asset = storage::get_total_deployed_asset(env);
+    let last = storage::get_last_harvest_at(env);
+    if deployed_shares <= 0 || deployed_asset <= 0 || last == 0 {
+        return 0;
+    }
+    let Ok(Ok(values)) = VaultClient::new(env, &vault_addr).try_get_asset_amounts_per_shares(&deployed_shares) else {
+        return 0;
+    };
+    let growth = values.get(0).unwrap_or(0) - deployed_asset;
+    let elapsed = env.ledger().timestamp().saturating_sub(last) as i128;
+    let limit = deployed_asset * HARVEST_MAX_GROWTH_BPS_PER_DAY * elapsed
+        / (BPS_DENOMINATOR * SECONDS_PER_DAY as i128);
+    growth.min(limit).max(0)
+}
+
+/// Rule 22: yield `owner` could collect right now, as staker and as
+/// backer, counting growth not yet harvested. What the site shows.
+pub fn pending_yield(env: &Env, owner: &Address) -> (i128, i128) {
+    let (sb, bb) = index_bumps(env, harvestable(env));
+    let staker = match storage::get_stake(env, owner) {
+        Some(r) => {
+            let live = if r.withdrawn || r.amount <= 0 {
+                0
+            } else {
+                r.amount * (storage::get_yield_index(env) + sb - r.yield_index_at_stake) / YIELD_INDEX_PRECISION
+            };
+            r.yield_owed + live.max(0)
+        }
+        None => 0,
+    };
+    let backer = match storage::get_backer(env, owner) {
+        Some(r) => {
+            let live = r.amount * (storage::get_backer_yield_index(env) + bb - r.yield_index_at) / YIELD_INDEX_PRECISION;
+            r.yield_owed + live.max(0)
+        }
+        None => 0,
+    };
+    (staker, backer)
+}
+
 /// Staker yield owed and not yet paid (additive index, see `StakeRecord`).
 pub(crate) fn staker_yield_owed(env: &Env, record: &crate::types::StakeRecord) -> i128 {
     let delta = storage::get_yield_index(env) - record.yield_index_at_stake;
-    if delta <= 0 || record.amount <= 0 {
+    // A forfeited stake keeps `amount` but is out of `total_staked`: it
+    // earns nothing after the approval (rule 15 settled what it had).
+    if delta <= 0 || record.amount <= 0 || record.withdrawn {
         return 0;
     }
     record.amount * delta / YIELD_INDEX_PRECISION
@@ -1069,23 +1123,11 @@ pub(crate) fn take_backer_yield(env: &Env, owed: i128) -> i128 {
     paid
 }
 
-/// Moves a forfeited stake's unpaid yield to the protocol share (design
-/// rule 2026-09-29: a forfeited stake and its yield go to the pool).
-pub(crate) fn forfeit_staker_yield(env: &Env, record: &mut crate::types::StakeRecord) {
-    // Already out of `total_staked`: it has earned nothing since, and its
-    // yield was settled when it left.
-    if record.withdrawn {
-        record.yield_index_at_stake = storage::get_yield_index(env);
-        return;
-    }
-    let moved = take_staker_yield(env, staker_yield_owed(env, record));
+/// B1 rule 15: settles the stake's unpaid yield into `yield_owed` when a
+/// claim is approved. The claimant keeps it; the stake earns nothing more.
+pub(crate) fn settle_staker_yield(env: &Env, record: &mut crate::types::StakeRecord) {
+    record.yield_owed += staker_yield_owed(env, record);
     record.yield_index_at_stake = storage::get_yield_index(env);
-    if moved > 0 {
-        storage::set_protocol_yield_balance(
-            env,
-            storage::get_protocol_yield_balance(env) + moved,
-        );
-    }
 }
 
 /// What the pool holds (cash + deployed book value) above everything it owes:

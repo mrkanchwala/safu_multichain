@@ -371,7 +371,8 @@ fn instant_setup_stays_closed_after_the_pool_empties() {
 // -----------------------------------------------------------------------
 
 #[test]
-fn a_forfeited_stakes_unpaid_yield_goes_to_the_protocol_share() {
+fn a_claim_keeps_the_claimants_yield() {
+    // B1 rule 15: approval forfeits the stake, never the yield earned on it.
     let env = new_env();
     let s = setup(&env);
     let (staker, ben) = staked_wallet(&env, &s);
@@ -388,14 +389,44 @@ fn a_forfeited_stakes_unpaid_yield_goes_to_the_protocol_share() {
     let id = submit_claim_signed(
         &env, &s, &s.oracle, &staker, &tx_hash(&env, 1), &ENTITLEMENT, &TIER_C, &now_ts(&env),
     );
-    // While a claim is open the yield cannot be taken out from under it.
-    assert!(s.client.try_claim_yield(&staker, &ben).is_err());
-
     s.client.approve_claim(&id);
-    assert_eq!(s.client.get_yield_reserved().0, reserved_before - owed);
-    assert_eq!(s.client.get_yield_balance(), protocol_before + owed);
+    // Still owed to the claimant, nothing moved to the protocol.
+    assert_eq!(s.client.get_staker_yield_owed(&staker), owed);
+    assert_eq!(s.client.get_yield_reserved().0, reserved_before);
+    assert_eq!(s.client.get_yield_balance(), protocol_before);
+
+    // The forfeited stake earns nothing more.
+    grow(&s, &vault_id, &mock, 10_000 + GAIN_BPS);
+    advance_days(&env, 30);
+    s.client.harvest();
+    assert_eq!(s.client.get_staker_yield_owed(&staker), owed);
+
+    // Paid on request, to the beneficiary.
+    let token = TokenClient::new(&env, &s.token_id);
+    let before = token.balance(&ben);
+    assert_eq!(s.client.claim_yield(&staker, &ben), owed);
+    assert_eq!(token.balance(&ben) - before, owed);
     assert_eq!(s.client.get_staker_yield_owed(&staker), 0);
     assert_full_invariant(&s);
+}
+
+#[test]
+fn pending_yield_shows_growth_before_any_harvest() {
+    // B1 rule 22: the site's number includes growth still in the vault.
+    let env = new_env();
+    let s = setup(&env);
+    let (staker, _) = staked_wallet(&env, &s);
+    let (vault_id, mock, _) = deployed(&env, &s);
+    grow(&s, &vault_id, &mock, 10_000 + GAIN_BPS);
+    advance_days(&env, 30);
+    let (shown, as_backer) = s.client.get_pending_yield(&staker);
+    assert!(shown > 0);
+    assert_eq!(as_backer, 0);
+    assert_eq!(s.client.get_staker_yield_owed(&staker), 0, "nothing booked yet");
+    // Harvesting books exactly what was shown (floor rounding may lose 1).
+    s.client.harvest();
+    let booked = s.client.get_staker_yield_owed(&staker);
+    assert!(shown - booked <= 1 && booked <= shown, "shown {shown}, booked {booked}");
 }
 
 #[test]

@@ -152,30 +152,25 @@ fn points_accrue_tenure_banded_and_bank_on_withdraw() {
     let ben = Address::generate(&env);
     s.client.stake(&staker, &MID_STAKE, &ben);
 
-    // 30 days at the 0-90-day band (100 pts/day), points formula:
-    // base = 30*100 = 3000; × stake/max_stake (MID_STAKE/MAX_STAKE).
+    // B1 rule 17: 30 days x the stake in whole units.
     advance_days(&env, 30);
     s.client.withdraw(&staker, &ben);
 
-    let expected = 30 * POINTS_PER_DAY_TIER_1 * MID_STAKE / MAX_STAKE;
-    assert_eq!(s.client.get_points_balance(&staker), expected);
+    assert_eq!(s.client.get_points_balance(&staker), dollar_day_points(MID_STAKE, 30));
 }
 
 #[test]
-fn points_span_multiple_tenure_bands() {
+fn points_stay_flat_past_the_old_age_bands() {
     let env = new_env();
     let s = setup(&env);
     let staker = new_funded_address(&env, &s, MID_STAKE);
     let ben = Address::generate(&env);
     s.client.stake(&staker, &MID_STAKE, &ben);
 
-    // 100 days: 90 days at band 1 (100/day) + 10 days at band 2 (120/day).
+    // B1 rule 17: no bands. Day 91-100 earn the same as day 1-90.
     advance_days(&env, 100);
     s.client.withdraw(&staker, &ben);
-
-    let base = 90 * POINTS_PER_DAY_TIER_1 + 10 * POINTS_PER_DAY_TIER_2;
-    let expected = (base as i128) * MID_STAKE / MAX_STAKE;
-    assert_eq!(s.client.get_points_balance(&staker), expected);
+    assert_eq!(s.client.get_points_balance(&staker), dollar_day_points(MID_STAKE, 100));
 }
 
 #[test]
@@ -222,9 +217,7 @@ fn forfeited_stake_still_banks_points_earned_before_the_claim() {
         &TIER_C,
         &now_ts(&env),
     );
-    let base = i128::from(POINTS_TIER_1_DAYS) * POINTS_PER_DAY_TIER_1;
-    let expected = (base as i128) * MID_STAKE / MAX_STAKE;
-    assert_eq!(s.client.get_points_balance(&staker), expected);
+    assert_eq!(s.client.get_points_balance(&staker), dollar_day_points(MID_STAKE, POINTS_TIER_1_DAYS));
 }
 
 #[test]
@@ -242,8 +235,7 @@ fn get_points_balance_is_live_computed_while_still_staked() {
     advance_days(&env, 30);
     // Still staked: no withdraw call. Banked storage is empty at this
     // point; the view must compute points live instead of returning 0.
-    let expected = 30 * POINTS_PER_DAY_TIER_1 * MID_STAKE / MAX_STAKE;
-    assert_eq!(s.client.get_points_balance(&staker), expected);
+    assert_eq!(s.client.get_points_balance(&staker), dollar_day_points(MID_STAKE, 30));
 }
 
 #[test]

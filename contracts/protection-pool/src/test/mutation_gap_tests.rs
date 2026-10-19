@@ -70,28 +70,17 @@ fn do_override(
 // -----------------------------------------------------------------------
 
 #[test]
-fn points_formula_exact_values_at_all_day_tier_boundaries() {
-    let cases: [(u32, i128); 10] = [
-        (45, 4_500),   // inside tier 1
-        (90, 9_000),   // tier-1/2 boundary: d2 still 0
-        (91, 9_120),   // first tier-2 day
-        (135, 14_400), // mid tier 2
-        (180, 19_800), // tier-2/3 boundary
-        (181, 19_950), // first tier-3 day
-        (250, 30_300), // mid tier 3
-        (365, 47_550), // tier-3/4 boundary
-        (366, 47_750), // first tier-4 day
-        (400, 54_550), // deep tier 4
-    ];
-    for (days, raw_points) in cases {
-        let expected = raw_points * MID_STAKE / MAX_STAKE;
+fn points_are_dollar_days_at_any_age() {
+    // B1 rule 17: flat 1 point per unit per day, no age bands, and no
+    // division by the live max stake.
+    for days in [1u32, 45, 90, 91, 180, 181, 365, 366, 400] {
         let env = new_env();
         let s = setup(&env);
         let (staker, _ben) = staked_wallet(&env, &s);
         advance_days(&env, days);
         assert_eq!(
             s.client.get_points_balance(&staker),
-            expected,
+            dollar_day_points(MID_STAKE, days),
             "points mismatch at day {}",
             days
         );

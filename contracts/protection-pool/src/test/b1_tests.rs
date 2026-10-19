@@ -634,3 +634,35 @@ fn a_live_claim_is_never_cleared_early() {
     s.client.approve_claim(&id);
     assert_eq!(s.client.get_claim(&id).unwrap().status, ClaimStatus::Active);
 }
+
+// -----------------------------------------------------------------------
+// rule 17: points are dollar-days
+// -----------------------------------------------------------------------
+
+#[test]
+fn a_points_rate_change_never_rescales_past_points() {
+    let env = new_env();
+    let s = setup(&env);
+    let (w, _) = staked_wallet(&env, &s);
+    advance_days(&env, 10);
+    let before = s.client.get_points_balance(&w);
+    assert_eq!(before, dollar_day_points(MID_STAKE, 10));
+    // Double the staker rate; the 7-day timelock runs at the old rate.
+    set_setting_via_timelock(&env, &s, crate::settings::SettingKey::PointsRateStaker, 20_000);
+    let at_change = s.client.get_points_balance(&w);
+    assert!(at_change >= before + dollar_day_points(MID_STAKE, 7));
+    assert!(at_change <= before + dollar_day_points(MID_STAKE, 8));
+    advance_days(&env, 10);
+    assert_eq!(s.client.get_points_balance(&w), at_change + 2 * dollar_day_points(MID_STAKE, 10));
+}
+
+#[test]
+fn backers_earn_points_on_their_own_rate() {
+    let env = new_env();
+    let s = setup(&env);
+    let backer = new_funded_address(&env, &s, MID_STAKE);
+    s.client.back(&backer, &MID_STAKE);
+    advance_days(&env, 20);
+    assert_eq!(s.client.get_backer_points(&backer), dollar_day_points(MID_STAKE, 20));
+    assert_eq!(s.client.get_points_balance(&backer), 0, "staker points are separate");
+}

@@ -384,6 +384,11 @@ pub struct StakeRecord {
     pub tier_c_ratio: i128,
     pub time_gate_ledgers: u32,
     pub claim_window_secs: u64,
+    /// B1 rule 17: staker points index when this stake was made.
+    pub points_index_at: i128,
+    /// B1 rule 15: yield settled to this stake and not yet paid. Set when
+    /// a claim is approved: the claimant keeps the yield earned so far.
+    pub yield_owed: i128,
 }
 
 // -----------------------------------------------------------------------
@@ -438,6 +443,10 @@ pub struct BackerRecord {
     pub yield_index_at: i128,
     /// r3: yield settled to this backer and not yet paid.
     pub yield_owed: i128,
+    /// B1 rule 17: backer points index at the last settlement, and points
+    /// settled so far. Kept on withdrawal.
+    pub points_index_at: i128,
+    pub points: i128,
 }
 
 // -----------------------------------------------------------------------

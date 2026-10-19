@@ -927,7 +927,7 @@ fn approve_claim_at_exactly_deadline_succeeds() {
 fn approve_claim_burns_prior_banked_plus_new_points_exactly() {
     let env = new_env();
     let s = setup(&env);
-    let cycle_points = i128::from(POINTS_TIER_1_DAYS) * POINTS_PER_DAY_TIER_1 * MID_STAKE / MAX_STAKE;
+    let cycle_points = dollar_day_points(MID_STAKE, POINTS_TIER_1_DAYS);
     let beneficiary = Address::generate(&env);
     let staker = new_funded_address(&env, &s, MID_STAKE);
     s.client.stake(&staker, &MID_STAKE, &beneficiary);

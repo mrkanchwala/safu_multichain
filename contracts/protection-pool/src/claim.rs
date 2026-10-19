@@ -661,9 +661,9 @@ fn activate_claim(env: &Env, stake_record: &mut StakeRecord, claim: &mut Claim) 
     storage::set_points_balance(env, &claim.wallet, 0);
 
     let stake_amount = stake_record.amount;
-    // r3 (2026-09-29): the stake's unpaid yield goes to the pool (protocol
-    // share) with the stake. Settled BEFORE `total_staked` drops below.
-    crate::vault::forfeit_staker_yield(env, stake_record);
+    // B1 rule 15: the claimant keeps the yield earned so far (settled into
+    // `yield_owed`, paid on request). Settled BEFORE `total_staked` drops.
+    crate::vault::settle_staker_yield(env, stake_record);
     stake_record.withdrawn = true;
     // Pre-audit hardening (H2): approved means this address never stakes again.
     stake_record.claim_approved = true;

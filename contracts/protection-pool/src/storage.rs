@@ -187,6 +187,9 @@ pub enum DataKey {
     WatchHead,
     WatchTail,
     WatchAt(u64),
+    /// B1 rule 17: points index per side (0 stakers, 1 backers): the value
+    /// and the timestamp it was stored at.
+    PointsIndex(u32),
 }
 
 // -----------------------------------------------------------------------
@@ -877,6 +880,14 @@ pub fn set_watch_at(env: &Env, seq: u64, claim_id: &BytesN<32>) {
 
 pub fn remove_watch_at(env: &Env, seq: u64) {
     env.storage().persistent().remove(&DataKey::WatchAt(seq));
+}
+
+pub fn get_points_index(env: &Env, side: u32) -> (i128, u64) {
+    env.storage().instance().get(&DataKey::PointsIndex(side)).unwrap_or((0, 0))
+}
+
+pub fn set_points_index(env: &Env, side: u32, value: i128, at: u64) {
+    env.storage().instance().set(&DataKey::PointsIndex(side), &(value, at));
 }
 
 pub fn get_storage_version(env: &Env) -> u32 {

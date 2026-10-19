@@ -33,6 +33,7 @@ mod backer;
 mod claim;
 mod error;
 mod governance;
+mod points;
 mod settings;
 mod stake;
 mod storage;
@@ -650,9 +651,20 @@ impl ProtectionPool {
     /// still in the vault until the next harvest).
     pub fn get_staker_yield_owed(env: Env, staker: Address) -> i128 {
         match storage::get_stake(&env, &staker) {
-            Some(record) if !record.withdrawn => vault::staker_yield_owed(&env, &record),
-            _ => 0,
+            Some(record) => record.yield_owed + vault::staker_yield_owed(&env, &record),
+            None => 0,
         }
+    }
+
+    /// B1 rule 22: yield `owner` could collect right now (as staker, as
+    /// backer), including vault growth not yet harvested. For the site.
+    pub fn get_pending_yield(env: Env, owner: Address) -> (i128, i128) {
+        vault::pending_yield(&env, &owner)
+    }
+
+    /// B1 rule 17: a backer's points so far (kept on withdrawal).
+    pub fn get_backer_points(env: Env, backer: Address) -> i128 {
+        backer::points_view(&env, &backer)
     }
 
     /// r3: a backer's yield credited and not yet paid.
@@ -664,7 +676,8 @@ impl ProtectionPool {
         storage::get_backer_yield_index(&env)
     }
 
-    /// r3: set-aside yield (stakers, backers). Never deployed or spent on claims.
+    /// Yield owed (stakers, backers). B1 rule 14: owed in full, but the cash
+    /// is pool cash until paid.
     pub fn get_yield_reserved(env: Env) -> (i128, i128) {
         (storage::get_staker_yield_reserved(&env), storage::get_backer_yield_reserved(&env))
     }

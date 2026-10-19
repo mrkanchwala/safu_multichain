@@ -97,6 +97,8 @@ fn empty_record(env: &Env) -> BackerRecord {
         share_left: 0,
         yield_index_at: storage::get_backer_yield_index(env),
         yield_owed: 0,
+        points_index_at: crate::points::index(env, crate::points::BACKER),
+        points: 0,
     }
 }
 
@@ -113,6 +115,10 @@ fn accrue_yield(env: &Env, record: &mut BackerRecord) {
         record.yield_owed += record.amount * delta / YIELD_INDEX_PRECISION;
     }
     record.yield_index_at = index;
+    // Rule 17: points on the counted balance, settled the same way.
+    let p = crate::points::index(env, crate::points::BACKER);
+    record.points += crate::points::earned(record.amount, record.points_index_at, p);
+    record.points_index_at = p;
 }
 
 /// Moves every matured deposit into the counted balance. Returns the amount
@@ -144,6 +150,7 @@ fn settle_maturity(env: &Env, record: &mut BackerRecord) -> i128 {
 /// stake) has done the first two and does the transfer after. Shared so a
 /// stake overflow and a direct backing follow exactly the same rules.
 pub(crate) fn add_backing(env: &Env, backer: &Address, amount: i128) -> Result<(), PoolError> {
+    crate::points::checkpoint(env, crate::points::BACKER);
     let mut record = storage::get_backer(env, backer).unwrap_or_else(|| empty_record(env));
     let matured = settle_maturity(env, &mut record);
 
@@ -362,12 +369,14 @@ pub fn complete_withdrawal(env: &Env, backer: &Address) -> Result<i128, PoolErro
     }
     let pay = collectable(env, &mut record)?;
     crate::vault::harvest(env);
-    crate::vault::pull_for_payment(env, pay)?;
+
+    let matured = settle_maturity(env, &mut record);
+    // Unpaid yield goes out with the principal. Rule 14: it is pool cash
+    // until paid, so it may need pulling from the vault too.
+    let paid_yield = crate::vault::take_backer_yield(env, record.yield_owed);
+    crate::vault::pull_for_payment(env, pay + paid_yield)?;
 
     // Effects before interaction (CEI).
-    let matured = settle_maturity(env, &mut record);
-    // r3: unpaid yield goes out with the principal (set-aside cash).
-    let paid_yield = crate::vault::take_backer_yield(env, record.yield_owed);
     record.yield_owed -= paid_yield;
     record.amount -= pay;
     record.withdraw_paid += pay;
@@ -418,6 +427,7 @@ pub fn claim_yield(env: &Env, backer: &Address) -> Result<i128, PoolError> {
     if paid <= 0 {
         return Err(PoolError::NoYieldOwed);
     }
+    crate::vault::pull_for_payment(env, paid)?;
     record.yield_owed -= paid;
     storage::set_backer(env, backer, &record);
     storage::bump_instance_ttl(env);
@@ -434,6 +444,16 @@ pub fn claim_yield(env: &Env, backer: &Address) -> Result<i128, PoolError> {
 
 /// r3: view of a backer's unpaid yield, including what has accrued since
 /// the record was last touched. Read-only.
+pub fn points_view(env: &Env, backer: &Address) -> i128 {
+    match storage::get_backer(env, backer) {
+        Some(mut record) => {
+            accrue_yield(env, &mut record);
+            record.points
+        }
+        None => 0,
+    }
+}
+
 pub fn yield_owed_view(env: &Env, backer: &Address) -> i128 {
     match storage::get_backer(env, backer) {
         Some(mut record) => {

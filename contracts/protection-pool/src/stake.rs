@@ -26,7 +26,7 @@ use soroban_sdk::{contractevent, token::TokenClient, xdr::ToXdr, Address, Env};
 use crate::error::PoolError;
 use crate::storage;
 use crate::types::{
-    StakeRecord, LEDGERS_PER_DAY, STAKE_BPS_DENOMINATOR,
+    StakeRecord, STAKE_BPS_DENOMINATOR,
 };
 
 // -----------------------------------------------------------------------
@@ -78,20 +78,12 @@ pub fn compute_points_for_record(env: &Env, record: &StakeRecord) -> i128 {
     if record.amount <= 0 || record.withdrawn {
         return 0;
     }
-
-    let now = env.ledger().sequence();
-    let d = (now.saturating_sub(record.staked_at_ledger) / LEDGERS_PER_DAY) as i128;
-    let d1 = d.min(90);
-    let d2 = if d > 90 { d.min(180) - 90 } else { 0 };
-    let d3 = if d > 180 { d.min(365) - 180 } else { 0 };
-    let d4 = if d > 365 { d - 365 } else { 0 };
-    let base = d1 * 100 + d2 * 120 + d3 * 150 + d4 * 200;
-
-    let denom = max_stake(env);
-    if denom <= 0 {
-        return 0;
-    }
-    base * record.amount / denom
+    // B1 rule 17: dollar-days via the staker points index.
+    crate::points::earned(
+        record.amount,
+        record.points_index_at,
+        crate::points::index(env, crate::points::STAKER),
+    )
 }
 
 /// XLM native asset SAC address, set once at `initialize` (network-specific,
@@ -185,6 +177,7 @@ pub fn stake(
     // r3 (code review B2, 2026-09-29): recognise growth earned so far before
     // this stake counts, so it goes to the stakers who earned it. Best effort.
     crate::vault::harvest(env);
+    crate::points::checkpoint(env, crate::points::STAKER);
 
     // Effects before interaction (CEI).
     let record = StakeRecord {
@@ -209,6 +202,8 @@ pub fn stake(
         active_claim_id: None,
         reserved_claim_id: None,
         claim_approved: false,
+        points_index_at: crate::points::index(env, crate::points::STAKER),
+        yield_owed: 0,
     };
     storage::set_stake(env, staker, &record);
     storage::set_total_staked(env, total_staked + staked);
@@ -307,7 +302,7 @@ pub fn withdraw(env: &Env, staker: &Address, beneficiary: &Address) -> Result<()
     // `StakeRecord`); `amount` (flat principal) is still what
     // total_staked/tier_cap use below and elsewhere.
     crate::vault::harvest(env);
-    let owed = crate::vault::staker_yield_owed(env, &record);
+    let owed = record.yield_owed + crate::vault::staker_yield_owed(env, &record);
 
     // D2: before D2 this transfer could not fail on funds, `total_staked`
     // WAS the contract's real balance. Once XLM can sit in the yield vault
@@ -315,14 +310,16 @@ pub fn withdraw(env: &Env, staker: &Address, beneficiary: &Address) -> Result<()
     // as an opaque SAC host trap. Checked before any state mutation so the
     // typed error is the only outcome; principal is never at risk, it is in
     // the vault. v1: `pull_for_payment` redeems from the vault first if cash
-    // is short. r3: checked against principal only; the yield part is
-    // set-aside cash, which is always liquid.
-    crate::vault::pull_for_payment(env, amount)?;
-    let payout = amount + crate::vault::take_staker_yield(env, owed);
+    // is short. B1 rule 14: the yield part is pool cash until paid, so it
+    // is pulled too.
+    let paid_yield = crate::vault::take_staker_yield(env, owed);
+    let payout = amount + paid_yield;
+    crate::vault::pull_for_payment(env, payout)?;
 
     // Effects before interaction (CEI).
     record.withdrawn = true;
     record.amount = 0;
+    record.yield_owed = 0;
     record.yield_index_at_stake = storage::get_yield_index(env);
     storage::set_stake(env, staker, &record);
 
@@ -385,12 +382,13 @@ pub fn emergency_exit(env: &Env, staker: &Address) -> Result<(), PoolError> {
     // `require_not_paused` guard (V8's equivalent does; porting that
     // modifier would leave this path unfundable exactly when it matters).
     // v1: the in-path pull has no pause guard either, for the same reason.
-    crate::vault::pull_for_payment(env, amount)?;
-    let owed = crate::vault::staker_yield_owed(env, &record);
+    let owed = record.yield_owed + crate::vault::staker_yield_owed(env, &record);
     let payout = amount + crate::vault::take_staker_yield(env, owed);
+    crate::vault::pull_for_payment(env, payout)?;
 
     record.withdrawn = true;
     record.amount = 0;
+    record.yield_owed = 0;
     record.yield_index_at_stake = storage::get_yield_index(env);
     storage::set_stake(env, staker, &record);
 
@@ -412,21 +410,15 @@ pub fn emergency_exit(env: &Env, staker: &Address) -> Result<(), PoolError> {
 /// are untouched (coverage is principal only). Works while paused (the
 /// harvest is skipped then, already-credited yield is still paid).
 ///
-/// Paid to the beneficiary, hash-checked exactly as in `withdraw`. Refused
-/// while a claim is open or queued on this stake: if that claim is
-/// approved, the unpaid yield goes to the pool with the stake. A forfeited
-/// stake has no yield left to take (moved at forfeiture).
+/// Paid to the beneficiary, hash-checked exactly as in `withdraw`. B1 rule
+/// 15: a claim never takes the claimant's yield, so this works with a claim
+/// open or queued, and after one is approved (the yield earned up to the
+/// approval was settled into `yield_owed` then).
 pub fn claim_yield(env: &Env, staker: &Address, beneficiary: &Address) -> Result<i128, PoolError> {
     staker.require_auth();
     let mut record = storage::get_stake(env, staker).ok_or(PoolError::NoStake)?;
-    if record.amount <= 0 || record.withdrawn {
+    if record.amount <= 0 && record.yield_owed <= 0 {
         return Err(PoolError::NoActiveStake);
-    }
-    if record.active_claim_id.is_some() {
-        return Err(PoolError::ClaimActive);
-    }
-    if record.reserved_claim_id.is_some() {
-        return Err(PoolError::ClaimQueuedForStake);
     }
     let expected_hash = env.crypto().sha256(&beneficiary.to_xdr(env)).to_bytes();
     if expected_hash != record.beneficiary_hash {
@@ -434,13 +426,15 @@ pub fn claim_yield(env: &Env, staker: &Address, beneficiary: &Address) -> Result
     }
 
     crate::vault::harvest(env);
-    let owed = crate::vault::staker_yield_owed(env, &record);
+    let owed = record.yield_owed + crate::vault::staker_yield_owed(env, &record);
     let paid = crate::vault::take_staker_yield(env, owed);
     if paid <= 0 {
         return Err(PoolError::NoYieldOwed);
     }
+    crate::vault::pull_for_payment(env, paid)?;
 
     // Effects before interaction (CEI).
+    record.yield_owed = 0;
     record.yield_index_at_stake = storage::get_yield_index(env);
     storage::set_stake(env, staker, &record);
     storage::bump_instance_ttl(env);

@@ -94,6 +94,9 @@ pub enum SettingKey {
     /// (idle pool) to `DripMaxSecs` (>= 50% utilisation). Min <= max.
     DripMinSecs = 24,
     DripMaxSecs = 25,
+    /// B1 rule 17: points per unit per day, x10_000 (10_000 = 1 point).
+    PointsRateStaker = 26,
+    PointsRateBacker = 27,
 }
 
 /// A proposed change waiting for co-signer approval and/or its timelock.
@@ -136,6 +139,7 @@ const DRIP_MIN_MIN: i128 = SECONDS_PER_DAY as i128;
 const DRIP_MIN_MAX: i128 = 90 * SECONDS_PER_DAY as i128;
 const DRIP_MAX_MIN: i128 = 7 * SECONDS_PER_DAY as i128;
 const DRIP_MAX_MAX: i128 = 180 * SECONDS_PER_DAY as i128;
+const POINTS_RATE_MAX: i128 = 10 * crate::points::POINTS_RATE_ONE;
 
 /// Defaults = the values the pool shipped with, so a fresh deploy behaves
 /// exactly as before until a setting is changed.
@@ -167,6 +171,7 @@ fn default_value(env: &Env, key: SettingKey) -> i128 {
         SettingKey::BackerMaturitySecs => BACKER_MATURITY_SECONDS as i128,
         SettingKey::DripMinSecs => DRIP_MIN_SECONDS as i128,
         SettingKey::DripMaxSecs => DRIP_MAX_SECONDS as i128,
+        SettingKey::PointsRateStaker | SettingKey::PointsRateBacker => crate::points::POINTS_RATE_ONE,
     }
 }
 
@@ -200,6 +205,9 @@ fn in_bounds(env: &Env, key: SettingKey, value: i128) -> bool {
         SettingKey::BackerMaturitySecs => (0..=BACKER_MATURITY_MAX).contains(&value),
         SettingKey::DripMinSecs => (DRIP_MIN_MIN..=DRIP_MIN_MAX).contains(&value),
         SettingKey::DripMaxSecs => (DRIP_MAX_MIN..=DRIP_MAX_MAX).contains(&value),
+        SettingKey::PointsRateStaker | SettingKey::PointsRateBacker => {
+            (0..=POINTS_RATE_MAX).contains(&value)
+        }
     }
 }
 
@@ -334,6 +342,10 @@ pub fn execute_setting(env: &Env, key: SettingKey) -> Result<(), PoolError> {
         return Err(PoolError::SettingOrderInvalid);
     }
     let old_value = get(env, key);
+    // Rule 17: points earned so far stay at the old rate.
+    if let Some(side) = crate::points::side_of(key) {
+        crate::points::checkpoint(env, side);
+    }
     if key == SettingKey::PoolCap {
         storage::set_pool_cap(env, pending.value);
     } else {
