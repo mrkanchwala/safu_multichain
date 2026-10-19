@@ -384,8 +384,9 @@ pub fn push_idle(env: &Env) {
     if amount <= 0 || amount < capacity * AUTO_PUSH_MIN_BPS / BPS_DENOMINATOR {
         return;
     }
-    let min_shares = amount * deployed_shares / deployed_asset * (BPS_DENOMINATOR - MAX_REBALANCE_SLIPPAGE_BPS)
-        / BPS_DENOMINATOR;
+    // Multiply before dividing so the floor loses at most one unit.
+    let min_shares = amount * deployed_shares * (BPS_DENOMINATOR - MAX_REBALANCE_SLIPPAGE_BPS)
+        / (deployed_asset * BPS_DENOMINATOR);
 
     let vault = VaultClient::new(env, &vault_addr);
     let Ok(Ok(shares_before)) = vault.try_balance(&env.current_contract_address()) else {
@@ -996,7 +997,8 @@ pub(crate) fn index_bumps(env: &Env, amount: i128) -> (i128, i128) {
         if total <= 0 {
             return 0;
         }
-        let part = amount * total / capacity * crate::settings::get(env, key) / YIELD_SPLIT_BPS_DENOMINATOR;
+        // Multiply before dividing so the split loses at most one unit.
+        let part = amount * total * crate::settings::get(env, key) / (capacity * YIELD_SPLIT_BPS_DENOMINATOR);
         part * YIELD_INDEX_PRECISION / total
     };
     (
