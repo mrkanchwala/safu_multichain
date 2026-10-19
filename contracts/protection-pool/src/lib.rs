@@ -493,8 +493,10 @@ impl ProtectionPool {
         storage::get_stake(&env, &wallet)
     }
 
+    /// A claim past day 90 reads as `AwaitingApproval` (rule 25), whether
+    /// or not anything has saved that yet.
     pub fn get_claim(env: Env, claim_id: BytesN<32>) -> Option<Claim> {
-        storage::get_claim(&env, &claim_id)
+        claim::view_claim(&env, &claim_id)
     }
 
     /// V8 `pointsOf`: live-computed if still staked and not withdrawn,

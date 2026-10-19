@@ -404,6 +404,15 @@ fn promote_if_due(env: &Env, claim: &mut Claim, r: &StakeRecord) -> bool {
     true
 }
 
+/// Read-only: the claim as it stands now, with rule 25's promotion applied.
+pub fn view_claim(env: &Env, claim_id: &BytesN<32>) -> Option<Claim> {
+    let mut claim = storage::get_claim(env, claim_id)?;
+    if let Some(r) = storage::get_stake(env, &claim.wallet) {
+        promote_if_due(env, &mut claim, &r);
+    }
+    Some(claim)
+}
+
 /// Adds a claim to the back of the watch list.
 fn watch(env: &Env, claim_id: &BytesN<32>) {
     let tail = storage::get_watch_tail(env);
@@ -411,38 +420,64 @@ fn watch(env: &Env, claim_id: &BytesN<32>) {
     storage::set_watch_tail(env, tail + 1);
 }
 
-/// Checks the claim at the front of the watch list: promotes it if due,
-/// expires it if its clock ran out, drops it once it is finished, and
-/// otherwise moves it to the back. Returns false when the list is empty.
+/// Holes skipped at the front of the watch list per check.
+const WATCH_HOLE_SKIP_MAX: u32 = 8;
+
+/// True once a watched claim needs no more watching: expired now (its
+/// clock ran out, money freed), or already finished.
+fn watch_done(env: &Env, id: &BytesN<32>) -> bool {
+    let Some(claim) = storage::get_claim(env, id) else { return true };
+    match claim.status {
+        // `expire_pending_approval` treats a claim past day 90 as awaiting
+        // approval (rule 25) without saving that, so a check that finds
+        // nothing to do writes nothing.
+        ClaimStatus::PendingTime | ClaimStatus::AwaitingApproval => {
+            expire_pending_approval(env, id).is_ok()
+        }
+        // Not stale yet (or suspended): keep watching. Fully collected
+        // claims finish on their own.
+        ClaimStatus::Active => {
+            claim.streamed >= claim.entitlement || expire_stale_claim(env, id).is_ok()
+        }
+        // Finished, or back in the line (the line has its own cleanup).
+        _ => true,
+    }
+}
+
+/// Checks the watched claim at the cursor and moves the cursor on. A
+/// check that finds nothing to do only reads. A finished claim's place is
+/// removed; finished places at the front are dropped so the list shrinks.
+/// Returns false when the list is empty.
 fn watch_step(env: &Env) -> bool {
-    let head = storage::get_watch_head(env);
-    if head >= storage::get_watch_tail(env) {
+    let mut head = storage::get_watch_head(env);
+    let tail = storage::get_watch_tail(env);
+    if head >= tail {
         return false;
     }
-    let id = storage::get_watch_at(env, head);
-    storage::remove_watch_at(env, head);
-    storage::set_watch_head(env, head + 1);
-    let Some(id) = id else { return true };
-    let Some(mut claim) = storage::get_claim(env, &id) else { return true };
-    let keep = match claim.status {
-        ClaimStatus::PendingTime | ClaimStatus::AwaitingApproval => {
-            if let Some(r) = storage::get_stake(env, &claim.wallet) {
-                if promote_if_due(env, &mut claim, &r) {
-                    storage::set_claim(env, &id, &claim);
-                    ClaimUnlocked { wallet: claim.wallet.clone(), claim_id: id.clone() }.publish(env);
-                }
-            }
-            claim.status == ClaimStatus::PendingTime || expire_pending_approval(env, &id).is_err()
-        }
-        // Err = not stale yet (or suspended, or fully streamed and about to
-        // complete): keep watching.
-        ClaimStatus::Active => expire_stale_claim(env, &id).is_err(),
-        // Finished, or back in the line (the line has its own cleanup).
-        _ => false,
-    };
-    if keep {
-        watch(env, &id);
+    let mut cur = storage::get_watch_cursor(env);
+    if cur < head || cur >= tail {
+        cur = head;
     }
+    let done = match storage::get_watch_at(env, cur) {
+        Some(id) => {
+            let done = watch_done(env, &id);
+            if done {
+                storage::remove_watch_at(env, cur);
+            }
+            done
+        }
+        None => true,
+    };
+    if done && cur == head {
+        head += 1;
+        let mut skipped = 0;
+        while head < tail && skipped < WATCH_HOLE_SKIP_MAX && storage::get_watch_at(env, head).is_none() {
+            head += 1;
+            skipped += 1;
+        }
+        storage::set_watch_head(env, head);
+    }
+    storage::set_watch_cursor(env, cur + 1);
     true
 }
 

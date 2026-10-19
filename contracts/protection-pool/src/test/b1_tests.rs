@@ -666,3 +666,61 @@ fn backers_earn_points_on_their_own_rate() {
     assert_eq!(s.client.get_backer_points(&backer), dollar_day_points(MID_STAKE, 20));
     assert_eq!(s.client.get_points_balance(&backer), 0, "staker points are separate");
 }
+
+// -----------------------------------------------------------------------
+// rule 24: what the upkeep costs the user (run with --nocapture to print)
+// -----------------------------------------------------------------------
+
+/// Fee estimate of the last call, in stroops: (total, rent, everything
+/// except rent). Pubnet fee snapshot from the SDK; native test contract, so
+/// VM costs are missing, but they are the same with or without upkeep.
+fn last_fee(env: &Env) -> (i64, i64, i64) {
+    let f = env.cost_estimate().fee();
+    let rent = f.persistent_entry_rent + f.temporary_entry_rent;
+    (f.total, rent, f.total - rent)
+}
+
+/// Stake fee after `days`, with `claims` early claims filed first and
+/// `dead` deciding whether they have run out by then.
+fn stake_fee(claims: u8, dead: bool) -> (i64, i64, i64) {
+    let env = new_env();
+    let s = setup(&env);
+    let mut ids = std::vec::Vec::new();
+    for seed in 1..=claims {
+        let (w, _) = staked_wallet(&env, &s);
+        ids.push(early_claim(&env, &s, &w, seed));
+    }
+    if claims == 0 {
+        staked_wallet(&env, &s);
+        staked_wallet(&env, &s);
+    }
+    // Same time passes in every case, so storage rent is comparable.
+    advance_past_time_gate(&env);
+    if dead {
+        advance_ledgers(&env, APPROVE_WINDOW_LEDGERS + LEDGERS_PER_DAY);
+    } else {
+        advance_days(&env, 50);
+    }
+    staked_wallet(&env, &s);
+    let fee = last_fee(&env);
+    for id in ids {
+        let status = s.client.get_claim(&id).unwrap().status;
+        assert_eq!(status == ClaimStatus::Expired, dead);
+    }
+    fee
+}
+
+#[test]
+fn upkeep_fee_stays_small() {
+    let (idle_dead_time, idle_live_time) = (stake_fee(0, true), stake_fee(0, false));
+    let checked = stake_fee(2, false);
+    let cleared = stake_fee(2, true);
+    std::println!("stake fee in stroops (total, rent, non-rent); 1 XLM = 10,000,000:");
+    std::println!("  nothing to tidy, day 140: {idle_live_time:?}");
+    std::println!("  2 claims checked, day 140: {checked:?}  non-rent +{}", checked.2 - idle_live_time.2);
+    std::println!("  nothing to tidy, day 191: {idle_dead_time:?}");
+    std::println!("  2 claims cleared, day 191: {cleared:?}  non-rent +{}", cleared.2 - idle_dead_time.2);
+    // The upkeep's own work (not rent) adds under 0.01 XLM per call.
+    assert!(checked.2 - idle_live_time.2 < 100_000);
+    assert!(cleared.2 - idle_dead_time.2 < 100_000);
+}

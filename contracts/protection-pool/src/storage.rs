@@ -186,6 +186,8 @@ pub enum DataKey {
     /// `WatchHead` is the next to check, `WatchTail` the next free number.
     WatchHead,
     WatchTail,
+    /// The next watch-list place to check; walks head..tail and wraps.
+    WatchCursor,
     WatchAt(u64),
     /// B1 rule 17: points index per side (0 stakers, 1 backers): the value
     /// and the timestamp it was stored at.
@@ -866,6 +868,14 @@ pub fn get_watch_tail(env: &Env) -> u64 {
 
 pub fn set_watch_tail(env: &Env, value: u64) {
     env.storage().instance().set(&DataKey::WatchTail, &value);
+}
+
+pub fn get_watch_cursor(env: &Env) -> u64 {
+    env.storage().instance().get(&DataKey::WatchCursor).unwrap_or(0)
+}
+
+pub fn set_watch_cursor(env: &Env, value: u64) {
+    env.storage().instance().set(&DataKey::WatchCursor, &value);
 }
 
 pub fn get_watch_at(env: &Env, seq: u64) -> Option<BytesN<32>> {
