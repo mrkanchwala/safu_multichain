@@ -179,6 +179,8 @@ fn no_push_below_the_threshold() {
 fn backing_is_pushed_once_it_counts_toward_capacity() {
     let env = new_env();
     let s = setup(&env);
+    // B1 step 3: maturity defaults to 0; this test needs the wait on.
+    set_setting_via_timelock(&env, &s, crate::settings::SettingKey::BackerMaturitySecs, 7 * 86_400);
     let (_a, _b, _m) = pool_at_ceiling(&env, &s);
     let deployed = s.client.get_total_deployed_asset();
     let backer = new_funded_address(&env, &s, 10 * MAX_STAKE);
@@ -187,7 +189,7 @@ fn backing_is_pushed_once_it_counts_toward_capacity() {
     assert_eq!(s.client.get_total_deployed_asset(), deployed);
     advance_ledgers(
         &env,
-        (crate::types::BACKER_MATURITY_SECONDS / SECONDS_PER_LEDGER) as u32 + 1,
+        (7 * 86_400 / SECONDS_PER_LEDGER) as u32 + 1,
     );
     s.client.mature_backing(&backer);
     assert_eq!(

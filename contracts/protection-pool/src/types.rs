@@ -15,7 +15,7 @@
 //! constants (`MAX_APPROVAL_WINDOW_SECONDS`, `REVOCATION_TTL_LEDGERS`) are
 //! also defined here.
 
-use soroban_sdk::{contracttype, Address, BytesN};
+use soroban_sdk::{contracttype, Address, BytesN, Vec};
 
 // -----------------------------------------------------------------------
 // Time constants: Soroban has no native "days"; ledgers close ~5s apart.
@@ -390,26 +390,50 @@ pub struct StakeRecord {
 // v1 (2026-09-22): backers (backer.rs).
 // -----------------------------------------------------------------------
 
-/// How long new backer money waits before it counts toward capacity
-/// (withdrawal-safety rule 4). Fixed in code, not a setting (design
-/// decision 2026-09-22): it is the guard against deposit spike -> admit
-/// claims -> pull out.
-pub const BACKER_MATURITY_SECONDS: u64 = 7 * SECONDS_PER_DAY;
+/// Default wait before new backer money counts toward capacity
+/// (`SettingKey::BackerMaturitySecs`, 0-7 days). B1 (locked rule 11,
+/// 2026-10-16): 0, backing counts from day 1. The drip exit and the
+/// free-capital rule already block deposit spike -> admit claims -> pull out.
+pub const BACKER_MATURITY_SECONDS: u64 = 0;
+
+/// B1 (rule 11): each deposit waiting to mature keeps its own clock. At most
+/// this many can wait at once per backer (only matters if maturity > 0).
+pub const MAX_PENDING_DEPOSITS: u32 = 8;
+
+/// B1 (rule 12): backer exit drip length, from 7 days when the pool is idle
+/// to 90 days at >= 50% utilisation (`SettingKey::DripMinSecs/DripMaxSecs`).
+pub const DRIP_MIN_SECONDS: u64 = 7 * SECONDS_PER_DAY;
+pub const DRIP_MAX_SECONDS: u64 = 90 * SECONDS_PER_DAY;
+/// Utilisation (allocated / capacity, bps) at which the drip is longest.
+pub const DRIP_FULL_UTIL_BPS: i128 = 5_000;
+
+/// One deposit waiting to count toward capacity.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PendingDeposit {
+    pub amount: i128,
+    pub matures_at: u64,
+}
 
 #[contracttype]
 #[derive(Clone, Debug)]
 pub struct BackerRecord {
-    /// Matured money: counts toward capacity, can be requested out.
+    /// Counted money: backs claims, can be requested out.
     pub amount: i128,
-    /// Deposited but not yet matured: held, does NOT count toward capacity.
-    pub pending_amount: i128,
-    /// Timestamp at which `pending_amount` matures; 0 when nothing pending.
-    pub pending_matures_at: u64,
-    /// Open withdrawal request (0 = none). Still counted toward capacity
-    /// until completed (rule 2).
+    /// B1 (rule 11): deposits still waiting to count, each with its own
+    /// clock (a new deposit never restarts an older one). Empty at maturity 0.
+    pub pending: Vec<PendingDeposit>,
+    /// B1 (rule 12): open withdrawal request, the total asked for (0 = none).
+    /// The unpaid part keeps counting toward capacity (rule 2).
     pub withdraw_amount: i128,
-    /// Earliest completion timestamp for the open request.
-    pub withdraw_ready_at: u64,
+    /// Paid out of `withdraw_amount` so far.
+    pub withdraw_paid: i128,
+    /// When the request was made; the drip counts days from here.
+    pub withdraw_started_at: u64,
+    /// The day `share_left` belongs to, and what is left of this backer's
+    /// share of that day's free capital.
+    pub share_day: u32,
+    pub share_left: i128,
     /// r3: `BackerYieldIndex` at the last settlement of this record.
     pub yield_index_at: i128,
     /// r3: yield settled to this backer and not yet paid.

@@ -270,7 +270,10 @@ fn changed_max_stake_applies_to_new_stakes() {
     let over = bps_of(POOL_CAP, lower_max) + 1;
     let staker = new_funded_address(&env, &s, over);
     let ben = Address::generate(&env);
-    assert_eq!(s.client.try_stake(&staker, &over, &ben), Err(Ok(PoolError::StakeOutOfRange)));
+    // B1 rule 4: the new max is staked, the rest becomes backing.
+    s.client.stake(&staker, &over, &ben);
+    assert_eq!(s.client.get_stake(&staker).unwrap().amount, over - 1);
+    assert_eq!(s.client.get_backer(&staker).unwrap().amount, 1);
 }
 
 #[test]

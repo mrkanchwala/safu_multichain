@@ -125,9 +125,14 @@ pub fn stake(
     }
     // V8: require(msg.value >= STAKE_MIN && msg.value <= STAKE_MAX, "stake out of range")
     // Here the bounds are basis points of pool_cap instead of fixed amounts.
-    if amount < min_stake(env) || amount > max_stake(env) {
+    // B1 (locked rule 4, 2026-10-16): above the max is no longer refused.
+    // The max is staked and the rest becomes backing (never forfeited by a
+    // claim), all in one transfer.
+    if amount < min_stake(env) {
         return Err(PoolError::StakeOutOfRange);
     }
+    let staked = amount.min(max_stake(env));
+    let overflow = amount - staked;
 
     // V8: require(stakes[msg.sender].amount == 0, "already staked")
     // One active StakeRecord per address, must withdraw before re-staking.
@@ -145,8 +150,10 @@ pub fn stake(
 
     let total_staked = storage::get_total_staked(env);
     let pool_cap = storage::get_pool_cap(env);
-    // V8: totalStaked + msg.value <= MAX_POOL_ETH && <= maxPoolSize
-    if total_staked + amount > pool_cap {
+    // V8: totalStaked + msg.value <= MAX_POOL_ETH && <= maxPoolSize.
+    // Rule 4: a pool full for stakes refuses the WHOLE deposit (the overflow
+    // never turns a refused stake into backing).
+    if total_staked + staked > pool_cap {
         return Err(PoolError::PoolCapExceeded);
     }
 
@@ -182,7 +189,7 @@ pub fn stake(
     // Effects before interaction (CEI).
     let record = StakeRecord {
         beneficiary_hash,
-        amount,
+        amount: staked,
         // Snapshot NOW (after the harvest above): this staker only accrues
         // yield realised after joining.
         yield_index_at_stake: storage::get_yield_index(env),
@@ -204,15 +211,19 @@ pub fn stake(
         claim_approved: false,
     };
     storage::set_stake(env, staker, &record);
-    storage::set_total_staked(env, total_staked + amount);
+    storage::set_total_staked(env, total_staked + staked);
     storage::set_total_stakers(env, storage::get_total_stakers(env) + 1);
     // r3: from the first stake on, vault/treasury/deploy-ceiling changes wait 7 days.
     storage::set_ever_funded(env);
     storage::bump_instance_ttl(env);
 
-    Staked { staker: staker.clone(), amount }.publish(env);
+    Staked { staker: staker.clone(), amount: staked }.publish(env);
+    if overflow > 0 {
+        // Same rules as `back()`; the harvest above already ran.
+        crate::backer::add_backing(env, staker, overflow)?;
+    }
 
-    // Interaction: SAC transfer, staker to contract.
+    // Interaction: one SAC transfer for both parts, staker to contract.
     let token = TokenClient::new(env, &asset_token_address(env));
     token.transfer(staker, env.current_contract_address(), &amount);
     // v1: put idle cash above the buffer into the vault. Never fails the stake.

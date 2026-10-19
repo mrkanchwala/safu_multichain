@@ -286,7 +286,8 @@ impl ProtectionPool {
 
     // -- v1 backers (backer.rs): no admin function touches backer money --
 
-    /// Deposit backer money. Counts toward capacity after 7 days.
+    /// Deposit backer money. Counts toward capacity after `BackerMaturitySecs`
+    /// (default 0: at once).
     pub fn back(env: Env, backer: Address, amount: i128) -> Result<(), PoolError> {
         backer::back(&env, &backer, amount)
     }
@@ -296,7 +297,8 @@ impl ProtectionPool {
         backer::mature_backing(&env, &backer)
     }
 
-    /// Start the notice period. Returns the earliest completion timestamp.
+    /// Open a withdrawal request; it drips out daily (7 to 90 days by
+    /// utilisation). Returns an estimate of the last drip day.
     pub fn request_backer_withdrawal(env: Env, backer: Address, amount: i128) -> Result<u64, PoolError> {
         backer::request_withdrawal(&env, &backer, amount)
     }
@@ -305,10 +307,15 @@ impl ProtectionPool {
         backer::cancel_withdrawal(&env, &backer)
     }
 
-    /// Pay a requested withdrawal to the backer's own address, once the
-    /// notice has passed and only from capital open claims don't need.
+    /// Collect what the drip has unlocked, to the backer's own address, only
+    /// from capital open claims don't need. Returns the principal paid now.
     pub fn complete_backer_withdrawal(env: Env, backer: Address) -> Result<i128, PoolError> {
         backer::complete_withdrawal(&env, &backer)
+    }
+
+    /// What `complete_backer_withdrawal` would pay right now (0 if nothing).
+    pub fn get_backer_collectable(env: Env, backer: Address) -> i128 {
+        backer::collectable_view(&env, &backer)
     }
 
     pub fn get_backer(env: Env, backer: Address) -> Option<BackerRecord> {

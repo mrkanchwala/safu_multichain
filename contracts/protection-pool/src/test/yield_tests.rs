@@ -21,11 +21,17 @@ use super::common::*;
 use super::d2_vault_tests::{with_vault, MockVaultClient};
 use crate::error::PoolError;
 use crate::settings::SettingKey;
-use crate::types::{BACKER_MATURITY_SECONDS, HARVEST_MAX_GROWTH_BPS_PER_DAY, YIELD_INDEX_PRECISION};
+use crate::types::{HARVEST_MAX_GROWTH_BPS_PER_DAY, YIELD_INDEX_PRECISION};
 use crate::{GovChange, GovKind};
 
-const MATURITY_LEDGERS: u32 = (BACKER_MATURITY_SECONDS / SECONDS_PER_LEDGER) as u32;
-const DEFAULT_NOTICE_LEDGERS: u32 = (30 * 86_400 / SECONDS_PER_LEDGER) as u32;
+// B1 step 3: maturity is 0 by default; the tests of "waiting money earns nothing"
+// turn the 7-day setting on first. The notice became a drip (7 days on an idle pool).
+const MATURITY_LEDGERS: u32 = (7 * 86_400 / SECONDS_PER_LEDGER) as u32;
+const DRIP_IDLE_LEDGERS: u32 = (7 * 86_400 / SECONDS_PER_LEDGER) as u32;
+
+fn with_week_maturity(env: &Env, s: &Setup<'_>) {
+    set_setting_via_timelock(env, s, crate::settings::SettingKey::BackerMaturitySecs, 7 * 86_400);
+}
 const ENTITLEMENT: i128 = STROOPS_PER_UNIT;
 const TIER_C: u32 = 3;
 /// Deploy ceiling used by every test here, bps of capacity.
@@ -54,8 +60,10 @@ fn assert_full_invariant(s: &Setup<'_>) {
 fn matured_backer(env: &Env, s: &Setup<'_>, amount: i128) -> Address {
     let b = new_funded_address(env, s, amount);
     s.client.back(&b, &amount);
-    advance_ledgers(env, MATURITY_LEDGERS);
-    s.client.mature_backing(&b);
+    if !s.client.get_backer(&b).unwrap().pending.is_empty() {
+        advance_ledgers(env, MATURITY_LEDGERS);
+        s.client.mature_backing(&b);
+    }
     b
 }
 
@@ -86,6 +94,7 @@ fn grow(s: &Setup<'_>, vault_id: &Address, mock: &MockVaultClient<'_>, rate_bps:
 fn pending_backer_money_earns_nothing_matured_money_earns() {
     let env = new_env();
     let s = setup(&env);
+    with_week_maturity(&env, &s);
     staked_wallet(&env, &s);
     let b = new_funded_address(&env, &s, MID_STAKE);
     s.client.back(&b, &MID_STAKE); // still in its 7-day wait
@@ -145,7 +154,7 @@ fn completed_backer_withdrawal_pays_unpaid_yield_with_the_principal() {
     assert!(owed > 0);
 
     s.client.request_backer_withdrawal(&b, &MID_STAKE);
-    advance_ledgers(&env, DEFAULT_NOTICE_LEDGERS);
+    advance_ledgers(&env, DRIP_IDLE_LEDGERS);
     s.client.complete_backer_withdrawal(&b);
     assert!(balance(&env, &s, &b) >= MID_STAKE + owed);
     assert_eq!(s.client.get_backer_yield_owed(&b), 0);
@@ -444,6 +453,7 @@ fn a_new_staker_does_not_share_growth_earned_before_joining() {
 fn newly_matured_backing_does_not_share_growth_earned_before_it_counted() {
     let env = new_env();
     let s = setup(&env);
+    with_week_maturity(&env, &s);
     staked_wallet(&env, &s);
     let b = new_funded_address(&env, &s, MID_STAKE);
     s.client.back(&b, &MID_STAKE);

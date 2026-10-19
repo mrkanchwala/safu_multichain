@@ -176,6 +176,11 @@ pub enum DataKey {
     PayoutSnap,
     /// 2026-10-16: storage layout version.
     StorageVersion,
+    /// B1 (rule 12): unpaid total of every open backer withdrawal request.
+    TotalBackerOpen,
+    /// B1: the day's drip snapshot (day, free capital, open requests,
+    /// utilisation bps), taken at the day's first backer collection.
+    DripSnap,
 }
 
 // -----------------------------------------------------------------------
@@ -819,6 +824,23 @@ pub fn get_payout_snap(env: &Env) -> Option<(u32, i128, i128)> {
 
 pub fn set_payout_snap(env: &Env, snap: &(u32, i128, i128)) {
     env.storage().instance().set(&DataKey::PayoutSnap, snap);
+}
+
+pub fn get_total_backer_open(env: &Env) -> i128 {
+    env.storage().instance().get(&DataKey::TotalBackerOpen).unwrap_or(0)
+}
+
+pub fn set_total_backer_open(env: &Env, value: i128) {
+    env.storage().instance().set(&DataKey::TotalBackerOpen, &value);
+}
+
+/// (day, free capital, open requests, utilisation bps).
+pub fn get_drip_snap(env: &Env) -> Option<(u32, i128, i128, i128)> {
+    env.storage().instance().get(&DataKey::DripSnap)
+}
+
+pub fn set_drip_snap(env: &Env, snap: &(u32, i128, i128, i128)) {
+    env.storage().instance().set(&DataKey::DripSnap, snap);
 }
 
 pub fn get_storage_version(env: &Env) -> u32 {

@@ -298,4 +298,8 @@ pub enum PoolError {
     ApproverNotSecondRole = 132,
     /// Queued claims are released in line order; this one isn't next.
     NotFirstInQueue = 133,
+    /// Backer drip: nothing more is unlocked yet, or today's share is used.
+    NothingToCollectYet = 134,
+    /// A backer already has `MAX_PENDING_DEPOSITS` deposits waiting to count.
+    TooManyPendingDeposits = 135,
 }

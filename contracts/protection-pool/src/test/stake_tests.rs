@@ -40,14 +40,16 @@ fn stake_below_min_panics() {
 }
 
 #[test]
-fn stake_above_max_panics() {
+fn stake_above_max_overflows_into_backing() {
+    // B1 rule 4 (2026-10-16): was `stake_above_max_panics`.
     let env = new_env();
     let s = setup(&env);
     let amount = MAX_STAKE + 1;
     let staker = new_funded_address(&env, &s, amount);
     let ben = Address::generate(&env);
-    let result = s.client.try_stake(&staker, &amount, &ben);
-    assert_eq!(result, Err(Ok(PoolError::StakeOutOfRange)));
+    s.client.stake(&staker, &amount, &ben);
+    assert_eq!(s.client.get_stake(&staker).unwrap().amount, MAX_STAKE);
+    assert_eq!(s.client.get_backer(&staker).unwrap().amount, 1);
 }
 
 #[test]

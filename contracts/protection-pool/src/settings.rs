@@ -25,7 +25,7 @@ use crate::error::PoolError;
 use crate::storage;
 use crate::types::{
     APPROVE_WINDOW_SECONDS, BACKER_MATURITY_SECONDS, CLAIM_WINDOW_SECONDS,
-    COLLECTION_INACTIVITY_SECONDS, COOLDOWN_LEDGERS, LEDGERS_PER_DAY, MAX_STAKE_BPS,
+    COLLECTION_INACTIVITY_SECONDS, COOLDOWN_LEDGERS, DRIP_MAX_SECONDS, DRIP_MIN_SECONDS, LEDGERS_PER_DAY, MAX_STAKE_BPS,
     MIN_STAKE_BPS, SECONDS_PER_DAY, TIER_A_RATIO, TIER_B_RATIO, TIER_C_RATIO, TIME_GATE_LEDGERS,
     VESTING_LEDGERS, YIELD_SPLIT_BACKER_BPS, YIELD_SPLIT_BPS_DENOMINATOR, YIELD_SPLIT_STAKER_BPS,
 };
@@ -58,7 +58,9 @@ pub enum SettingKey {
     PayoutLowBps = 8,
     PayoutMidBps = 9,
     PayoutHighBps = 10,
-    /// Backer withdrawal notice period, seconds.
+    /// Backer withdrawal notice period, seconds. UNUSED since B1 step 3: the
+    /// daily drip (`DripMinSecs`/`DripMaxSecs`) replaced the notice. Kept so
+    /// the numbering never shifts.
     BackerNoticeSeconds = 11,
     /// Pool cap RAISE. Lowering stays immediate via `set_pool_cap` (a safety
     /// brake); raising after anyone has staked goes through this timelock.
@@ -86,8 +88,12 @@ pub enum SettingKey {
     /// Fixed on the claim when it enters that state.
     ApproveWindowSecs = 21,
     InactivitySecs = 22,
-    /// 2026-10-16: wait before new backing counts toward capacity.
+    /// 2026-10-16: wait before new backing counts toward capacity. Default 0.
     BackerMaturitySecs = 23,
+    /// B1 (rule 12): backer exit drip, seconds. Length runs from `DripMinSecs`
+    /// (idle pool) to `DripMaxSecs` (>= 50% utilisation). Min <= max.
+    DripMinSecs = 24,
+    DripMaxSecs = 25,
 }
 
 /// A proposed change waiting for co-signer approval and/or its timelock.
@@ -126,6 +132,10 @@ const CLAIM_WINDOW_MAX: i128 = 90 * SECONDS_PER_DAY as i128;
 const CLAIM_CLOCK_MIN: i128 = 30 * SECONDS_PER_DAY as i128;
 const CLAIM_CLOCK_MAX: i128 = 365 * SECONDS_PER_DAY as i128;
 const BACKER_MATURITY_MAX: i128 = 7 * SECONDS_PER_DAY as i128;
+const DRIP_MIN_MIN: i128 = SECONDS_PER_DAY as i128;
+const DRIP_MIN_MAX: i128 = 90 * SECONDS_PER_DAY as i128;
+const DRIP_MAX_MIN: i128 = 7 * SECONDS_PER_DAY as i128;
+const DRIP_MAX_MAX: i128 = 180 * SECONDS_PER_DAY as i128;
 
 /// Defaults = the values the pool shipped with, so a fresh deploy behaves
 /// exactly as before until a setting is changed.
@@ -155,6 +165,8 @@ fn default_value(env: &Env, key: SettingKey) -> i128 {
         SettingKey::ApproveWindowSecs => APPROVE_WINDOW_SECONDS as i128,
         SettingKey::InactivitySecs => COLLECTION_INACTIVITY_SECONDS as i128,
         SettingKey::BackerMaturitySecs => BACKER_MATURITY_SECONDS as i128,
+        SettingKey::DripMinSecs => DRIP_MIN_SECONDS as i128,
+        SettingKey::DripMaxSecs => DRIP_MAX_SECONDS as i128,
     }
 }
 
@@ -186,6 +198,8 @@ fn in_bounds(env: &Env, key: SettingKey, value: i128) -> bool {
             (CLAIM_CLOCK_MIN..=CLAIM_CLOCK_MAX).contains(&value)
         }
         SettingKey::BackerMaturitySecs => (0..=BACKER_MATURITY_MAX).contains(&value),
+        SettingKey::DripMinSecs => (DRIP_MIN_MIN..=DRIP_MIN_MAX).contains(&value),
+        SettingKey::DripMaxSecs => (DRIP_MAX_MIN..=DRIP_MAX_MAX).contains(&value),
     }
 }
 
@@ -215,6 +229,8 @@ fn consistent_with_live(env: &Env, key: SettingKey, value: i128) -> bool {
             value <= g(SettingKey::TierARatio) && value >= g(SettingKey::TierCRatio)
         }
         SettingKey::TierCRatio => value <= g(SettingKey::TierBRatio),
+        SettingKey::DripMinSecs => value <= g(SettingKey::DripMaxSecs),
+        SettingKey::DripMaxSecs => value >= g(SettingKey::DripMinSecs),
         _ => true,
     }
 }

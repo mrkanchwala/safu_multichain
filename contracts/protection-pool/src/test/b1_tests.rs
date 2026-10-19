@@ -432,11 +432,107 @@ fn a_shorter_approve_window_does_not_reach_a_claim_already_waiting() {
 fn backer_maturity_is_a_setting() {
     let env = new_env();
     let s = setup(&env);
-    set_setting_via_timelock(&env, &s, K::BackerMaturitySecs, 0);
+    // B1 step 3 (rule 11): default 0, counts at once.
     let backer = Address::generate(&env);
-    s.token_admin.mint(&backer, &MID_STAKE);
+    s.token_admin.mint(&backer, &(2 * MID_STAKE));
     s.client.back(&backer, &MID_STAKE);
-    // Matures at once, no wait.
-    s.client.mature_backing(&backer);
     assert_eq!(s.client.get_total_backed(), MID_STAKE);
+    // Set to a day: the next deposit waits.
+    set_setting_via_timelock(&env, &s, K::BackerMaturitySecs, DAY_SECS);
+    s.client.back(&backer, &MID_STAKE);
+    assert_eq!(s.client.get_total_backed_pending(), MID_STAKE);
+    assert_eq!(s.client.try_mature_backing(&backer), Err(Ok(PoolError::BackingNotMature)));
+}
+
+// -- B1 step 3: stake overflow (rule 4), re-stake (rule 9), drip settings ----
+
+#[test]
+fn a_deposit_above_the_max_stakes_the_max_and_backs_the_rest() {
+    let env = new_env();
+    let s = setup(&env);
+    let extra = 3 * MID_STAKE;
+    let staker = new_funded_address(&env, &s, MAX_STAKE + extra);
+    let ben = Address::generate(&env);
+    s.client.stake(&staker, &(MAX_STAKE + extra), &ben);
+    assert_eq!(s.client.get_stake(&staker).unwrap().amount, MAX_STAKE);
+    assert_eq!(s.client.get_total_staked(), MAX_STAKE);
+    let b = s.client.get_backer(&staker).unwrap();
+    assert_eq!(b.amount, extra, "the rest is backing, counted at once");
+    assert_eq!(s.client.get_capacity(), MAX_STAKE + extra);
+    let token = soroban_sdk::token::TokenClient::new(&env, &s.token_id);
+    assert_eq!(token.balance(&staker), 0, "one transfer for both parts");
+}
+
+#[test]
+fn a_full_pool_refuses_the_whole_deposit() {
+    let env = new_env();
+    let s = setup_with_cap(&env, POOL_CAP);
+    // Fill the pool's staking room to within less than one max stake.
+    let mut room = POOL_CAP - s.client.get_total_staked();
+    while room >= MAX_STAKE {
+        staked_wallet_amount(&env, &s, MAX_STAKE);
+        room = POOL_CAP - s.client.get_total_staked();
+    }
+    let staker = new_funded_address(&env, &s, 2 * MAX_STAKE);
+    let ben = Address::generate(&env);
+    assert_eq!(s.client.try_stake(&staker, &(2 * MAX_STAKE), &ben), Err(Ok(PoolError::PoolCapExceeded)));
+    assert!(s.client.get_backer(&staker).is_none(), "nothing turned into backing");
+}
+
+#[test]
+fn below_the_min_is_still_refused() {
+    let env = new_env();
+    let s = setup(&env);
+    let staker = new_funded_address(&env, &s, MIN_STAKE);
+    let ben = Address::generate(&env);
+    assert_eq!(s.client.try_stake(&staker, &(MIN_STAKE - 1), &ben), Err(Ok(PoolError::StakeOutOfRange)));
+}
+
+#[test]
+fn no_top_ups_even_above_the_max() {
+    let env = new_env();
+    let s = setup(&env);
+    let (staker, ben) = staked_wallet(&env, &s);
+    s.token_admin.mint(&staker, &(2 * MAX_STAKE));
+    assert_eq!(s.client.try_stake(&staker, &(2 * MAX_STAKE), &ben), Err(Ok(PoolError::AlreadyStaked)));
+    assert!(s.client.get_backer(&staker).is_none());
+}
+
+#[test]
+fn restake_rule_new_address_after_a_paid_claim_same_address_otherwise() {
+    // Rule 9 (founder 2026-10-19): after an approved claim the address never
+    // stakes again (the registry keeps its wallets bound to it, so a fresh
+    // address with new wallets is the only way back in). Without a paid
+    // claim, withdraw + stake again works.
+    let env = new_env();
+    let s = setup(&env);
+    let (staker, ben) = staked_wallet(&env, &s);
+    s.client.withdraw(&staker, &ben);
+    s.token_admin.mint(&staker, &MID_STAKE);
+    s.client.stake(&staker, &MID_STAKE, &ben);
+
+    advance_past_time_gate(&env);
+    let id = submit_claim_signed(&env, &s, &s.oracle, &staker, &tx_hash(&env, 1), &(MID_STAKE / 10), &1, &now_ts(&env));
+    s.client.approve_claim(&id);
+    s.token_admin.mint(&staker, &MID_STAKE);
+    assert_eq!(s.client.try_stake(&staker, &MID_STAKE, &ben), Err(Ok(PoolError::AddressHasApprovedClaim)));
+}
+
+#[test]
+fn drip_settings_have_bounds_and_order() {
+    let env = new_env();
+    let s = setup(&env);
+    for (key, bad) in [
+        (K::DripMinSecs, 0),
+        (K::DripMinSecs, 90 * DAY_SECS + 1),
+        (K::DripMaxSecs, 7 * DAY_SECS - 1),
+        (K::DripMaxSecs, 180 * DAY_SECS + 1),
+    ] {
+        assert_eq!(s.client.try_propose_setting(&key, &bad), Err(Ok(PoolError::SettingOutOfBounds)));
+    }
+    // Min above the live max (90 d) is refused at execution.
+    s.client.propose_setting(&K::DripMinSecs, &(90 * DAY_SECS));
+    s.client.approve_setting(&K::DripMinSecs, &(90 * DAY_SECS));
+    set_setting_via_timelock(&env, &s, K::DripMaxSecs, 30 * DAY_SECS);
+    assert_eq!(s.client.try_execute_setting(&K::DripMinSecs), Err(Ok(PoolError::SettingOrderInvalid)));
 }
