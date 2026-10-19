@@ -1,0 +1,4 @@
+# Filters for a mutants-check-* run (one cargo-mutants argument per line).
+-f protection-pool/src/claim.rs
+-f protection-pool/src/storage.rs
+-F 'watch_step|queue_front|queue_waiting|expire_queued|queued_claim_dead|try_release_queued_claim|watch_head|watch_cursor|remove_watch_at|remove_queue_at'

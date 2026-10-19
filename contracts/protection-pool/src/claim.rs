@@ -311,7 +311,7 @@ fn queued_claim_dead(env: &Env, claim_id: &BytesN<32>, claim: &Claim) -> bool {
 /// Moves the head of the line past dead places (marking a dead Reserved
 /// claim Expired and freeing its wallet's queue slot). Returns the claim id
 /// now first in line, if any.
-fn queue_front(env: &Env) -> Option<BytesN<32>> {
+pub(crate) fn queue_front(env: &Env) -> Option<BytesN<32>> {
     let tail = storage::get_queue_tail(env);
     let mut head = storage::get_queue_head(env);
     let start = head;
@@ -448,7 +448,7 @@ fn watch_done(env: &Env, id: &BytesN<32>) -> bool {
 /// check that finds nothing to do only reads. A finished claim's place is
 /// removed; finished places at the front are dropped so the list shrinks.
 /// Returns false when the list is empty.
-fn watch_step(env: &Env) -> bool {
+pub(crate) fn watch_step(env: &Env) -> bool {
     let mut head = storage::get_watch_head(env);
     let tail = storage::get_watch_tail(env);
     if head >= tail {

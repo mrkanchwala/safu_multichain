@@ -11,10 +11,12 @@ name: Mutation testing (manual)
 # Started by pushing a tag (manual dispatch needs the file on main first):
 #   mutants-smoke-<n>  one shard of ~1/50 of the mutants
 #   mutants-full-<n>   20 shards in parallel
+#   mutants-check-<n>  10 shards over only the mutants named in .github/mutants-check.args
+#                      (cargo-mutants -f/-F filters), to re-test a set of misses after new tests
 # Mutants are limited to protection-pool code changed since main.
 on:
   push:
-    tags: ["mutants-smoke-*", "mutants-full-*"]
+    tags: ["mutants-smoke-*", "mutants-full-*", "mutants-check-*"]
 
 env:
   BASE: main
@@ -33,6 +35,8 @@ jobs:
         run: |
           if [ "${{ startsWith(github.ref_name, 'mutants-smoke-') }}" = "true" ]; then
             echo 'shards=[0]' >> "$GITHUB_OUTPUT"; echo 'total=50' >> "$GITHUB_OUTPUT"
+          elif [ "${{ startsWith(github.ref_name, 'mutants-check-') }}" = "true" ]; then
+            echo "shards=$(python3 -c 'print(list(range(10)))')" >> "$GITHUB_OUTPUT"; echo 'total=10' >> "$GITHUB_OUTPUT"
           else
             echo "shards=$(python3 -c 'print(list(range(20)))')" >> "$GITHUB_OUTPUT"; echo 'total=20' >> "$GITHUB_OUTPUT"
           fi
@@ -69,7 +73,13 @@ jobs:
         working-directory: contracts
         run: |
           set +e
-          cargo mutants --package protection-pool --in-diff ../changes.diff \
+          if [ "${{ startsWith(github.ref_name, 'mutants-check-') }}" = "true" ]; then
+            SELECT=$(grep -v '^#' ../.github/mutants-check.args | tr '\n' ' ')
+          else
+            SELECT="--in-diff ../changes.diff"
+          fi
+          echo "select: $SELECT"
+          eval cargo mutants --package protection-pool $SELECT \
             --shard ${{ matrix.shard }}/${{ needs.plan.outputs.total }} -j 2 --output .. \
             -- -- --skip pool_solvency_tests
           echo "cargo-mutants exit: $?"

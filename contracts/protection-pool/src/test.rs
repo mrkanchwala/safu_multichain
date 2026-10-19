@@ -27,6 +27,8 @@ mod governance_tests;
 /// v1 (2026-09-24): in-path two-way rebalancing, plus adversarial stress on
 /// every exit path (can the pull/push be gamed?).
 mod inpath_liquidity_tests;
+/// The claim line and the watch list, step by step against a plain model.
+mod line_and_watch_tests;
 mod mutation_gap_tests;
 mod override_tests;
 /// Pre-audit hardening (2026-09-23): the two `/audit-chain` findings.
