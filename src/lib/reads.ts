@@ -82,6 +82,16 @@ export type MyStake = {
 async function takeableYield(
   claimMethod: string, claimArgs: ReturnType<typeof addr>[], viewMethod: string, owner: string,
 ): Promise<bigint> {
+  // New pool (B1 rule 22): one read-only view, growth included, and it works while a claim is
+  // open. Index 0 = as staker, 1 = as backer. Older pools lack it, so fall through.
+  try {
+    const [asStaker, asBacker] = await readContract<[bigint, bigint]>(
+      poolId(), "get_pending_yield", [addr(owner)],
+    );
+    return claimMethod === "claim_backer_yield" ? asBacker : asStaker;
+  } catch {
+    // older pool
+  }
   try {
     return await readContract<bigint>(poolId(), claimMethod, claimArgs);
   } catch {
