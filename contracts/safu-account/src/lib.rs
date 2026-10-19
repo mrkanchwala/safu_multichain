@@ -264,8 +264,8 @@ impl SafuAccountContract {
         Ok(())
     }
 
-    /// Owner: start the pool's backer notice period for `amount`. Returns
-    /// the earliest completion timestamp.
+    /// Owner: open a backer withdrawal of `amount`, paid by the pool in daily
+    /// parts. Returns the pool's estimate of the last part's day.
     pub fn request_back_withdrawal(env: Env, amount: i128) -> u64 {
         env.current_contract_address().require_auth();
         let me = env.current_contract_address();
@@ -279,8 +279,8 @@ impl SafuAccountContract {
         PoolClient::new(&env, &addr(&env, DataKey::Pool)).cancel_backer_withdrawal(&me);
     }
 
-    /// Owner: complete a backer withdrawal after the notice period and send
-    /// everything home.
+    /// Owner: collect today's part of a backer withdrawal (plus any unpaid
+    /// yield) and send everything home.
     pub fn complete_back_withdrawal_home(env: Env) -> Result<i128, AccountError> {
         env.current_contract_address().require_auth();
         let me = env.current_contract_address();

@@ -13,7 +13,7 @@
 
 #![cfg(test)]
 
-use soroban_sdk::testutils::Address as _;
+use soroban_sdk::testutils::{Address as _, Ledger as _};
 use soroban_sdk::token::TokenClient;
 use soroban_sdk::{Address, Env};
 
@@ -632,4 +632,78 @@ fn a_price_pushed_up_for_a_moment_books_at_most_the_daily_limit() {
     let rest = s.client.harvest();
     assert!(first + rest >= amount * 99 / 100, "real growth was lost: {}", first + rest);
     assert_full_invariant(&s);
+}
+
+// -----------------------------------------------------------------------
+// The site's pending number equals what is then paid
+// -----------------------------------------------------------------------
+
+#[test]
+fn pending_yield_respects_the_daily_growth_limit() {
+    // Growth far above what one hour may book: the view shows the limit,
+    // exactly as a harvest then books it.
+    let env = new_env();
+    let s = setup(&env);
+    let (staker, _) = staked_wallet(&env, &s);
+    let (vault_id, mock, deployed_amount) = deployed(&env, &s);
+    mock.set_rate_bps(&(10_000 + GAIN_BPS));
+    s.token_admin.mint(&vault_id, &s.client.get_capacity());
+    env.ledger().with_mut(|li| li.timestamp += 3_600);
+    let limit = deployed_amount * HARVEST_MAX_GROWTH_BPS_PER_DAY * 3_600 / (10_000 * 86_400);
+    assert!(limit > 0 && limit < deployed_amount * GAIN_BPS / 10_000, "the limit must bind");
+
+    let (shown, _) = s.client.get_pending_yield(&staker);
+    let booked_growth = s.client.harvest();
+    assert!(booked_growth <= limit && limit - booked_growth <= 1, "harvest {booked_growth}, limit {limit}");
+    let booked = s.client.get_staker_yield_owed(&staker);
+    assert!(booked > 0);
+    assert!(shown - booked <= 1 && booked <= shown, "shown {shown}, booked {booked}");
+}
+
+#[test]
+fn pending_backer_yield_counts_settled_and_live_yield() {
+    let env = new_env();
+    let s = setup(&env);
+    staked_wallet(&env, &s);
+    let b = matured_backer(&env, &s, MID_STAKE);
+    let (vault_id, mock, _) = deployed(&env, &s);
+    grow(&s, &vault_id, &mock, 10_000 + GAIN_BPS);
+    s.client.harvest();
+    // A top-up settles the yield so far into the record.
+    s.token_admin.mint(&b, &MID_STAKE);
+    s.client.back(&b, &MID_STAKE);
+    assert!(s.client.get_backer(&b).unwrap().yield_owed > 0, "nothing settled");
+    grow(&s, &vault_id, &mock, 10_000 + 2 * GAIN_BPS);
+
+    let (_, shown) = s.client.get_pending_yield(&b);
+    s.client.harvest();
+    let paid = s.client.claim_backer_yield(&b);
+    assert!(shown - paid <= 1 && paid <= shown, "shown {shown}, paid {paid}");
+    assert_full_invariant(&s);
+}
+
+#[test]
+fn a_forfeited_stake_shows_no_new_yield() {
+    // Approval keeps `amount` on the record but stops its earning.
+    let env = new_env();
+    let s = setup(&env);
+    let (staker, _) = staked_wallet(&env, &s);
+    let (_other, _) = staked_wallet(&env, &s);
+    let (vault_id, mock, _) = deployed(&env, &s);
+    grow(&s, &vault_id, &mock, 10_000 + GAIN_BPS);
+    s.client.harvest();
+    advance_past_time_gate(&env);
+    let id = submit_claim_signed(
+        &env, &s, &s.oracle, &staker, &tx_hash(&env, 1), &ENTITLEMENT, &TIER_C, &now_ts(&env),
+    );
+    s.client.approve_claim(&id);
+    let owed = s.client.get_staker_yield_owed(&staker);
+    assert!(s.client.get_stake(&staker).unwrap().amount > 0);
+
+    grow(&s, &vault_id, &mock, 10_000 + 2 * GAIN_BPS);
+    assert!(s.client.get_pending_yield(&_other).0 > 0, "the pool still earns");
+    assert_eq!(s.client.get_pending_yield(&staker).0, owed);
+    s.client.harvest();
+    assert_eq!(s.client.get_staker_yield_owed(&staker), owed);
+    assert_eq!(s.client.get_pending_yield(&staker).0, owed);
 }

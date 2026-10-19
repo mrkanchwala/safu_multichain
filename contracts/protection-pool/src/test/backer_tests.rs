@@ -527,3 +527,101 @@ fn yield_on_counted_backer_money_goes_to_backers() {
     assert_eq!(s.client.get_withdrawable_amount(&staker), MID_STAKE + staker_reserved);
     assert_eq!(s.client.get_backer_yield_owed(&backer), backer_reserved);
 }
+
+// -- exact drip accounting ------------------------------------------------
+
+fn open_total(env: &Env, s: &Setup<'_>) -> i128 {
+    env.as_contract(&s.contract_id, || crate::storage::get_total_backer_open(env))
+}
+
+#[test]
+fn the_open_total_follows_every_request_collection_and_cancel() {
+    let env = new_env();
+    let s = setup(&env);
+    let b = matured_backer(&env, &s, BACKING);
+    s.client.request_backer_withdrawal(&b, &BACKING);
+    assert_eq!(open_total(&env, &s), BACKING);
+    let paid = s.client.complete_backer_withdrawal(&b);
+    assert_eq!(paid, BACKING / 7);
+    assert_eq!(open_total(&env, &s), BACKING - paid);
+    s.client.cancel_backer_withdrawal(&b);
+    assert_eq!(open_total(&env, &s), 0);
+}
+
+#[test]
+fn the_days_share_is_exact_and_a_same_day_retry_gets_only_what_is_left() {
+    let env = new_env();
+    let s = setup(&env);
+    // An odd amount of free capital, so the share rounds.
+    let (bs, _) = claim_backed_by(&env, &s, 2, 4 * MID_STAKE + 1);
+    let free = free_capital(&s);
+    assert!(free % 2 == 1 && free < 2 * BACKING, "scenario: odd free capital below both requests: {free}");
+    s.client.request_backer_withdrawal(&bs[0], &BACKING);
+    s.client.request_backer_withdrawal(&bs[1], &BACKING);
+    advance_days(&env, 90);
+    // Half the day's free capital, rounded up.
+    let first = s.client.complete_backer_withdrawal(&bs[0]);
+    assert_eq!(first, (free + 1) / 2);
+    // Later the same day: the share is used up.
+    advance_ledgers(&env, 2);
+    assert_eq!(
+        s.client.try_complete_backer_withdrawal(&bs[0]),
+        Err(Ok(PoolError::NothingToCollectYet))
+    );
+
+    // Next day, new free capital: the share is worked from what is still unpaid.
+    advance_days(&env, 1);
+    staked_wallet(&env, &s);
+    let free2 = free_capital(&s);
+    let open = open_total(&env, &s);
+    let remaining = BACKING - first;
+    let want = (free2 * remaining + open.max(remaining) - 1) / open.max(remaining);
+    assert!(want > 0 && want < free2, "scenario: the share binds");
+    assert_eq!(s.client.complete_backer_withdrawal(&bs[0]), want);
+}
+
+#[test]
+fn capital_allocated_after_the_days_snapshot_cannot_leave() {
+    let env = new_env();
+    let s = setup(&env);
+    let b = matured_backer(&env, &s, BACKING);
+    let other = matured_backer(&env, &s, BACKING);
+    s.client.request_backer_withdrawal(&b, &BACKING);
+    advance_days(&env, 30);
+    // The day's first backer action takes the snapshot: all capital free.
+    s.client.request_backer_withdrawal(&other, &1);
+    // A claim activated later the same day takes every dollar.
+    env.as_contract(&s.contract_id, || {
+        crate::storage::set_total_allocated(&env, crate::storage::get_capacity(&env));
+    });
+    assert_eq!(
+        s.client.try_complete_backer_withdrawal(&b),
+        Err(Ok(PoolError::BackerCapitalNotFree))
+    );
+}
+
+#[test]
+fn principal_and_unpaid_yield_are_both_pulled_from_the_vault() {
+    let env = new_env();
+    let s = setup(&env);
+    let b = matured_backer(&env, &s, BACKING);
+    let (v, mock) = with_vault(&env, &s, 8_000);
+    s.client.deploy_to_vault(&(BACKING * 8_000 / 10_000), &0);
+    mock.set_rate_bps(&11_000);
+    mock.set_deposit_rate_bps(&(10_000 * 10_000 / 11_000));
+    s.token_admin.mint(&v, &BACKING);
+    let_growth_through(&env, 1_000);
+    s.client.harvest();
+    // A top-up settles the yield into the record.
+    s.token_admin.mint(&b, &1);
+    s.client.back(&b, &1);
+    let owed = s.client.get_backer(&b).unwrap().yield_owed;
+    assert!(owed > 0);
+    let amount = s.client.get_backer(&b).unwrap().amount;
+    s.client.request_backer_withdrawal(&b, &amount);
+    advance_days(&env, 7);
+    let token = soroban_sdk::token::TokenClient::new(&env, &s.token_id);
+    assert!(token.balance(&s.contract_id) < amount + owed, "scenario: cash alone is short");
+    assert_eq!(s.client.complete_backer_withdrawal(&b), amount);
+    assert_eq!(token.balance(&b), amount + owed);
+}

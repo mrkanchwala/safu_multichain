@@ -22,6 +22,9 @@ mod d1_signature_tests;
 /// as `d1_signature_tests`: this covers the liquid-vs-deployed accounting
 /// layer and its invariant, not pool mechanics.
 mod d2_vault_tests;
+/// Single-rule edge cases: upgrade version, suspension lapse, points
+/// checkpoints, exit payouts with yield, and the claim day share.
+mod edge_tests;
 /// Pre-audit hardening (2026-09-23): key-loss-safe governance scenarios.
 mod governance_tests;
 /// v1 (2026-09-24): in-path two-way rebalancing, plus adversarial stress on

@@ -36,7 +36,7 @@ jobs:
           if [ "${{ startsWith(github.ref_name, 'mutants-smoke-') }}" = "true" ]; then
             echo 'shards=[0]' >> "$GITHUB_OUTPUT"; echo 'total=50' >> "$GITHUB_OUTPUT"
           elif [ "${{ startsWith(github.ref_name, 'mutants-check-') }}" = "true" ]; then
-            echo "shards=$(python3 -c 'print(list(range(10)))')" >> "$GITHUB_OUTPUT"; echo 'total=10' >> "$GITHUB_OUTPUT"
+            echo "shards=$(python3 -c 'print(list(range(20)))')" >> "$GITHUB_OUTPUT"; echo 'total=20' >> "$GITHUB_OUTPUT"
           else
             echo "shards=$(python3 -c 'print(list(range(20)))')" >> "$GITHUB_OUTPUT"; echo 'total=20' >> "$GITHUB_OUTPUT"
           fi

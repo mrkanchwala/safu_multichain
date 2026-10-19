@@ -335,3 +335,70 @@ fn admission_rate_change_moves_the_daily_cap() {
     assert_ne!(before, lower);
     assert_eq!(s.client.get_setting(&SettingKey::AdmitLowBps), lower);
 }
+
+// -- pause, tier and drip settings ------------------------------------------
+
+/// Proposes, approves and waits out the timelock; returns the execute result.
+fn try_change(env: &soroban_sdk::Env, s: &Setup<'_>, key: SettingKey, value: i128) -> Result<(), PoolError> {
+    s.client.propose_setting(&key, &value);
+    s.client.approve_setting(&key, &value);
+    advance_ledgers(env, TIMELOCK_LEDGERS + 1);
+    match s.client.try_execute_setting(&key) {
+        Ok(_) => Ok(()),
+        Err(Ok(e)) => Err(e),
+        Err(Err(_)) => panic!("host error"),
+    }
+}
+
+#[test]
+fn pause_tier_and_drip_settings_keep_their_bounds_inclusive() {
+    let env = new_env();
+    let s = setup(&env);
+    let d: i128 = 86_400;
+    let cases: [(SettingKey, i128, i128); 6] = [
+        (SettingKey::PauseMaxSecs, d, 30 * d),
+        (SettingKey::PauseGapSecs, 30 * d, 90 * d),
+        (SettingKey::TierARatio, 1, 20),
+        (SettingKey::TierCRatio, 1, 20),
+        (SettingKey::DripMinSecs, d, 90 * d),
+        (SettingKey::DripMaxSecs, 7 * d, 180 * d),
+    ];
+    for (key, lo, hi) in cases {
+        s.client.propose_setting(&key, &lo);
+        s.client.propose_setting(&key, &hi);
+        assert_eq!(s.client.try_propose_setting(&key, &(lo - 1)), Err(Ok(PoolError::SettingOutOfBounds)));
+        assert_eq!(s.client.try_propose_setting(&key, &(hi + 1)), Err(Ok(PoolError::SettingOutOfBounds)));
+    }
+}
+
+#[test]
+fn a_shorter_pause_and_a_longer_gap_are_accepted() {
+    let env = new_env();
+    let s = setup(&env);
+    assert_eq!(try_change(&env, &s, SettingKey::PauseMaxSecs, 86_400), Ok(()));
+    assert_eq!(try_change(&env, &s, SettingKey::PauseGapSecs, 60 * 86_400), Ok(()));
+    assert_eq!(s.client.get_setting(&SettingKey::PauseGapSecs), 60 * 86_400);
+}
+
+#[test]
+fn tier_ratios_keep_their_order_a_then_b_then_c() {
+    let env = new_env();
+    let s = setup(&env);
+    // Defaults: A 15, B 10, C 5. Equal neighbours are allowed.
+    assert_eq!(try_change(&env, &s, SettingKey::TierARatio, 9), Err(PoolError::SettingOrderInvalid));
+    assert_eq!(try_change(&env, &s, SettingKey::TierBRatio, 16), Err(PoolError::SettingOrderInvalid));
+    assert_eq!(try_change(&env, &s, SettingKey::TierBRatio, 4), Err(PoolError::SettingOrderInvalid));
+    assert_eq!(try_change(&env, &s, SettingKey::TierBRatio, 15), Ok(()));
+    assert_eq!(try_change(&env, &s, SettingKey::TierBRatio, 5), Ok(()));
+    assert_eq!(try_change(&env, &s, SettingKey::TierARatio, 5), Ok(()));
+}
+
+#[test]
+fn the_longest_drip_can_never_be_shorter_than_the_shortest() {
+    let env = new_env();
+    let s = setup(&env);
+    let d: i128 = 86_400;
+    assert_eq!(try_change(&env, &s, SettingKey::DripMinSecs, 30 * d), Ok(()));
+    assert_eq!(try_change(&env, &s, SettingKey::DripMaxSecs, 20 * d), Err(PoolError::SettingOrderInvalid));
+    assert_eq!(try_change(&env, &s, SettingKey::DripMaxSecs, 30 * d), Ok(()));
+}

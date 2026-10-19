@@ -505,7 +505,7 @@ pub(crate) fn upkeep(env: &Env) {
 /// claim's own activation snapshot still sets its cap base (the
 /// anti-manipulation guarantee: shrinking the pool after a claim activates
 /// can't slow that claim). Rounded up so no claim is ever owed a zero share.
-fn daily_share(env: &Env, claim: &Claim, day: u32) -> i128 {
+pub(crate) fn daily_share(env: &Env, claim: &Claim, day: u32) -> i128 {
     let (capacity, allocated) = match storage::get_payout_snap(env) {
         Some((d, c, a)) if d == day => (c, a),
         _ => {

@@ -96,6 +96,10 @@ impl Owner {
 }
 
 fn setup_stack(env: &Env) -> Stack<'_> {
+    // Setup deploys and initialises every contract in one test budget; on
+    // chain each is its own transaction. Per-transaction cost is measured
+    // against the live limits in `first_deposit_fits_network_limits`.
+    env.cost_estimate().budget().reset_unlimited();
     env.ledger().with_mut(|li| {
         li.sequence_number = 1_000_000;
         li.timestamp = 1_700_000_000;
@@ -314,14 +318,33 @@ fn second_bridge_in_while_staked_is_held_in_the_same_account() {
     assert_eq!(SafuAccountContractClient::new(&env, &a1).balance(), amount);
 }
 
+/// Over the max: the pool stakes the max and the rest becomes backing.
 #[test]
-fn over_max_is_held_then_owner_stakes_part_of_it() {
+fn over_max_stakes_the_max_and_backs_the_rest() {
     let env = Env::default();
     let s = setup_stack(&env);
     let owner = Owner::evm(0x11);
     let (_, max) = bounds(&s);
     let amount = max + s.c.scale() * 1_000;
     let account = bridge_in(&env, &s, owner.domain(), 1, owner.sender32(&env), amount).unwrap().unwrap();
+    assert_eq!(staked(&s, &account), max);
+    assert_eq!(backed(&s, &account), (amount - max, 0));
+    let acct = SafuAccountContractClient::new(&env, &account);
+    assert_eq!(acct.balance(), 0);
+}
+
+/// Money held in the account (here: a deposit while the pool is paused) is
+/// staked by the owner on request.
+#[test]
+fn held_money_is_staked_by_the_owner() {
+    let env = Env::default();
+    let s = setup_stack(&env);
+    let owner = Owner::evm(0x11);
+    let (_, max) = bounds(&s);
+    let amount = max + s.c.scale() * 1_000;
+    s.pool.pause();
+    let account = bridge_in(&env, &s, owner.domain(), 1, owner.sender32(&env), amount).unwrap().unwrap();
+    s.pool.unpause();
     assert_eq!(staked(&s, &account), 0);
     let acct = SafuAccountContractClient::new(&env, &account);
     assert_eq!(acct.balance(), amount);
@@ -435,6 +458,8 @@ fn evm_account_ignores_hook_data_and_pays_its_owner() {
     let owner = Owner::evm(0x11);
     let (_, max) = bounds(&s);
     let hook = sol_payout_hook(&env, [0x77; 32], 255);
+    // Staked first, so the next deposit is held in the account.
+    bridge_in(&env, &s, owner.domain(), 9, owner.sender32(&env), max).unwrap().unwrap();
     let account =
         bridge_with_hook(&env, &s, &s.adapter, owner.domain(), 1, owner.sender32(&env), max * 2, &hook).unwrap().unwrap();
     let acct = SafuAccountContractClient::new(&env, &account);
@@ -453,9 +478,11 @@ fn solana_payout_account_is_saved_once_from_a_valid_deposit() {
     let owner = Owner::sol(0x22);
     let thief = Owner::sol(0x66);
     let (_, max) = bounds(&s);
-    let held = max * 2; // over max: held, not staked
+    let held = max * 2;
     let unit = s.c.scale();
     let own = sol_payout_hook(&env, owner.sender32(&env), 255);
+    // Staked first, so every later deposit is held in the account.
+    bridge_in(&env, &s, owner.domain(), 9, owner.sender32(&env), max).unwrap().unwrap();
 
     // No hook data: the deposit still lands, but nothing can go home yet.
     let account = bridge_in(&env, &s, owner.domain(), 1, owner.sender32(&env), held).unwrap().unwrap();
@@ -492,6 +519,8 @@ fn remainder_below_one_canonical_unit_stays_for_next_time() {
     let s = setup_stack(&env);
     let owner = Owner::evm(0x11);
     let (_, max) = bounds(&s);
+    // Staked first, so the next deposit is held in the account.
+    bridge_in(&env, &s, owner.domain(), 9, owner.sender32(&env), max).unwrap().unwrap();
     let account = bridge_in(&env, &s, owner.domain(), 1, owner.sender32(&env), max * 2).unwrap().unwrap();
     let dust = s.c.scale() - 1;
     s.c.usdc_admin.mint(&account, &dust);
@@ -565,8 +594,22 @@ fn claim_path_runs_from_a_home_chain_signature_and_pays_home() {
 
 // ---------------------------------------------------------------- backers --
 
+/// (counted, still waiting to count) backing of `account`.
 fn backed(s: &Stack, account: &Address) -> (i128, i128) {
-    s.pool.get_backer(account).map(|r| (r.amount, r.pending_amount)).unwrap_or((0, 0))
+    s.pool
+        .get_backer(account)
+        .map(|r| (r.amount, r.pending.iter().map(|d| d.amount).sum()))
+        .unwrap_or((0, 0))
+}
+
+/// Moves time past every waiting deposit of `account` and counts them.
+/// Backing counts at once by default, so this is usually a no-op.
+fn mature_all(env: &Env, s: &Stack, account: &Address) {
+    let r = s.pool.get_backer(account).unwrap();
+    if let Some(last) = r.pending.iter().map(|d| d.matures_at).max() {
+        env.ledger().with_mut(|li| li.timestamp = last + 1);
+        s.pool.mature_backing(account);
+    }
 }
 
 #[test]
@@ -580,7 +623,7 @@ fn backer_bridge_in_backs_the_pool_from_a_separate_account() {
         bridge_via(&env, &s, &s.backer_adapter, owner.domain(), 1, owner.sender32(&env), amount).unwrap().unwrap();
     assert_eq!(account, s.backer_adapter.account_address(&owner.domain(), &owner.key(&env)));
     assert_ne!(account, s.adapter.account_address(&owner.domain(), &owner.key(&env)));
-    assert_eq!(backed(&s, &account), (0, amount)); // pending until maturity
+    assert_eq!(backed(&s, &account), (amount, 0)); // counts at once by default
     assert_eq!(staked(&s, &account), 0);
     let acct = SafuAccountContractClient::new(&env, &account);
     assert_eq!(acct.mode(), DepositMode::Back);
@@ -603,12 +646,12 @@ fn backer_deposit_while_pool_paused_is_held_then_backed_by_owner() {
     s.pool.unpause();
     env.set_auths(&[owner_auth(&env, &account, &owner, 1, &account, "back_held", (amount,).into_val(&env))]);
     acct.back_held(&amount);
-    assert_eq!(backed(&s, &account), (0, amount));
+    assert_eq!(backed(&s, &account), (amount, 0));
 }
 
-/// Back -> maturity -> request -> notice -> complete_back_withdrawal_home:
-/// the full amount burns to the owner's home address. Timings come from the
-/// pool's own record and setting.
+/// Back -> request -> daily drip -> complete_back_withdrawal_home each day:
+/// every part burns to the owner's home address until the full amount is
+/// out.
 #[test]
 fn backer_withdrawal_runs_from_a_home_chain_signature_and_pays_home() {
     let env = Env::default();
@@ -619,24 +662,29 @@ fn backer_withdrawal_runs_from_a_home_chain_signature_and_pays_home() {
         bridge_via(&env, &s, &s.backer_adapter, owner.domain(), 1, owner.sender32(&env), amount).unwrap().unwrap();
     let acct = SafuAccountContractClient::new(&env, &account);
 
-    let matures_at = s.pool.get_backer(&account).unwrap().pending_matures_at;
-    env.ledger().with_mut(|li| li.timestamp = matures_at + 1);
-    s.pool.mature_backing(&account);
+    mature_all(&env, &s, &account);
     assert_eq!(backed(&s, &account), (amount, 0));
 
     env.set_auths(&[owner_auth(&env, &account, &owner, 1, &account, "request_back_withdrawal", (amount,).into_val(&env))]);
-    let ready_at = acct.request_back_withdrawal(&amount);
-    assert_eq!(ready_at, s.pool.get_backer(&account).unwrap().withdraw_ready_at);
-    let notice = s.pool.get_setting(&SettingKey::BackerNoticeSeconds) as u64;
-    assert!(ready_at >= env.ledger().timestamp() + notice);
+    let last_day = acct.request_back_withdrawal(&amount);
+    assert!(last_day > env.ledger().timestamp());
 
-    env.ledger().with_mut(|li| li.timestamp = ready_at + 1);
-    env.set_auths(&[owner_auth(
-        &env, &account, &owner, 2, &account, "complete_back_withdrawal_home", ().into_val(&env),
-    )]);
-    assert_eq!(acct.complete_back_withdrawal_home(), amount);
+    // One part a day, each sent home, until the request closes.
+    let mut nonce = 2;
+    let mut days = 0;
+    while s.pool.get_backer(&account).unwrap().withdraw_amount > 0 {
+        env.set_auths(&[owner_auth(
+            &env, &account, &owner, nonce, &account, "complete_back_withdrawal_home", ().into_val(&env),
+        )]);
+        assert!(acct.complete_back_withdrawal_home() > 0);
+        assert!(acct.balance() < s.c.scale(), "each part goes home but a sub-unit remainder");
+        nonce += 1;
+        days += 1;
+        assert!(days <= 90, "drip never ended");
+        env.ledger().with_mut(|li| li.timestamp += 86_400);
+    }
+    assert!(days > 1, "the drip pays in parts");
     assert_eq!(backed(&s, &account), (0, 0));
-    assert_eq!(acct.balance(), 0);
 }
 
 #[test]
@@ -648,9 +696,7 @@ fn backer_can_cancel_a_pending_withdrawal() {
     let account =
         bridge_via(&env, &s, &s.backer_adapter, owner.domain(), 1, owner.sender32(&env), amount).unwrap().unwrap();
     let acct = SafuAccountContractClient::new(&env, &account);
-    let matures_at = s.pool.get_backer(&account).unwrap().pending_matures_at;
-    env.ledger().with_mut(|li| li.timestamp = matures_at + 1);
-    s.pool.mature_backing(&account);
+    mature_all(&env, &s, &account);
     env.set_auths(&[owner_auth(&env, &account, &owner, 1, &account, "request_back_withdrawal", (amount,).into_val(&env))]);
     acct.request_back_withdrawal(&amount);
     env.set_auths(&[owner_auth(&env, &account, &owner, 2, &account, "cancel_back_withdrawal", ().into_val(&env))]);
@@ -668,9 +714,7 @@ fn forged_signature_cannot_withdraw_backing() {
     let account =
         bridge_via(&env, &s, &s.backer_adapter, owner.domain(), 1, owner.sender32(&env), amount).unwrap().unwrap();
     let acct = SafuAccountContractClient::new(&env, &account);
-    let matures_at = s.pool.get_backer(&account).unwrap().pending_matures_at;
-    env.ledger().with_mut(|li| li.timestamp = matures_at + 1);
-    s.pool.mature_backing(&account);
+    mature_all(&env, &s, &account);
     let thief = Owner::evm(0x66);
     env.set_auths(&[owner_auth(&env, &account, &thief, 1, &account, "request_back_withdrawal", (amount,).into_val(&env))]);
     assert!(acct.try_request_back_withdrawal(&amount).is_err());
@@ -792,6 +836,8 @@ mod yield_home {
         s.pool.deploy_to_vault(&amount, &0);
         vault.set_rate_bps(&(BPS + GAIN_BPS));
         s.c.usdc_admin.mint(&vault.address, &amount);
+        // The pool books at most 0.1% growth a day: let enough days pass.
+        env.ledger().with_mut(|li| li.timestamp += (GAIN_BPS / 10 + 1) as u64 * 86_400);
         vault
     }
 
@@ -838,9 +884,7 @@ mod yield_home {
             .unwrap()
             .unwrap();
         let acct = SafuAccountContractClient::new(&env, &account);
-        let matures_at = s.pool.get_backer(&account).unwrap().pending_matures_at;
-        env.ledger().with_mut(|li| li.timestamp = matures_at + 1);
-        s.pool.mature_backing(&account);
+        mature_all(&env, &s, &account);
         deploy_and_grow(&env, &s);
         s.pool.harvest();
         let owed = s.pool.get_backer_yield_owed(&account);

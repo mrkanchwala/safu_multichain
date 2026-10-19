@@ -178,6 +178,24 @@ fn the_last_exit_short_by_rounding_is_paid_from_the_reserve() {
 }
 
 #[test]
+fn a_gap_of_exactly_the_cap_paid_by_exactly_that_reserve() {
+    // Both limits are inclusive: a shortfall equal to the cap, met by a
+    // reserve holding exactly that, still pays the exit in full.
+    let env = new_env();
+    let s = setup(&env);
+    let (a, gap) = last_staker_with_vault_loss(&env, &s, 10);
+    assert!(gap > MAX_ROUNDING_DRAW);
+    // Spare cash shrinks the shortfall to exactly the cap.
+    s.token_admin.mint(&s.contract_id, &(gap - MAX_ROUNDING_DRAW));
+    let funder = new_funded_address(&env, &s, MAX_ROUNDING_DRAW);
+    s.client.fund_rounding_reserve(&funder, &MAX_ROUNDING_DRAW);
+    let before = balance(&env, &s, &a.1);
+    s.client.withdraw(&a.0, &a.1);
+    assert_eq!(balance(&env, &s, &a.1) - before, MAX_STAKE);
+    assert_eq!(s.client.get_rounding_reserve(), 0);
+}
+
+#[test]
 fn a_gap_bigger_than_the_draw_cap_still_refuses() {
     let env = new_env();
     let s = setup(&env);
