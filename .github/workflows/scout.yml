@@ -1,0 +1,73 @@
+name: Scout (manual)
+
+# cargo-scout-audit over the contracts workspace. 0.3.16 could not build for wasm32v1-none
+# (soroban-sdk 27 refuses wasm32-unknown-unknown), so it analysed nothing while still printing a
+# "0 findings" row. That row is not a result. The verdict below passes only when the tool exits 0
+# AND its report names analysed contracts with no build failure.
+
+# Started by pushing a tag `scout-<n>` (manual dispatch needs the file on main first).
+on:
+  push:
+    tags: ["scout-*"]
+
+env:
+  SCOUT_VERSION: "0.3.17"
+
+permissions:
+  contents: read
+
+jobs:
+  scout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain in use
+        working-directory: contracts
+        run: rustc --version && cargo --version && cat rust-toolchain.toml
+
+      - name: Install cargo-scout-audit (pinned)
+        id: install
+        run: |
+          set +e
+          cargo install cargo-scout-audit --version "$SCOUT_VERSION" --locked 2>&1 | tee install.log
+          echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Run Scout
+        id: run
+        if: steps.install.outputs.exit_code == '0'
+        working-directory: contracts
+        run: |
+          set +e
+          cargo scout-audit 2>&1 | tee ../scout.log
+          echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+          cargo scout-audit --output-format md 2>&1 | tee -a ../scout.log
+          ls -la *.md report* 2>/dev/null | tee -a ../scout.log
+
+      - name: Verdict (exit code first, then build-failure check)
+        if: always()
+        run: |
+          {
+            echo "install exit: ${{ steps.install.outputs.exit_code }}"
+            echo "scout exit: ${{ steps.run.outputs.exit_code }}"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "${{ steps.install.outputs.exit_code }}" != "0" ]; then
+            echo "NO RESULT: install failed" | tee -a "$GITHUB_STEP_SUMMARY"; exit 1
+          fi
+          if grep -qiE "build failed|could not compile|panicked|error\[E" scout.log; then
+            echo "NO RESULT: a build failed, so any finding counts are vacuous" | tee -a "$GITHUB_STEP_SUMMARY"; exit 1
+          fi
+          if [ "${{ steps.run.outputs.exit_code }}" != "0" ]; then
+            echo "NO CLEAN RESULT: non-zero exit (read scout.log: findings or a tool fault)" | tee -a "$GITHUB_STEP_SUMMARY"; exit 1
+          fi
+          echo "ANALYSED: read the findings table in scout.log" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scout
+          path: |
+            install.log
+            scout.log
+            contracts/*.md

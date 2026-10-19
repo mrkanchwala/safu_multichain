@@ -1,0 +1,94 @@
+name: Mutation testing (manual)
+
+# Runs cargo-mutants over protection-pool code changed since main, split across parallel shards.
+# A smoke tag runs one small shard first to prove the setup produces real results.
+#
+# A run is only real if mutants were CAUGHT and some were built: a setup fault shows up as
+# everything missed with near-zero build times. Read the summary before trusting the numbers.
+# The 3 pool_solvency scenario tests are skipped per mutant (they take ~3 of the suite's ~4
+# minutes); the full suite still runs in CI on main and pull requests.
+
+# Started by pushing a tag (manual dispatch needs the file on main first):
+#   mutants-smoke-<n>  one shard of ~1/50 of the mutants
+#   mutants-full-<n>   20 shards in parallel
+# Mutants are limited to protection-pool code changed since main.
+on:
+  push:
+    tags: ["mutants-smoke-*", "mutants-full-*"]
+
+env:
+  BASE: main
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      shards: ${{ steps.p.outputs.shards }}
+      total: ${{ steps.p.outputs.total }}
+    steps:
+      - id: p
+        run: |
+          if [ "${{ startsWith(github.ref_name, 'mutants-smoke-') }}" = "true" ]; then
+            echo 'shards=[0]' >> "$GITHUB_OUTPUT"; echo 'total=50' >> "$GITHUB_OUTPUT"
+          else
+            echo "shards=$(python3 -c 'print(list(range(20)))')" >> "$GITHUB_OUTPUT"; echo 'total=20' >> "$GITHUB_OUTPUT"
+          fi
+
+  mutants:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.shards) }}
+    name: shard ${{ matrix.shard }}/${{ needs.plan.outputs.total }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Pinned to match contracts/rust-toolchain.toml.
+      - uses: dtolnay/rust-toolchain@1.96.0
+        with:
+          targets: wasm32v1-none
+
+      - name: Install cargo-mutants 27.1.0 (pinned)
+        run: cargo install cargo-mutants --version 27.1.0 --locked
+
+      - name: Diff to mutate
+        run: |
+          git diff --relative=contracts "origin/$BASE...HEAD" -- contracts ':!contracts/*/src/test/*' > changes.diff
+          echo "diff lines: $(wc -l < changes.diff)"
+          [ -s changes.diff ] || { echo "empty diff: nothing to mutate"; exit 1; }
+
+      - name: cargo mutants
+        working-directory: contracts
+        run: |
+          set +e
+          cargo mutants --package protection-pool --in-diff ../changes.diff \
+            --shard ${{ matrix.shard }}/${{ needs.plan.outputs.total }} -j 2 --output .. \
+            -- -- --skip pool_solvency_tests
+          echo "cargo-mutants exit: $?"
+          exit 0
+
+      - name: Summary
+        if: always()
+        run: |
+          d=mutants.out
+          for f in caught missed timeout unviable; do
+            n=$( [ -f $d/$f.txt ] && wc -l < $d/$f.txt || echo none )
+            echo "$f: $n" | tee -a "$GITHUB_STEP_SUMMARY"
+          done
+          [ -s $d/missed.txt ] && { echo '### missed'; cat $d/missed.txt; } >> "$GITHUB_STEP_SUMMARY"
+          # Real-result gate: something must have been caught.
+          [ -s $d/caught.txt ] || { echo "NOTHING CAUGHT: treat this shard as a setup fault" | tee -a "$GITHUB_STEP_SUMMARY"; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mutants-shard-${{ matrix.shard }}
+          path: mutants.out
