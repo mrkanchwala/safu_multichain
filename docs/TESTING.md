@@ -118,17 +118,17 @@ A missed mutant is closed in one of two ways: a test that fails on it, or a writ
 
 ## 4. Static analysis (Scout)
 
-`.github/workflows/scout.yml` runs CoinFabrik's Scout over all five crates, started by a `scout-<n>` tag. Last run `scout-2` (2026-10-19):
+`.github/workflows/scout.yml` runs CoinFabrik's Scout over all five crates, started by a `scout-<n>` tag. Last run `scout-4` (2026-10-20), on the contract code at `6e61cf4`, which is the code under tag `audit-freeze-2026-10-20`:
 
 | Crate | Critical | Medium | Enhancement |
 |---|---|---|---|
-| protection-pool | 192 | 23 | 49 |
+| protection-pool | 196 | 22 | 49 |
 | covered-registry | 0 | 7 | 3 |
 | safu-account | 4 | 4 | 2 |
 | cctp-adapter | 1 | 3 | 2 |
 | cctp-common | 5 | 0 | 1 |
 
-Every "critical" result is the integer-overflow lint. The release profile sets `overflow-checks = true`, so an overflow aborts the call and changes nothing. The medium results are being reviewed one by one, and the outcome goes to the auditor.
+Every "critical" result is the integer-overflow lint. The release profile sets `overflow-checks = true`, so an overflow aborts the call and changes nothing. Every medium result is reviewed in [`SCOUT_TRIAGE.md`](SCOUT_TRIAGE.md); none is open.
 
 ## 5. Backend (632, as of 2026-09-29)
 
