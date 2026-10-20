@@ -9,18 +9,19 @@ behaviour. This is our reasoning, written down so the auditor can check it. Runs
 
 | Mutant | Reason |
 |---|---|
-| `claim.rs` 1103 `!=` → `==` in `try_release_queued_claim` | Defence in depth. A wallet with a queued claim cannot get a second claim: `submit_claim` refuses a stake that already has one queued (`ClaimAlreadyQueued`), and an override that creates one forfeits the stake, which `queued_claim_dead` catches at the top of the same call. Kept so the invariant holds if a later path changes. |
-| `claim.rs` 1111, 1112 `\|\|` → `&&` in `try_release_queued_claim` | The same three conditions (stake still points at this claim, amount above 0, not withdrawn) are checked by `queued_claim_dead` earlier in the same call, against the same storage. |
+| `claim.rs` 1105 `!=` → `==` in `try_release_queued_claim` | Defence in depth. A wallet with a queued claim cannot get a second claim: `submit_claim` refuses a stake that already has one queued (`ClaimAlreadyQueued`), and an override that creates one forfeits the stake, which `queued_claim_dead` catches at the top of the same call. Kept so the invariant holds if a later path changes. |
+| `claim.rs` 1113, 1114 `\|\|` → `&&` in `try_release_queued_claim` | The same three conditions (stake still points at this claim, amount above 0, not withdrawn) are checked by `queued_claim_dead` earlier in the same call, against the same storage. |
 | `backer.rs` 409 guard → `true`, and `>` → `>=` in `collectable_view` | With no open request (`withdraw_amount == 0`), `limits` returns 0 due, so the view returns 0 either way. |
 | `backer.rs` 276:41 `>` → `>=` in `limits` | `owed_all` is at least the request's own unpaid remainder, which is above 0 whenever `limits` runs (a fully paid request is closed first). |
-| `settings.rs` 233, 234: delete the `PauseMaxSecs` / `PauseGapSecs` arms of `consistent_with_live` | The bounds already enforce the rule: a pause is at most 30 days and the gap at least 30 days, so "pause ≤ gap" can never fail. The arms stay in case the bounds change. |
+| `settings.rs` 233: delete the `PauseMaxSecs` arm of `consistent_with_live` | The bounds already enforce the rule: a pause is at most 30 days and the gap at least 30 days, so "pause ≤ gap" can never fail. The arm stays in case the bounds change. (The `PauseGapSecs` arm also checks the filing window now, and a test kills its deletion.) |
 | `backer.rs` 233 `>` → `>=` in `snap_values` | Capacity 0 means nothing is staked or backed, so no backer request exists to read it. |
 
 ## Same result either way
 
 | Mutant | Reason |
 |---|---|
-| `stake.rs` 326 `>` → `>=` in `withdraw` | Banking 0 points adds 0. |
+| `stake.rs` 332 `>` → `>=` in `withdraw` | Banking 0 points adds 0. |
+| `stake.rs` 153 `>` → `>=` in `stake` | Every stake record with amount 0 is also marked withdrawn (a withdrawal, an exit, a fully paid claim), so the second half of the check decides either way. |
 | `backer.rs` 139 `>` → `>=` in `settle_maturity` | With nothing matured, the update writes back the same values. |
 | `vault.rs` 1022, 1027 `>` → `>=` in `credit_yield` | A zero bump adds 0 to the index and 0 to the reserve. |
 | `points.rs` 50 `\|\|` → `&&` in `earned` | An early return. With either condition true, the formula below also gives 0 (zero amount, or no index growth). |
@@ -30,7 +31,7 @@ behaviour. This is our reasoning, written down so the auditor can check it. Runs
 | `claim.rs` 458 `<` → `<=` in `watch_step` | When the cursor equals the head, resetting it to the head changes nothing. |
 | `admin.rs` 160 `>` → `>=` in `pause` | With no earlier pause, the gap check compares against a start of 0, which any real ledger time passes. |
 | `admin.rs` 223:31 `>` → `>=` in `suspend_stake` | For a stake never suspended, `0 + SUSPEND_MAX_SECONDS` is far below any real ledger time, so the check passes either way. |
-| `storage.rs` 795 `>` → `>=` in `get_blocked_secs` | With no pause recorded, both branches give 0 blocked seconds. |
+| `storage.rs` 807 `>` → `>=` in `get_blocked_secs` | With no pause recorded, both branches give 0 blocked seconds. |
 | `lib.rs` 236 `<` → `<=` in `migrate` | At the current version there are no migration steps; running the empty step set again writes the same version. |
 | `lib.rs` 517 `>` → `>=` in `is_eligible` | A stake with amount 0 is always also withdrawn or forfeited, and both already make it ineligible. |
 

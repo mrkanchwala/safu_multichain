@@ -259,6 +259,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "cctp-adapter"
+version = "0.1.0"
+dependencies = [
+ "cctp-common",
+ "soroban-sdk",
+]
+
+[[package]]
+name = "cctp-adapter-fuzz"
+version = "0.0.0"
+dependencies = [
+ "arbitrary",
+ "cctp-adapter",
+ "cctp-common",
+ "ed25519-dalek",
+ "k256",
+ "libfuzzer-sys",
+ "protection-pool",
+ "safu-account",
+ "soroban-sdk",
+]
+
+[[package]]
+name = "cctp-common"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -550,6 +580,7 @@ dependencies = [
  "elliptic-curve",
  "rfc6979",
  "signature",
+ "spki",
 ]
 
 [[package]]
@@ -607,6 +638,7 @@ dependencies = [
  "ff",
  "generic-array",
  "group",
+ "pkcs8",
  "rand_core",
  "sec1",
  "subtle",
@@ -923,7 +955,9 @@ dependencies = [
  "cfg-if",
  "ecdsa",
  "elliptic-curve",
+ "once_cell",
  "sha2",
+ "signature",
 ]
 
 [[package]]
@@ -1116,17 +1150,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "protection-pool-fuzz"
-version = "0.0.0"
-dependencies = [
- "arbitrary",
- "ed25519-dalek",
- "libfuzzer-sys",
- "protection-pool",
- "soroban-sdk",
-]
-
-[[package]]
 name = "quote"
 version = "1.0.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1217,6 +1240,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
+name = "safu-account"
+version = "0.1.0"
+dependencies = [
+ "cctp-common",
+ "soroban-sdk",
+]
+
+[[package]]
 name = "schemars"
 version = "0.8.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1260,6 +1291,7 @@ dependencies = [
  "base16ct",
  "der",
  "generic-array",
+ "pkcs8",
  "subtle",
  "zeroize",
 ]

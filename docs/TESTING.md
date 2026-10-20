@@ -4,7 +4,7 @@ Every suite in this repository: what it proves, how to run it, and where it runs
 
 | Suite | Tests | Where it runs |
 |---|---|---|
-| Soroban contracts | 549 | Build server (CI runs the pool suite) |
+| Soroban contracts | 553 | Build server (CI runs the pool suite) |
 | Contract fuzz targets | 6 | Build server, in a capped Docker container |
 | Mutation testing (cargo-mutants) | sharded runs | GitHub Actions, started by tag |
 | Static analysis (Scout) | all 5 crates | GitHub Actions, started by tag |
@@ -13,7 +13,7 @@ Every suite in this repository: what it proves, how to run it, and where it runs
 | Site (vitest) | 19 | Local and CI |
 | Live testnet end to end (private repository) | 6 staged hacks across 3 chains | Stellar testnet, Sepolia, Solana devnet |
 
-## 1. Soroban contract tests (549)
+## 1. Soroban contract tests (553)
 
 ```bash
 cd contracts
@@ -23,11 +23,11 @@ cargo test -p protection-pool     # the pool only (what CI runs)
 
 The pool suite takes about 4 minutes, most of it in `pool_solvency_tests.rs`. Run it on a build server; it holds 2 to 3 CPU cores for the whole run.
 
-### protection-pool (482)
+### protection-pool (486)
 
 | File | Tests | What it checks |
 |---|---|---|
-| `claim_tests.rs` | 66 | Claim filing, the 90-day queue, the 100-day approval window, suspension, stale-claim expiry, payout streaming |
+| `claim_tests.rs` | 70 | Claim filing, the 90-day queue, the 100-day approval window, suspension, stale-claim expiry, payout streaming |
 | `backer_tests.rs` | 38 | Backing, the optional maturity clock per deposit, the daily withdrawal drip and each day's fair share, money needed by open claims cannot leave, backer yield |
 | `pool_rules_tests.rs` | 34 | The claim line (release in order, a fair share of each day's payout cap), no expiry clock while the pool can't pay, the pause gap, suspensions that lapse, upgrades (two roles, 7 days, storage version and migrate), stake overflow into backing, the rounding reserve |
 | `d1_signature_tests.rs` | 30 | The oracle's Ed25519 signature: every tampered field, wrong contract or key, deadlines, key rotation |
@@ -79,12 +79,12 @@ Last runs, all clean:
 
 | Target | Runs | Date | Code |
 |---|---|---|---|
-| `fuzz_solvency` | 53,143 | 2026-10-19 | `d08eef3` (new pool) |
-| `fuzz_backers` | 34,710 | 2026-10-19 | `d08eef3` (new pool) |
-| `fuzz_override` | 54,222 | 2026-10-19 | `d08eef3` (new pool) |
-| `fuzz_registry` | 24,850 | 2026-09-23 | earlier build; re-run on the audit commit |
-| `fuzz_check_auth` | 262,118 | 2026-09-24 | earlier build; re-run on the audit commit |
-| `fuzz_cctp_flows` | 23,189 | 2026-09-24 | earlier build; re-run on the audit commit |
+| `fuzz_solvency` | 8,269 | 2026-10-20 | `6e61cf4` |
+| `fuzz_backers` | 6,697 | 2026-10-20 | `6e61cf4` |
+| `fuzz_override` | 9,325 | 2026-10-20 | `6e61cf4` |
+| `fuzz_registry` | 9,507 | 2026-10-20 | `6e61cf4` |
+| `fuzz_check_auth` | 42,340 | 2026-10-20 | `6e61cf4` |
+| `fuzz_cctp_flows` | 674 | 2026-10-20 | `6e61cf4`; each run deploys Circle's contracts and the pool, so runs are slow (23,189 runs on 2026-09-24, earlier build) |
 
 ```bash
 cd contracts/protection-pool
@@ -110,6 +110,9 @@ Each shard uploads its caught, missed, timeout and unviable lists as an artifact
 | `mutants-full-1` | `d08eef3` | 876 | 115 | 7 timeouts, 13 unviable |
 | `mutants-check-2` | `999b722` | 375 | 54 | Re-check of every function with a miss, after new tests |
 | `mutants-check-3` | `b1c74ce` | 115 | 7 | Re-check of the functions targeted by the 2026-10-20 tests. The 7 left are explained in `docs/MUTATION_EQUIVALENTS.md` |
+| `mutants-check-4` | `76a7796` | 0 | 0 | The filter matched no mutants (only whole-function replacements exist for `apply`). Covered by hand instead: removing the new writer signature check, or emptying `apply`, fails the governance tests |
+| `mutants-check-5` | `6e61cf4` | 177 | 11 | Functions changed by the 2026-10-20 fixes; 2 timeouts. 7 misses closed with new tests (each confirmed to fail on its mutant); 4 equivalent, explained in `docs/MUTATION_EQUIVALENTS.md` |
+| `mutants-check-6` | pending | | | Re-check of `submit_claim` and `emergency_exit` after the new tests |
 
 A missed mutant is closed in one of two ways: a test that fails on it, or a written reason it cannot change behaviour (equivalent or unreachable). Those reasons are shared with the auditor.
 

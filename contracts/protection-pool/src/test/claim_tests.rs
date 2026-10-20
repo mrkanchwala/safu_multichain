@@ -1349,3 +1349,92 @@ fn staker_yield_the_set_aside_cannot_cover_stays_owed() {
     assert_eq!(s.client.claim_yield(&staker, &ben), 60);
     assert_eq!(s.client.get_stake(&staker).unwrap().yield_owed, 0);
 }
+
+// -----------------------------------------------------------------------
+// 2026-10-20: admission boundaries and the oracle's daily limit, each pinned
+// so a changed comparison fails a test (mutation check-5).
+// -----------------------------------------------------------------------
+
+fn claim_was_queued(env: &soroban_sdk::Env) -> bool {
+    use soroban_sdk::xdr::{ContractEventBody, ScVal};
+    env.events().all().events().iter().any(|e| match &e.body {
+        ContractEventBody::V0(v0) => v0
+            .topics
+            .first()
+            .is_some_and(|t| matches!(t, ScVal::Symbol(sym) if sym.0.as_slice() == b"claim_queued")),
+    })
+}
+
+/// A claim that fills capacity exactly is admitted; one unit more queues.
+#[test]
+fn a_claim_that_fills_capacity_exactly_is_admitted() {
+    let env = new_env();
+    let s = setup(&env);
+    let (w1, _) = staked_wallet(&env, &s);
+    let (w2, _) = staked_wallet(&env, &s);
+    let pool = s.client.address.clone();
+    let set_allocated = |v: i128| env.as_contract(&pool, || crate::storage::set_total_allocated(&env, v));
+    let capacity = s.client.get_capacity();
+    // Small enough that the daily admission cap (lowest at full use) is not
+    // what decides; only the capacity check is on its boundary.
+    let e: i128 = 1_000;
+
+    set_allocated(capacity - e);
+    let id = submit_claim_signed(&env, &s, &s.oracle, &w1, &tx_hash(&env, 1), &e, &TIER_C, &now_ts(&env));
+    assert!(!claim_was_queued(&env), "exactly at capacity must be admitted");
+    assert_ne!(s.client.get_claim(&id).unwrap().status, ClaimStatus::Reserved);
+
+    advance_days(&env, 1); // a fresh day for the oracle's own count
+    set_allocated(capacity - e + 1);
+    let id = submit_claim_signed(&env, &s, &s.oracle, &w2, &tx_hash(&env, 2), &e, &TIER_C, &now_ts(&env));
+    assert_eq!(s.client.get_claim(&id).unwrap().status, ClaimStatus::Reserved);
+}
+
+/// A claim that fills the daily admission cap exactly is admitted.
+#[test]
+fn a_claim_that_fills_the_daily_admission_cap_exactly_is_admitted() {
+    let env = new_env();
+    let s = setup(&env);
+    let (w, _) = staked_wallet(&env, &s);
+    let pool = s.client.address.clone();
+    env.as_contract(&pool, || {
+        let day = (env.ledger().timestamp() / crate::types::SECONDS_PER_DAY) as u32;
+        let cap = crate::claim::stress_cap(&env);
+        crate::storage::set_daily_entitlement(&env, day, cap - ENTITLEMENT, 0);
+    });
+    submit_claim_signed(&env, &s, &s.oracle, &w, &tx_hash(&env, 1), &ENTITLEMENT, &TIER_C, &now_ts(&env));
+    assert!(!claim_was_queued(&env), "exactly at the daily cap must be admitted");
+}
+
+/// The oracle's second claim of the day, with two stakers (limit 1), joins
+/// the line. The same call's upkeep may release it at once, so the line
+/// event is what shows the limit applied.
+#[test]
+fn the_oracles_daily_limit_sends_the_extra_claim_to_the_line() {
+    let env = new_env();
+    let s = setup(&env);
+    let (w1, _) = staked_wallet(&env, &s);
+    let (w2, _) = staked_wallet(&env, &s);
+    submit_claim_signed(&env, &s, &s.oracle, &w1, &tx_hash(&env, 1), &ENTITLEMENT, &TIER_C, &now_ts(&env));
+    assert!(!claim_was_queued(&env));
+    submit_claim_signed(&env, &s, &s.oracle, &w2, &tx_hash(&env, 2), &ENTITLEMENT, &TIER_C, &now_ts(&env));
+    assert!(claim_was_queued(&env), "the second claim of the day must go through the line");
+}
+
+/// Emergency exit also keeps yield the set-aside can't cover yet.
+#[test]
+fn emergency_exit_keeps_yield_the_set_aside_cannot_cover() {
+    let env = new_env();
+    let s = setup(&env);
+    let (staker, _ben) = staked_wallet(&env, &s);
+    let pool = s.client.address.clone();
+    env.as_contract(&pool, || {
+        let mut r = crate::storage::get_stake(&env, &staker).unwrap();
+        r.yield_owed = 100;
+        crate::storage::set_stake(&env, &staker, &r);
+        crate::storage::set_staker_yield_reserved(&env, 40);
+    });
+    s.token_admin.mint(&pool, &100);
+    s.client.emergency_exit(&staker);
+    assert_eq!(s.client.get_stake(&staker).unwrap().yield_owed, 60);
+}

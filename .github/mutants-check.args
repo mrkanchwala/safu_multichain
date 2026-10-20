@@ -1,11 +1,7 @@
 # Filters for a mutants-check-* run (one cargo-mutants argument per line).
-# check-5 (2026-10-20): pre-audit fixes (filing window and pauses, cancel of a
-# part-paid claim, emergency exit lock, staker yield carry, payout address,
-# treasury payout while paused).
--f protection-pool/src/admin.rs
+# check-6 (2026-10-20): re-check of the functions given new tests after
+# check-5 (admission boundaries, the oracle's daily limit, emergency exit
+# yield carry).
 -f protection-pool/src/claim.rs
--f protection-pool/src/settings.rs
 -f protection-pool/src/stake.rs
--f protection-pool/src/storage.rs
--f protection-pool/src/vault.rs
--F 'in (pause|submit_claim|cancel_claim|consistent_with_live|stake|check_beneficiary|set_beneficiary|withdraw|emergency_exit|claim_yield|paused_secs_since|withdraw_yield)$'
+-F 'in (submit_claim|emergency_exit)$'

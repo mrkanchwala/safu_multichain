@@ -52,7 +52,7 @@ One setting picks the network for the whole pool: `SAFU_POOL_NETWORK=testnet` or
 
 | Suite | Tests | Where it runs |
 |---|---|---|
-| Soroban contracts | 549 | Build server (CI runs the pool suite) |
+| Soroban contracts | 553 | Build server (CI runs the pool suite) |
 | Contract fuzz targets | 6 | Build server, in a capped Docker container |
 | Mutation testing (cargo-mutants) | sharded runs | GitHub Actions |
 | Static analysis (Scout) | all 5 crates | GitHub Actions |

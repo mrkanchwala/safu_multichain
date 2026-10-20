@@ -1,4 +1,4 @@
-# Audit scope: SAFU protection pool (Stellar, with the Solana port)
+# Audit scope: SAFU protection pool (Stellar)
 
 Prepared 2026-10-20 for the audit quote. This replaces the earlier scope built on
 `mrkanchwala/safu-soroban` (2,443 lines, the Tranche 3 pool): that pool is wound down and is not
@@ -21,16 +21,13 @@ review the head of `main`. Testnet deployment is due this week.
 Line counts exclude `src/test/`, `fuzz/` and comment/blank lines. The pool WASM is 130,732 bytes against
 the network maximum of 131,072.
 
-## 2. In scope: Solana (Anchor 1.1.2), repository `mrkanchwala/safu_solana`
+## 2. Next phase, for direction only: Solana (Anchor), repository `mrkanchwala/safu_solana`
 
-| Part | Path | Lines | What it does |
-|---|---|---|---|
-| safu_pool program | `programs/safu_pool/src/` | 3,287 | Stake, claims, backers, upkeep, admin, Marinade staking |
-| pool-core | `crates/pool-core/src/` | 700 | Every pool rule as a pure function |
-| **Total** | | **3,987** | |
-
-The Solana pool is being brought to the same rules as the Stellar pool. Its commit is pinned before the
-audit starts; the line count above is the current tree and is the one to quote against for now.
+Not part of this audit request. The Solana pool runs today on devnet with SOL deposits staked through
+Marinade; it has no USDC and no CCTP yet. It is being brought to the same rules as the Stellar pool
+(USDC, deposits from other chains over CCTP, the same claim line, settings and governance) before its
+own audit. For a sense of size only: today's tree is 3,987 lines (program 3,287, shared rule library
+700), and it will grow with that work. A separate scope with a pinned commit follows when it is ready.
 
 ## 3. Out of scope
 
@@ -59,7 +56,7 @@ audit starts; the line count above is the current tree and is the one to quote a
 ## 5. Testing done so far (Stellar pool)
 
 - Unit and integration tests across all five contracts (`docs/TESTING.md`).
-- Fuzzing: solvency, backers and override targets, 142,000 runs, no failures.
+- Fuzzing: six targets across the pool, registry, account and CCTP adapter, no failures (`docs/TESTING.md` section 2).
 - Mutation testing (cargo-mutants, CI): gaps closed with targeted tests; every mutant no test kills is
   listed with its reason in `docs/MUTATION_EQUIVALENTS.md`.
 - Scout (CoinFabrik): run on every crate. The pool's "critical" results are all integer-overflow flags

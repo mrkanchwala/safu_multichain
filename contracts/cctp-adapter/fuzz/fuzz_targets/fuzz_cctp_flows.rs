@@ -149,6 +149,10 @@ fn model_payout(env: &Env, msg: &[u8]) -> Option<[u8; 32]> {
 
 fuzz_target!(|ops: std::vec::Vec<Op>| {
     let env = Env::default();
+    // Setup deploys the pool, the account WASM and two adapters in one test
+    // budget; on a network each is its own transaction. Setup cost is not
+    // what this target tests, so lift the limit before it.
+    env.cost_estimate().budget().reset_unlimited();
     env.ledger().with_mut(|li| {
         li.sequence_number = 1_000_000;
         li.timestamp = 1_700_000_000;
@@ -182,7 +186,6 @@ fuzz_target!(|ops: std::vec::Vec<Op>| {
     let scale = c.scale();
     let max_stake = POOL_CAP * pool.get_setting(&SettingKey::MaxStakeBps) / BPS;
     let max_units = (max_stake / scale) as u32;
-    env.cost_estimate().budget().reset_unlimited();
 
     let owners = [Owner::evm(0x11), Owner::evm(0x12), Owner::sol(0x22), Owner::sol(0x23)];
     let thieves = [Owner::evm(0x66), Owner::sol(0x77)];
