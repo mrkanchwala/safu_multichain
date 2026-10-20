@@ -796,3 +796,23 @@ fn instance_ttl_bumped_to_exact_target_and_rebumped_below_threshold() {
     let ttl_after_second = env.as_contract(&contract_id, || env.storage().instance().get_ttl());
     assert_eq!(ttl_after_second, bump_to);
 }
+
+/// The penalty lock ends on the exact ledger it names: one ledger before,
+/// withdraw is refused; on that ledger, it goes through.
+/// Kills stake.rs:286 (`<` -> `<=` in withdraw).
+#[test]
+fn penalty_lock_ends_on_its_exact_ledger() {
+    let env = new_env();
+    let s = setup(&env);
+    let (staker, ben) = staked_wallet(&env, &s);
+    advance_ledgers(&env, TIME_GATE_LEDGERS);
+    let claim_id = submit_claim_signed(&env, &s, &s.oracle,
+        &staker, &tx_hash(&env, 1), &ENTITLEMENT, &TIER_C, &now_ts(&env),
+    );
+    s.client.approve_claim(&claim_id);
+    s.client.cancel_claim(&claim_id);
+    advance_ledgers(&env, crate::types::PENALTY_LOCK_LEDGERS - 1);
+    assert_eq!(s.client.try_withdraw(&staker, &ben), Err(Ok(PoolError::PenaltyLockActive)));
+    advance_ledgers(&env, 1);
+    assert!(s.client.try_withdraw(&staker, &ben).is_ok());
+}

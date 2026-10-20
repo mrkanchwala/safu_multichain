@@ -44,14 +44,21 @@ line of defence.
   Operational rule: backer capital is lined up once the realised staker hack rate
   exceeds ~3%/yr.
 
-## 2. Adjustable settings instead of an upgrade path
+## 2. Adjustable settings, and an upgrade path behind the same governance (updated 2026-10-20)
 
-No WASM upgrade exists. A fixed set of numbers is adjustable within hard bounds
-(`src/settings.rs`) via admin proposal → co-signer approval of the same value →
-7-day public timelock → execution, with events at every step. Tier ceilings, the
-90-day gate, the 30-day claim window and every funds-movement path are constants.
-Settings a live claim depends on (cooldown, vesting) are fixed on the claim at
-activation. Tests: `src/test/settings_tests.rs`.
+**The pool is upgradable (since 2026-10-16).** A code upgrade is a governance change
+(`GovChange::Upgrade(wasm_hash)`, `src/governance.rs`): one role proposes, a second role approves,
+it waits `GOV_DELAY_SECONDS` (7 days) in public, then anyone executes. An upgrade can never use the
+90-day single-role recovery path. Storage is versioned (`get_storage_version`, `migrate`), so a new
+WASM reads the old entries. Trust limit, stated plainly: **2 of the 3 roles = full control after 7
+days.** Stakers can `emergency_exit` during those 7 days, also while the pool is paused.
+
+**Settings** (`src/settings.rs`): a fixed list of numbers, each inside hard bounds, changes only by
+admin proposal → co-signer approval of the same value → 7-day public timelock → execution, with an
+event at every step. This now includes the tier ceilings (A ≥ B ≥ C, 1x–20x; a cut applies to new
+stakes only, a raise to everyone), the claim time gate (floor 90 days, can only go up) and the claim
+window. Values a stake or claim depends on are snapshotted onto it, so a change never reaches someone
+already in. Tests: `src/test/settings_tests.rs`, `src/test/governance_tests.rs`.
 
 ## 3. Key-loss-safe governance: 2 of 3 roles, 7-day delay, 90-day recovery (design decision, 2026-09-23)
 

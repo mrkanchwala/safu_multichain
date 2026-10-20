@@ -623,5 +623,100 @@ fn principal_and_unpaid_yield_are_both_pulled_from_the_vault() {
     let token = soroban_sdk::token::TokenClient::new(&env, &s.token_id);
     assert!(token.balance(&s.contract_id) < amount + owed, "scenario: cash alone is short");
     assert_eq!(s.client.complete_backer_withdrawal(&b), amount);
+    assert!(emitted(&env, "yield_paid"), "the yield part is announced");
     assert_eq!(token.balance(&b), amount + owed);
+}
+
+// -- 2026-10-20: mutation check-2 gaps -------------------------------------
+
+/// The day's share is rounded up, never more: with free capital that splits
+/// evenly the first collection is exactly half. Kills backer.rs:276:81
+/// (`- 1` -> `/ 1` and `+ 1` in `limits`).
+#[test]
+fn an_even_day_share_is_exact_with_no_extra_unit() {
+    let env = new_env();
+    let s = setup(&env);
+    let (bs, _) = claim_backed_by(&env, &s, 2, 4 * MID_STAKE + 2);
+    let free = free_capital(&s);
+    assert!(free % 2 == 0 && free < 2 * BACKING, "scenario: even free capital below both requests: {free}");
+    s.client.request_backer_withdrawal(&bs[0], &BACKING);
+    s.client.request_backer_withdrawal(&bs[1], &BACKING);
+    advance_days(&env, 90);
+    assert_eq!(s.client.complete_backer_withdrawal(&bs[0]), free / 2);
+}
+
+/// A collection announces matured money and paid yield only when there is
+/// some. Kills backer.rs:392 and :396 (`>` -> `<`, `==`, `>=`).
+#[test]
+fn collect_reports_maturity_only_when_money_matured() {
+    let env = new_env();
+    let s = setup(&env);
+    with_week_maturity(&env, &s);
+    let b = funded_backer(&env, &s, 2 * BACKING);
+    s.client.back(&b, &BACKING);
+    advance_ledgers(&env, WEEK_LEDGERS);
+    s.client.mature_backing(&b);
+    s.client.back(&b, &BACKING); // waits a week
+    s.client.request_backer_withdrawal(&b, &BACKING);
+
+    advance_days(&env, 1);
+    assert!(s.client.complete_backer_withdrawal(&b) > 0);
+    assert!(!emitted(&env, "backing_matured"), "nothing matured on day 1");
+    assert!(!emitted(&env, "yield_paid"), "no yield was owed");
+
+    advance_days(&env, 6);
+    s.client.complete_backer_withdrawal(&b);
+    assert!(emitted(&env, "backing_matured"), "the second deposit matured");
+    assert_eq!(s.client.get_total_backed_pending(), 0);
+}
+
+/// Sets up a backer whose record holds unpaid yield (same route as
+/// `principal_and_unpaid_yield_are_both_pulled_from_the_vault`).
+fn backer_with_yield(env: &Env, s: &Setup<'_>) -> (Address, i128) {
+    let b = matured_backer(env, s, BACKING);
+    let (v, mock) = with_vault(env, s, 8_000);
+    s.client.deploy_to_vault(&(BACKING * 8_000 / 10_000), &0);
+    mock.set_rate_bps(&11_000);
+    mock.set_deposit_rate_bps(&(10_000 * 10_000 / 11_000));
+    s.token_admin.mint(&v, &BACKING);
+    let_growth_through(env, 1_000);
+    s.client.harvest();
+    s.token_admin.mint(&b, &1);
+    s.client.back(&b, &1); // settles the yield into the record
+    let owed = s.client.get_backer(&b).unwrap().yield_owed;
+    assert!(owed > 0);
+    (b, owed)
+}
+
+/// Taking yield clears exactly what was paid, and says so. Kills
+/// backer.rs:431 (`-=` -> `/=`, `+=`) and :435 with matured == 0.
+#[test]
+fn claim_yield_clears_the_owed_yield() {
+    let env = new_env();
+    let s = setup(&env);
+    let (b, owed) = backer_with_yield(&env, &s);
+    let token = soroban_sdk::token::TokenClient::new(&env, &s.token_id);
+    let before = token.balance(&b);
+    assert_eq!(s.client.claim_backer_yield(&b), owed);
+    assert!(emitted(&env, "yield_paid"));
+    assert!(!emitted(&env, "backing_matured"), "nothing was waiting");
+    assert_eq!(s.client.get_backer(&b).unwrap().yield_owed, 0);
+    assert_eq!(token.balance(&b), before + owed);
+    assert_eq!(s.client.try_claim_backer_yield(&b), Err(Ok(PoolError::NoYieldOwed)));
+}
+
+/// Taking yield also counts a deposit whose week is up, and says so.
+/// Kills backer.rs:435 (`>` -> `<`, `==`).
+#[test]
+fn claim_yield_reports_a_deposit_that_matured() {
+    let env = new_env();
+    let s = setup(&env);
+    let (b, _) = backer_with_yield(&env, &s);
+    with_week_maturity(&env, &s);
+    s.token_admin.mint(&b, &BACKING);
+    s.client.back(&b, &BACKING); // waits a week
+    advance_ledgers(&env, WEEK_LEDGERS);
+    s.client.claim_backer_yield(&b);
+    assert!(emitted(&env, "backing_matured"));
+    assert_eq!(s.client.get_total_backed_pending(), 0);
 }

@@ -1,14 +1,6 @@
 # Filters for a mutants-check-* run (one cargo-mutants argument per line).
-# Every function that had a missed mutant in mutants-full-1.
--f protection-pool/src/admin.rs
+# check-3 (2026-10-20): the functions the 2026-10-20 tests target (missed in mutants-check-2).
 -f protection-pool/src/backer.rs
--f protection-pool/src/claim.rs
--f protection-pool/src/lib.rs
--f protection-pool/src/points.rs
 -f protection-pool/src/settings.rs
 -f protection-pool/src/stake.rs
--f protection-pool/src/storage.rs
--f protection-pool/src/vault.rs
--F 'in (pause|suspend_stake|today|settle_maturity|snap_values|limits|collectable|cancel_withdrawal|complete_withdrawal|collectable_view|daily_share|watch_step|queue_front|queue_waiting|expire_queued|queued_claim_dead|try_release_queued_claim|ProtectionPool::migrate|ProtectionPool::is_eligible|earned|consistent_with_live|withdraw|claim_yield|get_blocked_secs|draw_rounding_reserve|index_bumps|credit_yield|harvestable|pending_yield|staker_yield_owed)$'
--F 'get_storage_version|side_of|remove_queue_at|watch_head|watch_cursor|remove_watch_at'
--F 'settings.rs:12[678]:'
+-F 'in (limits|complete_withdrawal|collectable_view|claim_yield|consistent_with_live|withdraw)$'

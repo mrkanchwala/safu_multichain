@@ -402,3 +402,50 @@ fn the_longest_drip_can_never_be_shorter_than_the_shortest() {
     assert_eq!(try_change(&env, &s, SettingKey::DripMaxSecs, 20 * d), Err(PoolError::SettingOrderInvalid));
     assert_eq!(try_change(&env, &s, SettingKey::DripMaxSecs, 30 * d), Ok(()));
 }
+
+#[test]
+fn max_stake_can_never_drop_below_min_stake() {
+    let env = new_env();
+    let s = setup(&env);
+    assert_eq!(try_change(&env, &s, SettingKey::MinStakeBps, 5), Ok(()));
+    assert_eq!(try_change(&env, &s, SettingKey::MaxStakeBps, 4), Err(PoolError::SettingOrderInvalid));
+    assert_eq!(try_change(&env, &s, SettingKey::MaxStakeBps, 5), Ok(()));
+}
+
+/// Each admission and payout band, checked against both neighbours, with
+/// equal neighbours allowed. Defaults: admit 2,500 / 1,000 / 300 and
+/// payout 500 / 300 / 100 (low / mid / high utilisation).
+#[test]
+fn every_rate_band_stays_between_its_neighbours() {
+    use SettingKey::*;
+    let order = Err(PoolError::SettingOrderInvalid);
+    // (key, rejected values, accepted values), each key on a fresh pool.
+    let cases: [(SettingKey, [i128; 2], [i128; 2]); 6] = [
+        (AdmitLowBps, [999, 999], [1_000, 2_500]),
+        (AdmitMidBps, [2_501, 299], [300, 2_500]),
+        (AdmitHighBps, [1_001, 1_001], [1_000, 1]),
+        (PayoutLowBps, [299, 299], [300, 600]),
+        (PayoutMidBps, [501, 99], [100, 500]),
+        (PayoutHighBps, [301, 301], [300, 1]),
+    ];
+    for (key, bad, good) in cases {
+        let env = new_env();
+        let s = setup(&env);
+        for v in bad {
+            if key == AdmitMidBps && v > 2_500 {
+                // Above the low band and out of bounds together: lower the low
+                // band first so only the order rule can refuse it.
+                assert_eq!(try_change(&env, &s, AdmitLowBps, 2_000), Ok(()));
+                assert_eq!(try_change(&env, &s, key, 2_001), order);
+                continue;
+            }
+            assert_eq!(try_change(&env, &s, key, v), order, "{:?} {}", key, v);
+        }
+        for v in good {
+            if key == AdmitMidBps && v == 2_500 {
+                assert_eq!(try_change(&env, &s, AdmitLowBps, 2_500), Ok(()));
+            }
+            assert_eq!(try_change(&env, &s, key, v), Ok(()), "{:?} {}", key, v);
+        }
+    }
+}
