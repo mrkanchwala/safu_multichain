@@ -4,8 +4,8 @@ Prepared 2026-10-20 for the audit quote. This replaces the earlier scope built o
 `mrkanchwala/safu-soroban` (2,443 lines, the Tranche 3 pool): that pool is wound down and is not
 the audit target. The target is the new pool in this repository.
 
-**Branch:** `main`. The exact commit is pinned with a tag once the pool is on testnet; until then,
-review the head of `main`. Testnet deployment is due this week.
+**Commit:** tag `audit-freeze-2026-10-20` (`85b2be5`) on `main`. This commit is deployed on Stellar
+testnet; addresses and WASM hashes are in [TESTNET.md](TESTNET.md).
 
 ## 1. In scope: Stellar (Soroban, Rust, soroban-sdk 27.0.0, `wasm32v1-none`)
 

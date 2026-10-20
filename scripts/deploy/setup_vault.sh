@@ -90,7 +90,9 @@ check "seeder holds shares" "$( [ "$(view "$VAULT" balance --id "$SEEDER_ADDR")"
 [ $fail = 0 ] || stop "read-back failed; vault $VAULT must not be set on the pool"
 
 # --- 4 + 5. Rebalance into Blend, then assert nothing is idle ------------------------------------
-funds() { view "$VAULT" fetch_total_managed_funds | python3 -c '
+# Not view(): it strips every quote, which breaks this JSON (found on the 2026-10-20 testnet run).
+funds() { stellar contract invoke --id "$VAULT" "${N[@]}" --source "$ADMIN_SOURCE" --send=no -- \
+  fetch_total_managed_funds 2>/dev/null | tail -1 | python3 -c '
 import json, sys
 a = json.loads(sys.stdin.read())[0]
 print(a["idle_amount"], a["invested_amount"])'; }

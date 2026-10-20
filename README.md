@@ -2,7 +2,7 @@
 
 One USDC pool on Stellar that pays you back when a wallet you registered is drained, or when a loan in one of those wallets is wrongfully liquidated. Covered wallets can sit on Ethereum, Solana or Stellar. Payouts follow rules set in advance, and nobody votes on a claim.
 
-This is the new version of the pool: adjustable settings, upgrades behind two-of-three governance, a backer withdrawal drip, a first-come claim line and upkeep inside every user call. It goes to testnet first, then to audit. The pool live today at [safustaking.com](https://safustaking.com) is the earlier version (tag `mainnet-build-2026-09-29-r3`), and its stakers move to the new pool after the audit.
+This is the new version of the pool: adjustable settings, upgrades behind two-of-three governance, a backer withdrawal drip, a first-come claim line and upkeep inside every user call. It is on Stellar testnet (tag `audit-freeze-2026-10-20`, addresses in [docs/TESTNET.md](docs/TESTNET.md)) and goes to audit next. The pool live today at [safustaking.com](https://safustaking.com) is the earlier version (tag `mainnet-build-2026-09-29-r3`), and its stakers move to the new pool after the audit.
 
 ## How it works
 
@@ -76,7 +76,7 @@ stellar contract build --package protection-pool   # same for covered-registry, 
 
 ## Status
 
-The earlier version of this pool is live on Stellar mainnet. This version is headed to testnet, then to audit through the Stellar Community Fund's Audit Bank. Neither has had an external audit yet. Known, deliberate design choices are written up for the auditor in [docs/AUDITOR_DISCLOSURES.md](docs/AUDITOR_DISCLOSURES.md), and the threat model is in [docs/STRIDE_THREAT_MODEL.pdf](docs/STRIDE_THREAT_MODEL.pdf).
+The earlier version of this pool is live on Stellar mainnet. This version is on testnet and goes to audit through the Stellar Community Fund's Audit Bank. Neither has had an external audit yet. Known, deliberate design choices are written up for the auditor in [docs/AUDITOR_DISCLOSURES.md](docs/AUDITOR_DISCLOSURES.md), and the threat model is in [docs/STRIDE_THREAT_MODEL.pdf](docs/STRIDE_THREAT_MODEL.pdf).
 
 ## License
 
