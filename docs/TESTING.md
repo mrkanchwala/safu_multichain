@@ -1,17 +1,19 @@
 # Testing
 
-Every suite in this repository: what it proves, how to run it, and where it runs. Counts are from runs on 2026-09-29 at contracts commit `4970bc7`.
+Every suite in this repository: what it proves, how to run it, and where it runs. Contract counts are from 2026-10-20 at commit `b1c74ce` (branch `b1-pool-rework`, the pool going to audit).
 
 | Suite | Tests | Where it runs |
 |---|---|---|
-| Soroban contracts | 442 | VPS (CI runs the pool suite on `main`) |
-| Contract fuzz targets | 6 | VPS, in a capped Docker container |
-| Backend (pytest, private repository) | 632 | VPS |
+| Soroban contracts | 538 | Build server (CI runs the pool suite) |
+| Contract fuzz targets | 6 | Build server, in a capped Docker container |
+| Mutation testing (cargo-mutants) | sharded runs | GitHub Actions, started by tag |
+| Static analysis (Scout) | all 5 crates | GitHub Actions, started by tag |
+| Backend (pytest, private repository) | 632 (2026-09-29) | Build server |
 | EVM (Foundry) | 21 | Local |
-| Site (vitest) | 17 | Local and CI |
+| Site (vitest) | 19 | Local and CI |
 | Live testnet end to end (private repository) | 6 staged hacks across 3 chains | Stellar testnet, Sepolia, Solana devnet |
 
-## 1. Soroban contract tests (442)
+## 1. Soroban contract tests (538)
 
 ```bash
 cd contracts
@@ -19,27 +21,31 @@ cargo test --workspace            # all five crates
 cargo test -p protection-pool     # the pool only (what CI runs)
 ```
 
-The pool suite takes about 6 minutes. Run it on a build server; it holds 2 to 3 CPU cores for the whole run.
+The pool suite takes about 4 minutes, most of it in `pool_solvency_tests.rs`. Run it on a build server; it holds 2 to 3 CPU cores for the whole run.
 
-### protection-pool (380)
+### protection-pool (471)
 
 | File | Tests | What it checks |
 |---|---|---|
 | `claim_tests.rs` | 58 | Claim filing, the 90-day queue, the 100-day approval window, suspension, stale-claim expiry, payout streaming |
-| `backer_tests.rs` | 32 | Backing, the 7-day maturity, the withdrawal notice, money needed by open claims cannot leave |
+| `backer_tests.rs` | 38 | Backing, the optional maturity clock per deposit, the daily withdrawal drip and each day's fair share, money needed by open claims cannot leave, backer yield |
+| `b1_tests.rs` | 34 | The claim line (release in order, a fair share of each day's payout cap), no expiry clock while the pool can't pay, the pause gap, suspensions that lapse, upgrades (two roles, 7 days, storage version and migrate), stake overflow into backing, the rounding reserve |
 | `d1_signature_tests.rs` | 30 | The oracle's Ed25519 signature: every tampered field, wrong contract or key, deadlines, key rotation |
 | `t3_flags_tests.rs` | 29 | Claims queued while capacity is short, and yield accounting |
+| `inpath_liquidity_tests.rs` | 28 | Moving money between pool and vault inside ordinary user calls, including vault failures and theft attempts |
+| `yield_tests.rs` | 27 | Staker and backer yield, taken any time; the pending-yield view; points as dollar-days |
 | `stake_tests.rs` | 27 | Stake bounds, the pool cap, beneficiary rules, withdrawal, emergency exit |
-| `mutation_gap_tests.rs` | 26 | Cases added where mutation testing showed a changed line went unnoticed |
+| `settings_tests.rs` | 27 | Adjustable settings: allowed ranges, the order between related settings, the 7-day timelock, snapshots on stakes and claims |
+| `mutation_gap_tests.rs` | 27 | Cases added where mutation testing showed a changed line went unnoticed |
 | `admin_tests.rs` | 25 | Setup, role changes through governance, the pool cap, pause, stake suspension |
 | `d2_vault_tests.rs` | 25 | Depositing idle funds into the yield vault and withdrawing them |
-| `inpath_liquidity_tests.rs` | 24 | Moving money between pool and vault inside ordinary user calls, including vault failures and theft attempts |
 | `override_tests.rs` | 22 | The two-key override: both keys must agree, and an override can never exceed a tier ceiling |
-| `settings_tests.rs` | 21 | Adjustable settings: allowed ranges and the 7-day timelock |
-| `solvency_tests.rs` | 16 | Tier ceilings, the pool never commits more than it holds, loyalty points, eligibility |
-| `governance_tests.rs` | 13 | Three-role governance: two of three to pass a change, 7-day delay, recovery after a lost key |
+| `solvency_tests.rs` | 16 | Tier ceilings, the pool never commits more than it holds, points, eligibility |
+| `governance_tests.rs` | 15 | Three-role governance: two of three to pass a change, 7-day delay, recovery after a lost key |
 | `t2_mutation_gap_tests.rs` | 12 | More mutation-testing gap cases |
+| `line_and_watch_tests.rs` | 6 | The claim line and the watch list, driven one step at a time over many random layouts against a plain model |
 | `p2_findings_tests.rs` | 6 | Regression tests for two findings from an internal security review |
+| `edge_tests.rs` | 5 | Single rules pinned to their exact boundary |
 | `blend_scenario_tests.rs` | 5 | What the pool does if the Blend lending market behind the vault is exploited |
 | `profiling_tests.rs` | 5 | CPU and memory cost of the heaviest calls, against Soroban's limits |
 | `pool_solvency_tests.rs` | 3 | Solvency under the pool's liquidity model |
@@ -47,11 +53,11 @@ The pool suite takes about 6 minutes. Run it on a build server; it holds 2 to 3 
 
 `common.rs` holds shared setup and has no tests of its own.
 
-### Other contracts (62)
+### Other contracts (67)
 
 | Crate | Tests | What it checks |
 |---|---|---|
-| `cctp-adapter` | 25 | Full CCTP flows against Circle's real CCTP v2 contracts: stake, back, withdraw home, payouts home |
+| `cctp-adapter` | 30 | Full CCTP flows against Circle's real CCTP v2 contracts: stake (with any amount above the maximum going to backing), back, withdraw home, payouts home |
 | `safu-account` | 16 | The account accepts only its owner's own Ethereum or Solana signature |
 | `covered-registry` | 13 | One test per registry rule: a wallet binds to one stake for good, at most 3, only the writer key can add |
 | `cctp-common` | 8 | CCTP message parsing |
@@ -63,7 +69,7 @@ A fuzz target throws long random sequences of actions at a contract and checks a
 | Target | Crate | What must always hold |
 |---|---|---|
 | `fuzz_solvency` | protection-pool | The pool never owes more than it holds, across random stakes, withdrawals, claims, streams, cancels and time jumps |
-| `fuzz_backers` | protection-pool | Every backer's money is accounted for exactly, through the full claim state machine |
+| `fuzz_backers` | protection-pool | Every backer's money is accounted for exactly: waiting deposits, drip-paid withdrawals, stake overflow into backing, the full claim state machine |
 | `fuzz_override` | protection-pool | The two-key override and key rotation never double-pay or leave a stale approval |
 | `fuzz_registry` | covered-registry | The registry always matches a shadow model of its rules, re-read after every action |
 | `fuzz_check_auth` | safu-account | Only the owner's real signature moves money: mutated, foreign or malformed signatures always fail |
@@ -73,12 +79,12 @@ Last runs, all clean:
 
 | Target | Runs | Date | Code |
 |---|---|---|---|
-| `fuzz_solvency` | 18,918 | 2026-09-29 | `4970bc7` (current) |
-| `fuzz_backers` | 14,046 | 2026-09-29 | `4970bc7` (current) |
-| `fuzz_override` | 14,611 | 2026-09-29 | `4970bc7` (current) |
-| `fuzz_registry` | 24,850 | 2026-09-23 | before the vault rebalancing change, which does not touch the registry |
-| `fuzz_check_auth` | 262,118 | 2026-09-24 | before the vault rebalancing change, which does not touch the account |
-| `fuzz_cctp_flows` | 23,189 | 2026-09-24 | before the vault rebalancing change |
+| `fuzz_solvency` | 53,143 | 2026-10-19 | `d08eef3` (new pool) |
+| `fuzz_backers` | 34,710 | 2026-10-19 | `d08eef3` (new pool) |
+| `fuzz_override` | 54,222 | 2026-10-19 | `d08eef3` (new pool) |
+| `fuzz_registry` | 24,850 | 2026-09-23 | earlier build; re-run on the audit commit |
+| `fuzz_check_auth` | 262,118 | 2026-09-24 | earlier build; re-run on the audit commit |
+| `fuzz_cctp_flows` | 23,189 | 2026-09-24 | earlier build; re-run on the audit commit |
 
 ```bash
 cd contracts/protection-pool
@@ -87,7 +93,41 @@ cargo fuzz run fuzz_solvency -- -max_total_time=300
 
 Run fuzzing on a Linux server inside a Docker container with fixed CPU and memory limits. On macOS the address sanitizer crashes before any input runs.
 
-## 3. Backend (632)
+## 3. Mutation testing
+
+`cargo-mutants` changes one operator or line at a time in the pool and checks that some test fails. A change no test notices is a gap. `.github/workflows/mutants.yml` runs it on GitHub Actions, split into parallel shards, started by pushing a tag:
+
+| Tag | What runs |
+|---|---|
+| `mutants-smoke-<n>` | One small shard, to prove the setup gives real results |
+| `mutants-full-<n>` | Every mutant in pool code changed since `main`, 20 shards |
+| `mutants-check-<n>` | Only the functions listed in `.github/mutants-check.args` |
+
+Each shard uploads its caught, missed, timeout and unviable lists as an artifact.
+
+| Run | Code | Caught | Missed | Notes |
+|---|---|---|---|---|
+| `mutants-full-1` | `d08eef3` | 876 | 115 | 7 timeouts, 13 unviable |
+| `mutants-check-2` | `999b722` | 375 | 54 | Re-check of every function with a miss, after new tests |
+| `mutants-check-3` | `b1c74ce` | | | Re-check of the functions targeted by the 2026-10-20 tests |
+
+A missed mutant is closed in one of two ways: a test that fails on it, or a written reason it cannot change behaviour (equivalent or unreachable). Those reasons are shared with the auditor.
+
+## 4. Static analysis (Scout)
+
+`.github/workflows/scout.yml` runs CoinFabrik's Scout over all five crates, started by a `scout-<n>` tag. Last run `scout-2` (2026-10-19):
+
+| Crate | Critical | Medium | Enhancement |
+|---|---|---|---|
+| protection-pool | 192 | 23 | 49 |
+| covered-registry | 0 | 7 | 3 |
+| safu-account | 4 | 4 | 2 |
+| cctp-adapter | 1 | 3 | 2 |
+| cctp-common | 5 | 0 | 1 |
+
+Every "critical" result is the integer-overflow lint. The release profile sets `overflow-checks = true`, so an overflow aborts the call and changes nothing. The medium results are being reviewed one by one, and the outcome goes to the auditor.
+
+## 5. Backend (632, as of 2026-09-29)
 
 The backend lives in a private repository with the scanner and the tier engine, so its tests are listed here without the code. The suite covers:
 
@@ -100,7 +140,7 @@ The backend lives in a private repository with the scanner and the tier engine, 
 - The network switch: a mainnet pool refuses test settings and a testnet scanner
 - Error messages: nothing internal leaks to the user
 
-## 4. EVM (21)
+## 6. EVM (21)
 
 ```bash
 cd contracts-evm
@@ -112,7 +152,7 @@ forge test
 | `MockLendingMarket.t.sol` | 15 | The mock lending market used to stage liquidations on Sepolia |
 | `RegistrySender.t.sol` | 6 | The LayerZero registry sender (earlier design, kept for reference) |
 
-## 5. Site (17)
+## 7. Site (19)
 
 ```bash
 npm install
@@ -123,9 +163,9 @@ npm run lint     # oxlint
 
 `src/lib/friendly-error.test.ts` checks that contract and wallet errors turn into plain-English messages.
 
-## 6. Live testnet end to end
+## 8. Live testnet end to end
 
-These scripts run the real contracts, the real backend and real Circle CCTP against Stellar testnet, Sepolia and Solana devnet. They sit in the private repository with the backend they drive. The fast-build guard below is public.
+These scripts ran the real contracts (the earlier pool build, before this rework), the real backend and real Circle CCTP against Stellar testnet, Sepolia and Solana devnet. They sit in the private repository with the backend they drive. The fast-build guard below is public.
 
 ### Fast build
 

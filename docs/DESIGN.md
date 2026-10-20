@@ -14,7 +14,7 @@ The pool is USDC-denominated. Whatever asset was lost, ETH, USDC, USDT on Ethere
 
 ## Coverage, by tier
 
-A wallet's on-chain history sets its tier, computed off-chain from age and activity, older, quieter wallets score higher. Tier sets a coverage *ceiling*, not a fixed payout:
+A wallet's on-chain history sets its tier, computed off-chain from age and activity: older, quieter wallets score higher. Tier sets a coverage *ceiling*: the payout can be any amount up to it. The defaults are below; each ceiling is a setting between 1x and 20x, with A ≥ B ≥ C. Each stake keeps the ceilings in force on its stake day, and a claim uses the higher of that and the current value, so a cut reaches only new stakes and a raise reaches everyone:
 
 | Tier | Ceiling |
 |---|---|
@@ -22,7 +22,7 @@ A wallet's on-chain history sets its tier, computed off-chain from age and activ
 | B | 10x stake |
 | C | 5x stake |
 
-The actual entitlement is `min(ceiling, real loss)`, capped by the ceiling but never invented above it. Yield later credited to a stake never raises this ceiling, it's anchored to the fixed amount admitted at stake time, which the contract already bounds to a small fraction of the pool cap. Staking is permissionless; anyone can stake any amount inside the bounds, no whitelist.
+The actual entitlement is `min(ceiling, real loss)`, capped by the ceiling but never invented above it. Yield later credited to a stake never raises this ceiling, it's anchored to the fixed amount admitted at stake time, which the contract already bounds to a small fraction of the pool cap. Staking is permissionless: anyone can stake inside the bounds, no whitelist. One stake per address. A deposit above the maximum stake is split: the maximum is staked and the rest becomes backing, which earns yield and is never forfeited. A pool full for stakes refuses the whole deposit.
 
 ## Ownership: who can claim what
 
@@ -44,19 +44,35 @@ The exact comparison window and threshold are not published here, for the same r
 
 ## On-chain and off-chain
 
-| On-chain (fixed at deploy) | Off-chain (Python, changeable) |
+| On-chain (changed only through two roles and 7 days in public) | Off-chain (Python, changeable) |
 |---|---|
 | Tier ceilings (15x / 10x / 5x) | Which wallets are registered to which staker |
 | `entitlement > ceiling` rejection | The wrongful-liquidation price check |
 | Oracle signature verification | Reflector price reads |
-| 90-day time gate, cooldown, vesting | The actual entitlement number |
+| 90-day time gate (can only go up), cooldown, vesting | The actual entitlement number |
 | Solvency and daily outflow caps | Real-loss capping |
 
-The contract never learns what was lost, on which chain, or why the claim was ruled wrongful, it verifies a signed number against a ceiling. Everything that decides *that* number is off-chain and can be corrected without touching the deployed contract.
+The contract never learns what was lost, on which chain, or why the claim was ruled wrongful: it verifies a signed number against a ceiling. Everything that decides *that* number is off-chain and can be corrected without touching the deployed contract.
 
 ## Yield
 
-Staked USDC deploys into a DeFindex vault targeting Blend's USDC pool. Yield on staker money is shared with stakers (all of it by default, an adjustable setting): it compounds into every live staker's own withdrawable balance through a growing index rather than per-user share tokens, which avoids a known share-price manipulation pattern. Yield on backer money goes to the protocol. Nothing auto-transfers the moment it's realised.
+Staked USDC deploys into a DeFindex vault targeting Blend's USDC pool. Yield is simple yield on principal, tracked through a growing index rather than per-user share tokens, which avoids a known share-price manipulation pattern. Stakers and backers each get their share (all of it by default; separate settings for each side). Yield stays in the pool, deployed, until its owner takes it, and is paid in full whenever asked; until then it can serve as cash for claims but never counts as capacity. A claim never takes the claimant's earned yield. Growth on unclaimed yield and on SAFU's own balance is protocol revenue.
+
+## Claims: a line, not a race
+
+When the pool has no room for a claim on a given day (daily admission cap, capacity, or cash), the claim joins a line. Queued claims are released strictly in the order they joined, and a new claim joins the back while anyone waits, even if there is room for it. Each streaming claim gets its own pro-rata share of the day's payout cap, so collecting early in the day takes nothing from anyone else. No expiry clock runs on a day the pool could not pay.
+
+## Backing
+
+Backers add capital without covering wallets. Backing earns yield and counts toward the pool from day one (a maturity delay is available as a setting, default 0). Withdrawal is a daily drip: 7 days when the pool is idle, up to 90 days when it is busy, recomputed daily and shared pro rata between backers. Only capital not needed by open claims can leave.
+
+## No keeper
+
+Every user transaction does a small, capped amount of upkeep: release the head of the claim line if there is room, move due claims forward, clear one or two finished entries, and harvest yield. Nothing depends on a bot or a server job to keep the pool moving.
+
+## Settings and upgrades
+
+About two dozen numbers are adjustable inside hard bounds (stake limits, daily caps, tier ceilings, the claim window and time gate, cooldown, vesting, backer drip, points rates and more). Each change needs a proposal, a second role's approval of the same value, and 7 days in public. The contract can also be upgraded, through the same two roles and 7 days, never through the single-role recovery path. The trust limit is plain: two of the three roles control the pool after 7 days, and stakers can always leave in that window.
 
 ## What is deliberately not covered
 

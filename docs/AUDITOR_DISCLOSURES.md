@@ -14,13 +14,14 @@ protocol's yield share, and backer capital.
 
 **Consequence.** If the pool winds down with no new money, the last withdrawer can
 hit `InsufficientLiquidity` and wait until new stake or backer capital arrives.
-Solvency is enforced on admission (`total_allocated + entitlement <= total_staked`,
-daily admission/payout caps), not by per-staker loss accounting.
+Solvency is enforced on admission (`total_allocated + entitlement <= capacity`, where
+capacity is `total_staked + total_backed`, plus daily admission/payout caps), not by
+per-staker loss accounting.
 
 **Why accepted.** SAFU is designed around liquidity over time: the 90-day gate,
 7-day cooldown, 45-day vesting and the daily payout cap spread every claim out;
-claims queue rather than fail; new stake is always accepted; backers are the last
-line of defence.
+claims queue rather than fail; new stake is accepted up to the pool cap; backers are
+the last line of defence.
 
 **Measured.**
 - Contract tests `src/test/pool_solvency_tests.rs` ($100K cap, 1,000 stakers, 5% APY,
@@ -65,10 +66,11 @@ already in. Tests: `src/test/settings_tests.rs`, `src/test/governance_tests.rs`.
 **Behaviour.** Three roles: admin, co-signer, guardian (`src/governance.rs`). Every
 change that grants power or moves where money goes (the three roles, the oracle
 address + attestation key together, vault, treasury, vault deploy ceiling, the
-registry's writer key) needs one role to propose, a second role to approve the same
+registry's writer key, a code upgrade) needs one role to propose, a second role to approve the same
 change, then 7 days in public (`GOV_DELAY_SECONDS`) before anyone can execute it.
 Cancelling also takes two roles. The role a change replaces never counts: it cannot
-propose, approve or cancel its own replacement.
+propose, approve or cancel its own replacement. A new admin, co-signer, guardian or
+oracle key must sign its own installation, so a mistyped address cannot be installed.
 
 **Last-resort recovery.** If two roles are lost, the remaining one can propose a role
 replacement alone. It waits 90 days (`RECOVERY_DELAY_SECONDS`), and any other role
@@ -85,13 +87,15 @@ own (section 4), so no money is frozen forever.
 
 **Tests.** `src/test/governance_tests.rs`.
 
-## 4. Admin alone can pause the pool and suspend a stake (security review M-1, 2026-09-24: disclose, no change)
+## 4. Admin alone can pause the pool and suspend a stake, within limits (security review M-1, 2026-09-24; limits added 2026-10-16)
 
 **Behaviour.** `pause()` and `suspend_stake()` need the admin only (`src/admin.rs`).
-A pause lasts at most 30 days (`PAUSE_MAX_SECONDS`) and ends on its own, but the admin
-can call `pause()` again with no cooldown. So one admin key, if stolen, can keep the
-pool paused or suspend stakes until the other two roles replace the admin, which
-takes 7 days through governance (section 3).
+A pause lasts at most `PauseMaxSecs` (default 30 days) and ends on its own, and the next
+pause can start only `PauseGapSecs` (at least 30 days) after the last one ended. A
+suspension by the admin alone lapses after 30 days (`SUSPEND_MAX_SECONDS`); suspending
+again within that length needs a second role (`renew_suspension`). So one stolen admin
+key can delay things once, and the other two roles replace the admin in 7 days
+through governance (section 3).
 
 **Consequence.** A stolen admin key can delay stakes, claims and payouts by about 7
 days. It cannot move money, change who gets paid, or raise a payout: while paused,
@@ -138,3 +142,52 @@ keeps that line itself, with no keeper (`src/vault.rs`, module doc rule 3):
 
 **Tests.** `src/test/inpath_liquidity_tests.rs` (incl. adversarial: churn, donations, paused
 bank run, loss during a run, daily-cap bypass, theft of incoming money), `src/test/d2_vault_tests.rs`.
+
+## 6. The claim line: order, never speed (design decision, 2026-10-16)
+
+**Behaviour.** A claim the pool cannot admit today (daily admission cap, capacity, cash, or the
+oracle's daily throttle) joins a line (`src/claim.rs`, `queue_front`, `try_release_queued_claim`).
+Queued claims are released strictly in the order they joined, and a new claim joins the back while
+anyone waits, even if there would be room for it alone. Each streaming claim gets its own pro-rata
+share of the day's payout cap by what it is still owed; an unused share stays vested and carries
+forward. No expiry clock runs on a day the pool could not pay; a queued claim is cleared only once
+its stake is gone.
+
+**Consequence.** A small claim can wait behind a large one. That is the price of a line nobody can
+jump by calling first or by watching the mempool.
+
+**Tests.** `src/test/b1_tests.rs`, `src/test/line_and_watch_tests.rs`.
+
+## 7. Upkeep runs inside user calls, capped (design decision, 2026-10-19)
+
+**Behaviour.** There is no keeper. At the end of every user transaction `upkeep` releases the head
+of the line if there is room, moves due claims forward and clears finished entries from an on-chain
+watch list: at most `UPKEEP_WATCH_PER_CALL` (2) entries per call, skipping at most a fixed number of
+empty slots. Each step checks before it writes and is skipped if it cannot run, so upkeep never fails
+the caller. It is skipped while paused.
+
+**Consequence.** On a quiet day, bookkeeping waits for the next transaction. Nothing a user is owed
+depends on it: the claim functions apply the same due checks themselves.
+
+**Tests.** `src/test/b1_tests.rs`, `src/test/line_and_watch_tests.rs`.
+
+## 8. Rounding reserve (design decision, 2026-10-19)
+
+**Behaviour.** DeFindex locks a small number of shares at a vault's first deposit, and Blend rounds
+by a unit. Either can leave the last staker a few units short. The vault setup script makes the
+first deposit from a separate seeder wallet, so the locked shares are never the pool's. On top of
+that the pool holds a rounding reserve that anyone can fund and nothing can take out: a payment
+still short after the vault pays may draw up to 10,000 units (0.001 USDC) from it. The reserve is not
+pool cash, capacity or treasury surplus.
+
+**Tests.** `src/test/b1_tests.rs`, `src/test/inpath_liquidity_tests.rs`.
+
+## 9. After a paid claim, that address never stakes again (design decision, 2026-10-19)
+
+**Behaviour.** A paid claim forfeits the whole stake, and the address is blocked from staking
+again (`AddressHasApprovedClaim`). To stake again the owner uses a fresh address with new covered
+wallets; points start at zero. Without an approved claim, the same address can withdraw and stake
+again as usual.
+
+**Why.** The covered-wallet registry binds a wallet to its staker for good, and coverage only checks
+for a live stake. A same-address re-stake would cover the drained wallet again.

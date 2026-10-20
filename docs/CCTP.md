@@ -25,9 +25,10 @@ Sepolia).
 backing adapter. The burn names the adapter, so the user's own signed burn
 picks the intent. A user who does both has two separate accounts.
 
-If the pool refuses a deposit (stake bounds, pool full, already staked,
-paused), the USDC waits in the account. It is never lost; the owner can
-`stake_held` / `back_held` it or send it home.
+A stake above the maximum is split by the pool itself: the maximum is staked
+and the rest becomes backing. If the pool refuses a deposit (below the minimum,
+pool full, already staked, paused), the USDC waits in the account. It is never
+lost; the owner can `stake_held` / `back_held` it or send it home.
 
 ## Rules the frontend must follow
 
@@ -40,9 +41,9 @@ paused), the USDC waits in the account. It is never lost; the owner can
    burned. A contract wallet (e.g. a Safe) cannot produce the owner signature,
    so its account could never be used. Check `getCode(address)` is empty before
    allowing the burn.
-3. **Cap the amount live** from the pool's settings (min/max stake, pool cap).
-   Out-of-bounds deposits are held, not lost, but the user should not have to
-   recover them.
+3. **Show the amount split live** from the pool's settings (min/max stake, pool
+   cap): what gets staked, and what goes to backing. Deposits the pool refuses
+   are held, not lost, but the user should not have to recover them.
 4. **Signing format (`address_v2`).** Stellar now issues auth entries with
    `SOROBAN_CREDENTIALS_ADDRESS_V2`, whose signed payload also binds the
    account address (CAP-71). Build the payload with the SDK
@@ -78,13 +79,13 @@ MessageTransmitterV2, `receive_message` on Solana). Someone pays that gas:
 **DECIDED 2026-09-23: Option A.** The frontend hands the user a
 normal `receiveMessage` / `receive_message` transaction on their home chain;
 they approve and pay in their own wallet. No SAFU relayer on this leg, and
-**`safu-solana-relayer` is dropped** , do not create it. Because
+**`safu-solana-relayer` is dropped**: do not create it. Because
 `destinationCaller` is empty here, an abandoned payout is not lost: anyone,
 including SAFU ad hoc, can complete it later.
 
 **The inbound leg is the opposite and stays SAFU-paid.** After Circle attests
 a home-chain burn, a SAFU relayer calls `mint_and_stake` on Stellar and pays
-the XLM fee , the user holds no Stellar key by design. Built in Phase 4
+the XLM fee; the user holds no Stellar key by design. Built in Phase 4
 (Iris poll → `mint_and_stake`).
 
 ## Fees and decimals
