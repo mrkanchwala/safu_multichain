@@ -1,5 +1,5 @@
 # Filters for a mutants-check-* run (one cargo-mutants argument per line).
-# check-6 (2026-10-20): re-check of the functions given new tests after
+# check-7 (2026-10-20): re-check of the functions given new tests after
 # check-5 (admission boundaries, the oracle's daily limit, emergency exit
 # yield carry).
 -f protection-pool/src/claim.rs

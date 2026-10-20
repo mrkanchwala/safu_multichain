@@ -63,7 +63,9 @@ jobs:
       - name: Install cargo-mutants 27.1.0 (pinned)
         run: cargo install cargo-mutants --version 27.1.0 --locked
 
+      # Check runs select by the filter file instead, so they need no diff.
       - name: Diff to mutate
+        if: ${{ !startsWith(github.ref_name, 'mutants-check-') }}
         run: |
           git diff --relative=contracts "origin/$BASE...HEAD" -- contracts ':!contracts/*/src/test/*' > changes.diff
           echo "diff lines: $(wc -l < changes.diff)"
