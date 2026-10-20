@@ -103,6 +103,25 @@ fn max_stake(env: &Env) -> i128 {
     storage::get_pool_cap(env) * crate::settings::get(env, crate::settings::SettingKey::MaxStakeBps) / STAKE_BPS_DENOMINATOR
 }
 
+/// Payout address rules for `stake` and `set_beneficiary`: never a role key,
+/// and never the pool or its vault, where a payout would just stay put
+/// (2026-10-20, as on Solana).
+fn check_beneficiary(env: &Env, beneficiary: &Address) -> Result<(), PoolError> {
+    if beneficiary == &storage::get_oracle(env) {
+        return Err(PoolError::BeneficiaryIsOracle);
+    }
+    if beneficiary == &storage::get_admin(env) {
+        return Err(PoolError::BeneficiaryIsAdmin);
+    }
+    if beneficiary == &storage::get_co_signer(env) {
+        return Err(PoolError::BeneficiaryIsCoSigner);
+    }
+    if beneficiary == &env.current_contract_address() || Some(beneficiary.clone()) == storage::get_vault(env) {
+        return Err(PoolError::BeneficiaryIsPool);
+    }
+    Ok(())
+}
+
 pub fn stake(
     env: &Env,
     staker: &Address,
@@ -128,7 +147,9 @@ pub fn stake(
 
     // V8: require(stakes[msg.sender].amount == 0, "already staked")
     // One active StakeRecord per address, must withdraw before re-staking.
+    let mut carried_yield = 0;
     if let Some(existing) = storage::get_stake(env, staker) {
+        carried_yield = existing.yield_owed;
         if existing.amount > 0 && !existing.withdrawn {
             return Err(PoolError::AlreadyStaked);
         }
@@ -161,15 +182,7 @@ pub fn stake(
     // registry enforces the replacement invariant: a covered wallet can
     // never equal the staker, and beneficiary can never equal a covered
     // wallet: see backend/registry.py.
-    if beneficiary == &storage::get_oracle(env) {
-        return Err(PoolError::BeneficiaryIsOracle);
-    }
-    if beneficiary == &storage::get_admin(env) {
-        return Err(PoolError::BeneficiaryIsAdmin);
-    }
-    if beneficiary == &storage::get_co_signer(env) {
-        return Err(PoolError::BeneficiaryIsCoSigner);
-    }
+    check_beneficiary(env, beneficiary)?;
 
     // Verified 2026-07-14 via `cargo check` against soroban-sdk 27.0.0.
     let beneficiary_hash = env.crypto().sha256(&beneficiary.to_xdr(env)).to_bytes();
@@ -203,7 +216,7 @@ pub fn stake(
         reserved_claim_id: None,
         claim_approved: false,
         points_index_at: crate::points::index(env, crate::points::STAKER),
-        yield_owed: 0,
+        yield_owed: carried_yield,
     };
     storage::set_stake(env, staker, &record);
     storage::set_total_staked(env, total_staked + staked);
@@ -238,15 +251,7 @@ pub fn set_beneficiary(
     staker.require_auth();
 
     // beneficiary == staker ALLOWED here too, same 2026-09-19 decision as stake().
-    if new_beneficiary == &storage::get_oracle(env) {
-        return Err(PoolError::BeneficiaryIsOracle);
-    }
-    if new_beneficiary == &storage::get_admin(env) {
-        return Err(PoolError::BeneficiaryIsAdmin);
-    }
-    if new_beneficiary == &storage::get_co_signer(env) {
-        return Err(PoolError::BeneficiaryIsCoSigner);
-    }
+    check_beneficiary(env, new_beneficiary)?;
 
     let mut record = storage::get_stake(env, staker).ok_or(PoolError::NoStake)?;
     if record.amount <= 0 {
@@ -319,7 +324,8 @@ pub fn withdraw(env: &Env, staker: &Address, beneficiary: &Address) -> Result<()
     // Effects before interaction (CEI).
     record.withdrawn = true;
     record.amount = 0;
-    record.yield_owed = 0;
+    // 2026-10-20: yield the set-aside can't cover yet stays owed.
+    record.yield_owed = owed - paid_yield;
     record.yield_index_at_stake = storage::get_yield_index(env);
     storage::set_stake(env, staker, &record);
 
@@ -372,6 +378,10 @@ pub fn emergency_exit(env: &Env, staker: &Address) -> Result<(), PoolError> {
     if record.reserved_claim_id.is_some() {
         return Err(PoolError::ClaimQueuedForStake);
     }
+    // 2026-10-20: the 365-day lock after a cancelled claim holds here too.
+    if env.ledger().sequence() < record.penalty_locked_until_ledger {
+        return Err(PoolError::PenaltyLockActive);
+    }
 
     let amount = record.amount;
 
@@ -383,12 +393,14 @@ pub fn emergency_exit(env: &Env, staker: &Address) -> Result<(), PoolError> {
     // modifier would leave this path unfundable exactly when it matters).
     // v1: the in-path pull has no pause guard either, for the same reason.
     let owed = record.yield_owed + crate::vault::staker_yield_owed(env, &record);
-    let payout = amount + crate::vault::take_staker_yield(env, owed);
+    let paid_yield = crate::vault::take_staker_yield(env, owed);
+    let payout = amount + paid_yield;
     crate::vault::pull_for_payment(env, payout)?;
 
     record.withdrawn = true;
     record.amount = 0;
-    record.yield_owed = 0;
+    // 2026-10-20: yield the set-aside can't cover yet stays owed.
+    record.yield_owed = owed - paid_yield;
     record.yield_index_at_stake = storage::get_yield_index(env);
     storage::set_stake(env, staker, &record);
 
@@ -433,8 +445,9 @@ pub fn claim_yield(env: &Env, staker: &Address, beneficiary: &Address) -> Result
     }
     crate::vault::pull_for_payment(env, paid)?;
 
-    // Effects before interaction (CEI).
-    record.yield_owed = 0;
+    // Effects before interaction (CEI). Any part the set-aside can't cover
+    // yet stays owed (2026-10-20).
+    record.yield_owed = owed - paid;
     record.yield_index_at_stake = storage::get_yield_index(env);
     storage::set_stake(env, staker, &record);
     storage::bump_instance_ttl(env);

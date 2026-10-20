@@ -1214,6 +1214,8 @@ pub(crate) fn protocol_surplus(env: &Env) -> i128 {
 /// second check is what stops a treasury withdrawal from eating staker
 /// principal that happens to be sitting liquid.
 pub fn withdraw_yield(env: &Env, amount: i128) -> Result<(), PoolError> {
+    // 2026-10-20: no treasury payout while paused (Solana X4).
+    storage::require_not_paused(env)?;
     let admin = storage::get_admin(env);
     admin.require_auth();
 

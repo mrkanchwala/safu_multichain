@@ -449,3 +449,26 @@ fn every_rate_band_stays_between_its_neighbours() {
         }
     }
 }
+
+/// 2026-10-20: the filing window can never be longer than the pause gap,
+/// from either side, so at most one pause falls inside a window.
+#[test]
+fn the_filing_window_never_outlasts_the_pause_gap() {
+    let env = new_env();
+    let s = setup(&env);
+    let day = crate::types::SECONDS_PER_DAY as i128;
+    let try_change = |key: SettingKey, value: i128| {
+        s.client.propose_setting(&key, &value);
+        s.client.approve_setting(&key, &value);
+        advance_ledgers(&env, (SETTINGS_TIMELOCK_SECONDS / SECONDS_PER_LEDGER) as u32 + 1);
+        let r = s.client.try_execute_setting(&key);
+        if r.is_err() {
+            s.client.cancel_setting(&s.client.get_admin(), &key);
+        }
+        r
+    };
+    assert_eq!(try_change(SettingKey::ClaimWindowSecs, 31 * day), Err(Ok(PoolError::SettingOrderInvalid)));
+    assert!(try_change(SettingKey::PauseGapSecs, 60 * day).is_ok());
+    assert!(try_change(SettingKey::ClaimWindowSecs, 60 * day).is_ok());
+    assert_eq!(try_change(SettingKey::PauseGapSecs, 59 * day), Err(Ok(PoolError::SettingOrderInvalid)));
+}

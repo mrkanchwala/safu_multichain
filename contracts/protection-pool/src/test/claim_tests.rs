@@ -1213,3 +1213,139 @@ fn cancel_active_claim_allows_restake_after_penalty_lock() {
     advance_ledgers(&env, PENALTY_LOCK_LEDGERS + 1); // penalty lock clears
     s.client.withdraw(&staker, &ben);
 }
+
+// -----------------------------------------------------------------------
+// 2026-10-20 pre-audit fixes (the Solana pool's X1, X4, X6 and emergency
+// exit rules, brought to this pool)
+// -----------------------------------------------------------------------
+
+/// A pause right after a hack gives the filing window back the paused time.
+#[test]
+fn a_pause_after_a_hack_does_not_use_up_the_filing_window() {
+    let env = new_env();
+    let s = setup(&env);
+    let (staker, _ben) = staked_wallet(&env, &s);
+    let hack_ts = now_ts(&env);
+    advance_days(&env, 1);
+    s.client.pause();
+    advance_days(&env, 31); // the 30-day pause has run out
+    assert!(now_ts(&env) > hack_ts + CLAIM_WINDOW_SECONDS, "past the plain window");
+    let result = try_submit_claim_signed(&env, &s, &s.oracle, &staker, &tx_hash(&env, 1), &ENTITLEMENT, &TIER_C, &hack_ts);
+    assert!(result.is_ok(), "{:?}", result);
+}
+
+/// The window still ends: the plain window plus the paused time, and no more.
+#[test]
+fn the_filing_window_ends_after_the_paused_time_is_given_back() {
+    let env = new_env();
+    let s = setup(&env);
+    let (staker, _ben) = staked_wallet(&env, &s);
+    let hack_ts = now_ts(&env);
+    advance_days(&env, 1);
+    s.client.pause();
+    let paused = 30 * crate::types::SECONDS_PER_DAY;
+    let last_ok = hack_ts + CLAIM_WINDOW_SECONDS + paused;
+    advance_ledgers(&env, ((last_ok - now_ts(&env)) / SECONDS_PER_LEDGER) as u32);
+    assert_eq!(now_ts(&env), last_ok);
+    advance_ledgers(&env, 1);
+    let result = try_submit_claim_signed(&env, &s, &s.oracle, &staker, &tx_hash(&env, 1), &ENTITLEMENT, &TIER_C, &hack_ts);
+    assert_eq!(result, Err(Ok(PoolError::ClaimWindowExpired)));
+}
+
+/// Cancelling a claim that already paid part of itself out gives back only
+/// the rest of the stake.
+#[test]
+fn cancelling_a_partly_paid_claim_takes_the_paid_part_off_the_stake() {
+    let env = new_env();
+    let s = setup(&env);
+    let (staker, ben, claim_id) = active_claim_with_entitlement(&env, &s, ENTITLEMENT);
+    advance_ledgers(&env, COOLDOWN_LEDGERS + VESTING_LEDGERS);
+    let paid = s.client.claim_stream(&claim_id, &ben);
+    assert!(paid > 0 && paid < MID_STAKE, "test needs a part payment");
+    s.client.cancel_claim(&claim_id);
+
+    assert_eq!(s.client.get_stake(&staker).unwrap().amount, MID_STAKE - paid);
+    assert_eq!(s.client.get_total_staked(), MID_STAKE - paid);
+    assert_eq!(s.client.get_total_stakers(), 1);
+}
+
+/// A claim that already paid out the whole stake stays forfeited on cancel.
+#[test]
+fn cancelling_a_claim_paid_up_to_the_stake_leaves_it_forfeited() {
+    let env = new_env();
+    let s = setup(&env);
+    let (staker, _ben, claim_id) = active_claim_with_entitlement(&env, &s, ENTITLEMENT);
+    env.as_contract(&s.client.address, || {
+        let mut c = crate::storage::get_claim(&env, &claim_id).unwrap();
+        c.streamed = c.stake;
+        crate::storage::set_claim(&env, &claim_id, &c);
+    });
+    s.client.cancel_claim(&claim_id);
+
+    let record = s.client.get_stake(&staker).unwrap();
+    assert!(record.withdrawn && record.claim_approved);
+    assert_eq!(s.client.get_total_staked(), 0);
+    assert_eq!(s.client.get_total_stakers(), 0);
+    assert_eq!(s.client.try_emergency_exit(&staker), Err(Ok(PoolError::NoActiveStake)));
+}
+
+/// The 365-day lock after a cancelled claim holds on emergency exit too.
+#[test]
+fn emergency_exit_waits_out_the_penalty_lock() {
+    let env = new_env();
+    let s = setup(&env);
+    let (staker, _ben, claim_id) = active_claim_with_entitlement(&env, &s, ENTITLEMENT);
+    s.client.cancel_claim(&claim_id);
+    assert_eq!(s.client.try_emergency_exit(&staker), Err(Ok(PoolError::PenaltyLockActive)));
+    advance_ledgers(&env, PENALTY_LOCK_LEDGERS - 1);
+    assert_eq!(s.client.try_emergency_exit(&staker), Err(Ok(PoolError::PenaltyLockActive)));
+    advance_ledgers(&env, 1);
+    s.client.emergency_exit(&staker);
+}
+
+/// No treasury payout while the pool is paused.
+#[test]
+fn withdraw_yield_is_refused_while_paused() {
+    let env = new_env();
+    let s = setup(&env);
+    s.client.pause();
+    assert_eq!(s.client.try_withdraw_yield(&1), Err(Ok(PoolError::Paused)));
+}
+
+/// The pool can't be anyone's payout address.
+#[test]
+fn the_pool_cannot_be_a_payout_address() {
+    let env = new_env();
+    let s = setup(&env);
+    let pool = s.client.address.clone();
+    let staker = new_funded_address(&env, &s, MID_STAKE);
+    assert_eq!(s.client.try_stake(&staker, &MID_STAKE, &pool), Err(Ok(PoolError::BeneficiaryIsPool)));
+    let (staker, _ben) = staked_wallet(&env, &s);
+    assert_eq!(s.client.try_set_beneficiary(&staker, &pool), Err(Ok(PoolError::BeneficiaryIsPool)));
+}
+
+/// Staker yield the set-aside can't cover yet stays owed, also after the
+/// stake is withdrawn, and is paid once the set-aside has it.
+#[test]
+fn staker_yield_the_set_aside_cannot_cover_stays_owed() {
+    let env = new_env();
+    let s = setup(&env);
+    let (staker, ben) = staked_wallet(&env, &s);
+    let set_reserve = |v: i128| env.as_contract(&s.client.address, || crate::storage::set_staker_yield_reserved(&env, v));
+    env.as_contract(&s.client.address, || {
+        let mut r = crate::storage::get_stake(&env, &staker).unwrap();
+        r.yield_owed = 100;
+        crate::storage::set_stake(&env, &staker, &r);
+    });
+    // The yield's cash is in the pool, as after a real harvest.
+    s.token_admin.mint(&s.client.address, &100);
+    set_reserve(40);
+    assert_eq!(s.client.claim_yield(&staker, &ben), 40);
+    assert_eq!(s.client.get_stake(&staker).unwrap().yield_owed, 60);
+
+    s.client.withdraw(&staker, &ben);
+    assert_eq!(s.client.get_stake(&staker).unwrap().yield_owed, 60);
+    set_reserve(60);
+    assert_eq!(s.client.claim_yield(&staker, &ben), 60);
+    assert_eq!(s.client.get_stake(&staker).unwrap().yield_owed, 0);
+}

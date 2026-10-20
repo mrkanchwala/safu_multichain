@@ -234,6 +234,9 @@ fn unpausing_early_still_starts_the_gap() {
     s.client.unpause();
     assert_eq!(s.client.try_pause(), Err(Ok(PoolError::PauseGapNotMet)));
     advance_days(&env, 30);
+    // The gap is strict: exactly 30 days after the end is still too soon.
+    assert_eq!(s.client.try_pause(), Err(Ok(PoolError::PauseGapNotMet)));
+    advance_ledgers(&env, 1);
     s.client.pause();
     // Paused time so far: the 1-day pause plus nothing of the new one yet.
     assert_eq!(s.client.get_blocked_secs(), crate::types::SECONDS_PER_DAY);

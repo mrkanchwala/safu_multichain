@@ -231,7 +231,10 @@ fn consistent_with_live(env: &Env, key: SettingKey, value: i128) -> bool {
         SettingKey::PayoutHighBps => value <= g(SettingKey::PayoutMidBps),
         // A pause can never outlast the gap that follows it.
         SettingKey::PauseMaxSecs => value <= g(SettingKey::PauseGapSecs),
-        SettingKey::PauseGapSecs => value >= g(SettingKey::PauseMaxSecs),
+        // 2026-10-20: a filing window never outlasts the pause gap, so at
+        // most one pause falls inside it (`storage::paused_secs_since`).
+        SettingKey::PauseGapSecs => value >= g(SettingKey::PauseMaxSecs) && value >= g(SettingKey::ClaimWindowSecs),
+        SettingKey::ClaimWindowSecs => value <= g(SettingKey::PauseGapSecs),
         SettingKey::TierARatio => value >= g(SettingKey::TierBRatio),
         SettingKey::TierBRatio => {
             value <= g(SettingKey::TierARatio) && value >= g(SettingKey::TierCRatio)

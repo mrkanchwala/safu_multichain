@@ -161,7 +161,8 @@ pub fn pause(env: &Env) -> Result<(), PoolError> {
         // The last pause is over: its end is `paused_until` (set to the
         // unpause time by `unpause`).
         let last_end = storage::get_paused_until(env);
-        if now < last_end + setting(env, SettingKey::PauseGapSecs) as u64 {
+        // Strict (2026-10-20, Solana L3): the gap must be fully over.
+        if now <= last_end + setting(env, SettingKey::PauseGapSecs) as u64 {
             return Err(PoolError::PauseGapNotMet);
         }
         let settled = storage::get_paused_secs_settled(env);

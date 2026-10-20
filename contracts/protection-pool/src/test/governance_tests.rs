@@ -231,6 +231,8 @@ fn pause_ends_on_its_own_and_cannot_be_renewed_back_to_back() {
     // ...and none right after it ends: the gap (30 days) comes first.
     assert_eq!(s.client.try_pause(), Err(Ok(PoolError::PauseGapNotMet)));
     advance_secs(&env, 30 * crate::types::SECONDS_PER_DAY);
+    assert_eq!(s.client.try_pause(), Err(Ok(PoolError::PauseGapNotMet)));
+    advance_secs(&env, SECONDS_PER_LEDGER);
     s.client.pause();
     assert!(s.client.is_paused());
 }

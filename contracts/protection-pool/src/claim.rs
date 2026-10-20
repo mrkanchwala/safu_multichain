@@ -940,7 +940,9 @@ pub fn submit_claim(
     if hack_timestamp < stake_record.staked_at_timestamp {
         return Err(PoolError::HackPredatesStake);
     }
-    if now_ts > hack_timestamp + stake_record.claim_window_secs {
+    // 2026-10-20: time the pool was paused since the hack doesn't count
+    // against the window (no claim can be filed while paused).
+    if now_ts > hack_timestamp + stake_record.claim_window_secs + storage::paused_secs_since(env, hack_timestamp) {
         return Err(PoolError::ClaimWindowExpired);
     }
 
@@ -1536,21 +1538,21 @@ pub fn cancel_claim(env: &Env, claim_id: &BytesN<32>) -> Result<(), PoolError> {
     // submission, and no agency over an admin's own gate-met transition
     // either), nothing to restore, no penalty, just unblock withdrawal
     // below.
-    if claim.status == ClaimStatus::Active {
+    // 2026-10-20: what was already paid out comes off the stake (Solana X6).
+    // A claim paid up to the stake or more leaves it forfeited.
+    let restored = (claim.stake - claim.streamed).max(0);
+    if claim.status == ClaimStatus::Active && restored > 0 {
         stake_record.withdrawn = false;
         // The approval is undone, so the lifetime restake ban lifts with it.
         stake_record.claim_approved = false;
-        // No `stake_record.amount = claim.stake` here, amount was never
-        // zeroed by forfeiture (see activate_claim's doc comment), so
-        // it's already correct; V8's own cancelClaim doesn't touch it
-        // either, confirmed by reading the source directly.
+        stake_record.amount = restored;
         stake_record.penalty_locked_until_ledger = env.ledger().sequence() + PENALTY_LOCK_LEDGERS;
         // r3: the stake was out of `total_staked` while forfeited, so it
         // earns again only from now (code review B2: growth so far is
         // recognised first, for the stakers who were in).
         crate::vault::harvest(env);
         stake_record.yield_index_at_stake = storage::get_yield_index(env);
-        storage::set_total_staked(env, storage::get_total_staked(env) + claim.stake);
+        storage::set_total_staked(env, storage::get_total_staked(env) + restored);
         storage::set_total_stakers(env, storage::get_total_stakers(env) + 1);
     }
 

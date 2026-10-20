@@ -777,6 +777,18 @@ pub fn set_pause_start(env: &Env, value: u64) {
     env.storage().instance().set(&DataKey::PauseStart, &value);
 }
 
+/// Seconds the pool was paused between `from` and now. Only the current or
+/// last pause can fall inside a filing window: the window is never longer
+/// than the gap between pauses (`settings::consistent_with_live`), and no
+/// claim is filed while paused.
+pub fn paused_secs_since(env: &Env, from: u64) -> u64 {
+    if get_pause_start(env) == 0 {
+        return 0;
+    }
+    let now = env.ledger().timestamp();
+    get_paused_until(env).min(now).saturating_sub(get_pause_start(env).max(from))
+}
+
 pub fn get_paused_secs_settled(env: &Env) -> u64 {
     env.storage().instance().get(&DataKey::PausedSecsSettled).unwrap_or(0)
 }

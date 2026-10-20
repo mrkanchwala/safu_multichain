@@ -302,4 +302,6 @@ pub enum PoolError {
     NothingToCollectYet = 134,
     /// A backer already has `MAX_PENDING_DEPOSITS` deposits waiting to count.
     TooManyPendingDeposits = 135,
+    /// The payout address is the pool or its vault.
+    BeneficiaryIsPool = 136,
 }
