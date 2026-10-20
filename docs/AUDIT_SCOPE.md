@@ -43,7 +43,7 @@ the network maximum of 131,072.
 | `docs/CCTP.md` | The cross-chain stake path |
 | `docs/AUDITOR_DISCLOSURES.md` | Known-by-design behaviour, including the governance trust limit (2 of 3 roles = full control after 7 days) |
 | `docs/TESTING.md` | How to build and run every test |
-| STRIDE threat model | Being redone for this pool; sent separately |
+| STRIDE threat model | `docs/STRIDE_THREAT_MODEL.pdf` (2026-10-20, this pool) |
 
 ## 4. Testing done so far
 

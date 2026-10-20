@@ -1,17 +1,18 @@
 # Scout results: review of every medium finding
 
-Run `scout-2` (CoinFabrik Scout, `.github/workflows/scout.yml`), 2026-10-19, on the contract code at
-`ff07e2d`. Later commits change tests, docs and code comments only, so the results still apply.
+Run `scout-4` (CoinFabrik Scout, `.github/workflows/scout.yml`), 2026-10-20, on the contract code at
+`6e61cf4`, after the 2026-10-20 fixes. Later commits change tests, docs and CI only, so the results
+still apply.
 
 | Crate | Critical | Medium | Enhancement |
 |---|---|---|---|
-| protection-pool | 192 | 23 | 49 |
+| protection-pool | 196 | 22 | 49 |
 | covered-registry | 0 | 7 | 3 |
 | safu-account | 4 | 4 | 2 |
 | cctp-adapter | 1 | 3 | 2 |
 | cctp-common | 5 | 0 | 1 |
 
-## Critical: integer overflow (202 results)
+## Critical: integer overflow (206 results)
 
 Every critical result is the `integer-overflow-or-underflow` lint on plain `+`, `-` and `*`. The
 release profile sets `overflow-checks = true` (`contracts/Cargo.toml`), so an overflow aborts the call
@@ -28,7 +29,7 @@ bounds. No change.
 | Unsafe unwrap | adapter `lib.rs` 112, 234, 251 | 3 | Not reachable. Mode, pool and account WASM hash are set in `__constructor`. |
 | Init instead of constructor | pool `admin.rs` 96 | 1 | False positive. `admin::initialize` is an internal function called only from the pool's `__constructor` (`lib.rs`), so setup runs in the deploy transaction itself and cannot be front-run. It also checks `AlreadyInitialized` and requires the admin's signature. |
 | Ineffective extend TTL | pool `storage.rs` 640 | 1 | Intended. A revoked oracle approval is a temporary entry that must live exactly `REVOCATION_TTL_LEDGERS`, set once when it is written. Equal arguments are the point. |
-| Front running | pool `stake.rs` 404, 444; `backer.rs` 441 | 3 | Not applicable. Each is a transfer of the caller's own money (emergency exit, staker yield, backer yield) at an amount the contract computed. No price, no swap, nothing a front-runner can move. |
+| Front running | pool `stake.rs` 457; `backer.rs` 441 | 2 | Not applicable. Each is a transfer of the caller's own money (staker yield, backer yield) at an amount the contract computed. No price, no swap, nothing a front-runner can move. |
 | Missing new admin auth | pool `storage.rs` 209 (`set_admin`) | 1 | Already handled. `set_admin` is a storage helper. Its two callers are `__constructor` (the admin signs) and the governance `apply` step, which calls `require_auth` on the new admin first (`governance.rs`). The same holds for co-signer, guardian and oracle. |
 | DoS: storage without access control | pool `backer.rs` 136, 167 | 2 | Bounded. The pending-deposit list belongs to one backer, needs that backer's signature, and is capped at `MAX_PENDING_DEPOSITS` (8). |
 | DoS: storage without access control | pool `vault.rs` 349, 398, 565, 614, 771, 834, 1091 | 7 | False positive. These `push_back` calls build argument lists for a vault call in memory; nothing is written to storage. |

@@ -76,7 +76,7 @@ stellar contract build --package protection-pool   # same for covered-registry, 
 
 ## Status
 
-The earlier version of this pool is live on Stellar mainnet. This version is headed to testnet, then to audit through the Stellar Community Fund's Audit Bank. Neither has had an external audit yet. Known, deliberate design choices are written up for the auditor in [docs/AUDITOR_DISCLOSURES.md](docs/AUDITOR_DISCLOSURES.md).
+The earlier version of this pool is live on Stellar mainnet. This version is headed to testnet, then to audit through the Stellar Community Fund's Audit Bank. Neither has had an external audit yet. Known, deliberate design choices are written up for the auditor in [docs/AUDITOR_DISCLOSURES.md](docs/AUDITOR_DISCLOSURES.md), and the threat model is in [docs/STRIDE_THREAT_MODEL.pdf](docs/STRIDE_THREAT_MODEL.pdf).
 
 ## License
 
