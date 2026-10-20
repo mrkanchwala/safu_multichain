@@ -131,9 +131,34 @@ export async function disconnect(s: WcSession): Promise<void> {
   await client.disconnect({ topic: s.topic, reason: { code: 6000, message: "User disconnected" } }).catch(() => {});
 }
 
+// A request on a session the phone wallet has dropped (or with the app closed) used to wait
+// silently until WalletConnect's own expiry: the site sat on "Step 1 of 2" with no wallet prompt
+// (Rainbow, mainnet, 2026-10-01). So: check the session, ping the wallet, and cap the wait.
+const PING_MS = 15_000;
+const REQUEST_MS = 3 * 60_000;
+const NOT_ANSWERING =
+  "Your wallet app isn't answering. Open it on your phone and try again. If it still doesn't respond, disconnect, connect again and retry. Nothing was sent.";
+const NO_REPLY =
+  "Your wallet didn't respond within 3 minutes, so we stopped waiting. If you did approve it in the wallet, wait a minute and check your balance before trying again.";
+
+function withTimeout<T>(p: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms);
+  });
+  return Promise.race([p, timeout]).finally(() => clearTimeout(timer));
+}
+
 async function request<T>(s: WcSession, method: string, params: unknown): Promise<T> {
   const { client: c } = await setup();
-  return c.request<T>({ topic: s.topic, chainId: s.chainId, request: { method, params } });
+  const live = c.session.getAll().find((x) => x.topic === s.topic);
+  if (!live || live.expiry * 1000 <= Date.now()) throw new Error(NOT_ANSWERING);
+  try {
+    await withTimeout(c.ping({ topic: s.topic }), PING_MS, NOT_ANSWERING);
+  } catch {
+    throw new Error(NOT_ANSWERING);
+  }
+  return withTimeout(c.request<T>({ topic: s.topic, chainId: s.chainId, request: { method, params } }), REQUEST_MS, NO_REPLY);
 }
 
 /** EVM: forwards an EIP-1193 call (only signing methods are ever sent here). */

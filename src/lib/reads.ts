@@ -122,9 +122,12 @@ export async function readMyStake(_rpc: unknown, owner: string): Promise<MyStake
     | Uint8Array
     | null
     | undefined;
+  const amount = record.amount as bigint;
   return {
-    amount: record.amount as bigint,
-    withdrawable,
+    amount,
+    // The view counts harvested yield only; a withdraw harvests first, so principal + takeable yield
+    // (growth included) is what the staker actually gets.
+    withdrawable: amount + yieldOwed > withdrawable ? amount + yieldOwed : withdrawable,
     yieldOwed,
     activeClaimId: claimBytes ? hexFromBytes(claimBytes) : null,
   };
@@ -218,6 +221,21 @@ export function toRaw(ui: number, decimals: number): bigint {
 }
 
 export const fmtUsdc = (raw: bigint) => fromRaw(raw, USDC_DECIMALS).toFixed(2);
+
+/** Yield is often under a cent, which two decimals would show as 0.00. Below a cent this keeps
+ *  three significant digits (0.0010721 -> 0.00107), never more than the token's 7 decimals. */
+export const fmtYield = (raw: bigint) => {
+  const v = fromRaw(raw, USDC_DECIMALS);
+  if (v === 0 || v >= 0.01) return v.toFixed(2);
+  return v.toFixed(Math.min(USDC_DECIMALS, 2 + Math.ceil(-Math.log10(v))));
+};
+
+/** A balance that includes yield, to the token's full 7 decimals so the yield part shows
+ *  (1.0010721 rather than 1.00); trailing zeros trimmed, never fewer than 2 decimals. */
+export const fmtExact = (raw: bigint) => {
+  const [whole, frac = ""] = fromRaw(raw, USDC_DECIMALS).toFixed(USDC_DECIMALS).split(".");
+  return `${whole}.${frac.replace(/0+$/, "").padEnd(2, "0")}`;
+};
 
 export type MyBacking = {
   amount: bigint; // matured: counts toward capacity

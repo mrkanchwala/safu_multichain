@@ -134,11 +134,11 @@ export async function evmBurnToAdapter(client: AppClient, usdc6: bigint, mode: M
   const allowance = await evmClient.readContract({ address: EVM_USDC as `0x${string}`, abi: ERC20,
     functionName: "allowance", args: [client.address as `0x${string}`, EVM_TOKEN_MESSENGER_V2 as `0x${string}`] });
   if (allowance < usdc6) {
-    onStep("Step 1 of 2: approve USDC in your wallet, then come back to this page.");
+    onStep("Step 1 of 2: approve USDC in your wallet, then come back to this page. Connected by QR code? Open the wallet app on your phone.");
     await evmSend(client, EVM_USDC, encodeFunctionData({
       abi: ERC20, functionName: "approve", args: [EVM_TOKEN_MESSENGER_V2, usdc6] }));
   }
-  onStep(`Step ${allowance < usdc6 ? "2 of 2" : "1 of 1"}: confirm the transfer in your wallet, then come back to this page.`);
+  onStep(`Step ${allowance < usdc6 ? "2 of 2" : "1 of 1"}: confirm the transfer in your wallet, then come back to this page. Connected by QR code? Open the wallet app on your phone.`);
   return evmSend(client, EVM_TOKEN_MESSENGER_V2, encodeFunctionData({
     abi: MESSENGER, functionName: "depositForBurn",
     args: [usdc6, CCTP_DOMAIN.stellar, adapter32, EVM_USDC, adapter32, usdc6 / 1000n, CCTP_FINALITY_FAST],

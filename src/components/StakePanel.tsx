@@ -13,7 +13,7 @@ import {
   solanaBurnToAdapter,
   solanaUsdcBalance,
 } from "../lib/crosschain";
-import { fmtUsdc, readCoveredWallets, readMyStake, readPoolStats, readYieldIndex, rememberCoveredWallet } from "../lib/reads";
+import { fmtExact, fmtUsdc, fmtYield, readCoveredWallets, readMyStake, readPoolStats, readYieldIndex, rememberCoveredWallet } from "../lib/reads";
 import type { CoveredWallet, MyStake } from "../lib/reads";
 import { CHAINS, MAX_STAKE_USDC, MIN_BRIDGEABLE_RAW, MIN_STAKE_USDC, POOL_CAP_USDC, YIELD_INDEX_PRECISION } from "../lib/network";
 import type { ChainId } from "../lib/network";
@@ -31,9 +31,10 @@ import { TxStatus } from "./TxStatus";
 const MAX_COVERED_WALLETS = 3;
 
 function yieldStripPct(withdrawable: bigint, principal: bigint): string {
-  if (principal <= 0n) return "0.00";
-  const bps = ((withdrawable - principal) * 10_000n) / principal;
-  return (Number(bps) / 100).toFixed(2);
+  if (principal <= 0n) return "0.0000";
+  // Four decimals: on a small stake a few days of yield is well under 0.01%.
+  const ppm = ((withdrawable - principal) * 1_000_000n) / principal;
+  return (Number(ppm) / 10_000).toFixed(4);
 }
 
 export function StakePanel() {
@@ -229,7 +230,7 @@ export function StakePanel() {
               <div className="side-stat">
                 <div className="k">Withdrawable now (principal + yield)</div>
                 <div className="v">
-                  {fmtUsdc(myStake.withdrawable)} USDC{" "}
+                  {fmtExact(myStake.withdrawable)} USDC{" "}
                   <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
                     (+{yieldStripPct(myStake.withdrawable, myStake.amount)}%)
                   </span>
@@ -254,7 +255,7 @@ export function StakePanel() {
             disabled={takeYieldAction.isRunning}
             onClick={() => takeYieldAction.dispatch()}
           >
-            {takeYieldAction.isRunning ? "Sending..." : `Take ${fmtUsdc(myStake.yieldOwed)} USDC yield, keep my stake`}
+            {takeYieldAction.isRunning ? "Sending..." : `Take ${fmtYield(myStake.yieldOwed)} USDC yield, keep my stake`}
           </button>
         ) : null}
         <TxStatus action={takeYieldAction} />

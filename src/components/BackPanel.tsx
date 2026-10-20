@@ -10,7 +10,7 @@ import {
   matureBacking,
   requestBackerWithdrawal,
 } from "../lib/actions";
-import { fmtUsdc, readMyBacking, readPoolStats } from "../lib/reads";
+import { fmtUsdc, fmtYield, readMyBacking, readPoolStats } from "../lib/reads";
 import type { MyBacking } from "../lib/reads";
 import { TxStatus } from "./TxStatus";
 import { MIN_BRIDGEABLE_RAW } from "../lib/network";
@@ -153,7 +153,7 @@ export function BackPanel() {
               {backing.yieldOwed > 0n ? (
                 <div className="side-stat">
                   <div className="k">Yield earned</div>
-                  <div className="v">{fmtUsdc(backing.yieldOwed)} USDC</div>
+                  <div className="v">{fmtYield(backing.yieldOwed)} USDC</div>
                 </div>
               ) : null}
               {hasRequest ? (
@@ -205,7 +205,7 @@ export function BackPanel() {
         {backing && backing.yieldOwed >= (crossChain ? MIN_BRIDGEABLE_RAW : 1n) ? (
           <button className="secondary-action" style={{ width: "100%", marginTop: 8 }}
             disabled={takeYieldAction.isRunning} onClick={() => takeYieldAction.dispatch()}>
-            {takeYieldAction.isRunning ? "Sending..." : `Take ${fmtUsdc(backing.yieldOwed)} USDC yield`}
+            {takeYieldAction.isRunning ? "Sending..." : `Take ${fmtYield(backing.yieldOwed)} USDC yield`}
           </button>
         ) : null}
         <TxStatus action={takeYieldAction} />

@@ -1203,3 +1203,50 @@ body {
 .table-scroll + .table-scroll {
   margin-top: 22px;
 }
+
+/* An input directly followed by its button (covered-wallet form) needs a gap. */
+.field-input + .secondary-action {
+  margin-top: 8px;
+}
+
+/* Phone proportions (Tetra feedback, 2026-10-19): the four tabs on one line, logo and wallet button
+   in scale with each other, readable address fields, one layer of padding inside the card. */
+@media (max-width: 560px) {
+  .logo img {
+    height: 32px;
+  }
+  .connect-btn {
+    font-size: 13px;
+    padding: 9px 14px;
+  }
+  .tabs {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .tab {
+    flex: 1 1 auto;
+    padding: 12px 6px;
+    font-size: 12.5px;
+    text-align: center;
+    white-space: nowrap;
+  }
+  .panel {
+    padding: 16px;
+    gap: 20px;
+  }
+  .field-input {
+    padding: 10px 12px;
+  }
+  /* 16px, not less: iOS zooms the page in when a smaller input gets focus. */
+  .field-input input {
+    font-size: 16px;
+  }
+}
+
+/* Smallest phones (iPhone SE, 320px): the header's X/Telegram icons push the wallet button off
+   screen. The footer carries both links, so drop them from the header here. */
+@media (max-width: 380px) {
+  header .social {
+    display: none;
+  }
+}
