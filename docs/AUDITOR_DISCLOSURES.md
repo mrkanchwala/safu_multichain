@@ -59,7 +59,11 @@ admin proposal → co-signer approval of the same value → 7-day public timeloc
 event at every step. This now includes the tier ceilings (A ≥ B ≥ C, 1x–20x; a cut applies to new
 stakes only, a raise to everyone), the claim time gate (floor 90 days, can only go up) and the claim
 window. Values a stake or claim depends on are snapshotted onto it, so a change never reaches someone
-already in. Tests: `src/test/settings_tests.rs`, `src/test/governance_tests.rs`.
+already in. The claim window can never be set longer than the gap between pauses, so at most one
+pause falls inside any filing window. One edge: a stake keeps the window it was opened with, so if the
+window and then the gap are both lowered later, an older stake with a longer window could see two
+pauses inside it, and gets back only the time of the later one. Tests: `src/test/settings_tests.rs`,
+`src/test/governance_tests.rs`.
 
 ## 3. Key-loss-safe governance: 2 of 3 roles, 7-day delay, 90-day recovery (design decision, 2026-09-23)
 
@@ -95,7 +99,9 @@ pause can start only `PauseGapSecs` (at least 30 days) after the last one ended.
 suspension by the admin alone lapses after 30 days (`SUSPEND_MAX_SECONDS`); suspending
 again within that length needs a second role (`renew_suspension`). So one stolen admin
 key can delay things once, and the other two roles replace the admin in 7 days
-through governance (section 3).
+through governance (section 3). No claim can be filed while paused, so the paused time is added back
+to the claim's filing window. `emergency_exit` works paused or not, but never during the 365-day lock
+that follows a cancelled claim.
 
 **Consequence.** A stolen admin key can delay stakes, claims and payouts by about 7
 days. It cannot move money, change who gets paid, or raise a payout: while paused,
@@ -156,7 +162,7 @@ its stake is gone.
 **Consequence.** A small claim can wait behind a large one. That is the price of a line nobody can
 jump by calling first or by watching the mempool.
 
-**Tests.** `src/test/b1_tests.rs`, `src/test/line_and_watch_tests.rs`.
+**Tests.** `src/test/pool_rules_tests.rs`, `src/test/line_and_watch_tests.rs`.
 
 ## 7. Upkeep runs inside user calls, capped (design decision, 2026-10-19)
 
@@ -169,7 +175,7 @@ the caller. It is skipped while paused.
 **Consequence.** On a quiet day, bookkeeping waits for the next transaction. Nothing a user is owed
 depends on it: the claim functions apply the same due checks themselves.
 
-**Tests.** `src/test/b1_tests.rs`, `src/test/line_and_watch_tests.rs`.
+**Tests.** `src/test/pool_rules_tests.rs`, `src/test/line_and_watch_tests.rs`.
 
 ## 8. Rounding reserve (design decision, 2026-10-19)
 
@@ -180,7 +186,7 @@ that the pool holds a rounding reserve that anyone can fund and nothing can take
 still short after the vault pays may draw up to 10,000 units (0.001 USDC) from it. The reserve is not
 pool cash, capacity or treasury surplus.
 
-**Tests.** `src/test/b1_tests.rs`, `src/test/inpath_liquidity_tests.rs`.
+**Tests.** `src/test/pool_rules_tests.rs`, `src/test/inpath_liquidity_tests.rs`.
 
 ## 9. After a paid claim, that address never stakes again (design decision, 2026-10-19)
 

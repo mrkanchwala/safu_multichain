@@ -8,7 +8,7 @@
 mod admin_tests;
 /// 2026-10-16: line-order queue, fair daily shares, no expiry while the
 /// pool can't pay, pause gap, suspension lapse, upgrade path.
-mod b1_tests;
+mod pool_rules_tests;
 /// v1 (2026-09-22): backers, one test per locked withdrawal-safety rule.
 mod backer_tests;
 mod blend_scenario_tests;

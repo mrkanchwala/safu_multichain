@@ -4,8 +4,8 @@ Prepared 2026-10-20 for the audit quote. This replaces the earlier scope built o
 `mrkanchwala/safu-soroban` (2,443 lines, the Tranche 3 pool): that pool is wound down and is not
 the audit target. The target is the new pool in this repository.
 
-**Branch:** `b1-pool-rework` (not `main`). The exact commit is pinned with a tag once the pool is on
-testnet; until then, review the branch head. Testnet deployment is due this week.
+**Branch:** `main`. The exact commit is pinned with a tag once the pool is on testnet; until then,
+review the head of `main`. Testnet deployment is due this week.
 
 ## 1. In scope: Stellar (Soroban, Rust, soroban-sdk 27.0.0, `wasm32v1-none`)
 
@@ -18,7 +18,7 @@ testnet; until then, review the branch head. Testnet deployment is due this week
 | covered-registry | `contracts/covered-registry/src/` | 135 | Which wallets each stake covers (up to 3, bound for good) |
 | **Total** | | **5,612** | |
 
-Line counts exclude `src/test/`, `fuzz/` and comment/blank lines. The pool WASM is 130,273 bytes against
+Line counts exclude `src/test/`, `fuzz/` and comment/blank lines. The pool WASM is 130,732 bytes against
 the network maximum of 131,072.
 
 ## 2. In scope: Solana (Anchor 1.1.2), repository `mrkanchwala/safu_solana`
@@ -60,7 +60,7 @@ audit starts; the line count above is the current tree and is the one to quote a
 
 - Unit and integration tests across all five contracts (`docs/TESTING.md`).
 - Fuzzing: solvency, backers and override targets, 142,000 runs, no failures.
-- Mutation testing (cargo-mutants, CI): gaps closed with targeted tests; the final run and the
-  equivalent mutants (with reasons) are shared before the audit.
-- Scout (CoinFabrik): run on every crate. The pool's 192 "critical" results are all integer-overflow
-  flags (the build aborts on overflow); medium findings are being triaged, results shared before the audit.
+- Mutation testing (cargo-mutants, CI): gaps closed with targeted tests; every mutant no test kills is
+  listed with its reason in `docs/MUTATION_EQUIVALENTS.md`.
+- Scout (CoinFabrik): run on every crate. The pool's "critical" results are all integer-overflow flags
+  (the build aborts on overflow); every medium is reviewed in `docs/SCOUT_TRIAGE.md`.

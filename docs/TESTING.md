@@ -1,10 +1,10 @@
 # Testing
 
-Every suite in this repository: what it proves, how to run it, and where it runs. Contract counts are from 2026-10-20 at commit `b1c74ce` (branch `b1-pool-rework`, the pool going to audit).
+Every suite in this repository: what it proves, how to run it, and where it runs. Contract counts are from 2026-10-20 on `main`, the pool going to audit.
 
 | Suite | Tests | Where it runs |
 |---|---|---|
-| Soroban contracts | 538 | Build server (CI runs the pool suite) |
+| Soroban contracts | 549 | Build server (CI runs the pool suite) |
 | Contract fuzz targets | 6 | Build server, in a capped Docker container |
 | Mutation testing (cargo-mutants) | sharded runs | GitHub Actions, started by tag |
 | Static analysis (Scout) | all 5 crates | GitHub Actions, started by tag |
@@ -13,7 +13,7 @@ Every suite in this repository: what it proves, how to run it, and where it runs
 | Site (vitest) | 19 | Local and CI |
 | Live testnet end to end (private repository) | 6 staged hacks across 3 chains | Stellar testnet, Sepolia, Solana devnet |
 
-## 1. Soroban contract tests (538)
+## 1. Soroban contract tests (549)
 
 ```bash
 cd contracts
@@ -23,27 +23,27 @@ cargo test -p protection-pool     # the pool only (what CI runs)
 
 The pool suite takes about 4 minutes, most of it in `pool_solvency_tests.rs`. Run it on a build server; it holds 2 to 3 CPU cores for the whole run.
 
-### protection-pool (471)
+### protection-pool (482)
 
 | File | Tests | What it checks |
 |---|---|---|
-| `claim_tests.rs` | 58 | Claim filing, the 90-day queue, the 100-day approval window, suspension, stale-claim expiry, payout streaming |
+| `claim_tests.rs` | 66 | Claim filing, the 90-day queue, the 100-day approval window, suspension, stale-claim expiry, payout streaming |
 | `backer_tests.rs` | 38 | Backing, the optional maturity clock per deposit, the daily withdrawal drip and each day's fair share, money needed by open claims cannot leave, backer yield |
-| `b1_tests.rs` | 34 | The claim line (release in order, a fair share of each day's payout cap), no expiry clock while the pool can't pay, the pause gap, suspensions that lapse, upgrades (two roles, 7 days, storage version and migrate), stake overflow into backing, the rounding reserve |
+| `pool_rules_tests.rs` | 34 | The claim line (release in order, a fair share of each day's payout cap), no expiry clock while the pool can't pay, the pause gap, suspensions that lapse, upgrades (two roles, 7 days, storage version and migrate), stake overflow into backing, the rounding reserve |
 | `d1_signature_tests.rs` | 30 | The oracle's Ed25519 signature: every tampered field, wrong contract or key, deadlines, key rotation |
 | `t3_flags_tests.rs` | 29 | Claims queued while capacity is short, and yield accounting |
 | `inpath_liquidity_tests.rs` | 28 | Moving money between pool and vault inside ordinary user calls, including vault failures and theft attempts |
 | `yield_tests.rs` | 27 | Staker and backer yield, taken any time; the pending-yield view; points as dollar-days |
 | `stake_tests.rs` | 27 | Stake bounds, the pool cap, beneficiary rules, withdrawal, emergency exit |
-| `settings_tests.rs` | 27 | Adjustable settings: allowed ranges, the order between related settings, the 7-day timelock, snapshots on stakes and claims |
+| `settings_tests.rs` | 28 | Adjustable settings: allowed ranges, the order between related settings, the 7-day timelock, snapshots on stakes and claims |
 | `mutation_gap_tests.rs` | 27 | Cases added where mutation testing showed a changed line went unnoticed |
 | `admin_tests.rs` | 25 | Setup, role changes through governance, the pool cap, pause, stake suspension |
 | `d2_vault_tests.rs` | 25 | Depositing idle funds into the yield vault and withdrawing them |
 | `override_tests.rs` | 22 | The two-key override: both keys must agree, and an override can never exceed a tier ceiling |
 | `solvency_tests.rs` | 16 | Tier ceilings, the pool never commits more than it holds, points, eligibility |
-| `governance_tests.rs` | 15 | Three-role governance: two of three to pass a change, 7-day delay, recovery after a lost key |
+| `governance_tests.rs` | 16 | Three-role governance: two of three to pass a change, 7-day delay, recovery after a lost key |
 | `t2_mutation_gap_tests.rs` | 12 | More mutation-testing gap cases |
-| `line_and_watch_tests.rs` | 6 | The claim line and the watch list, driven one step at a time over many random layouts against a plain model |
+| `line_and_watch_tests.rs` | 7 | The claim line and the watch list, driven one step at a time over many random layouts against a plain model |
 | `p2_findings_tests.rs` | 6 | Regression tests for two findings from an internal security review |
 | `edge_tests.rs` | 5 | Single rules pinned to their exact boundary |
 | `blend_scenario_tests.rs` | 5 | What the pool does if the Blend lending market behind the vault is exploited |

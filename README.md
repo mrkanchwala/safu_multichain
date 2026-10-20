@@ -2,7 +2,7 @@
 
 One USDC pool on Stellar that pays you back when a wallet you registered is drained, or when a loan in one of those wallets is wrongfully liquidated. Covered wallets can sit on Ethereum, Solana or Stellar. Payouts follow rules set in advance, and nobody votes on a claim.
 
-This branch (`b1-pool-rework`) is the new version of the pool: adjustable settings, upgrades behind two-of-three governance, a backer withdrawal drip, a first-come claim line and upkeep inside every user call. It goes to testnet first, then to audit. The pool live today at [safustaking.com](https://safustaking.com) is the earlier version (tag `mainnet-build-2026-09-29-r3`), and its stakers move to the new pool after the audit.
+This is the new version of the pool: adjustable settings, upgrades behind two-of-three governance, a backer withdrawal drip, a first-come claim line and upkeep inside every user call. It goes to testnet first, then to audit. The pool live today at [safustaking.com](https://safustaking.com) is the earlier version (tag `mainnet-build-2026-09-29-r3`), and its stakers move to the new pool after the audit.
 
 ## How it works
 
@@ -52,7 +52,7 @@ One setting picks the network for the whole pool: `SAFU_POOL_NETWORK=testnet` or
 
 | Suite | Tests | Where it runs |
 |---|---|---|
-| Soroban contracts | 538 | Build server (CI runs the pool suite) |
+| Soroban contracts | 549 | Build server (CI runs the pool suite) |
 | Contract fuzz targets | 6 | Build server, in a capped Docker container |
 | Mutation testing (cargo-mutants) | sharded runs | GitHub Actions |
 | Static analysis (Scout) | all 5 crates | GitHub Actions |
