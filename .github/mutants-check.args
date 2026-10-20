@@ -1,6 +1,4 @@
 # Filters for a mutants-check-* run (one cargo-mutants argument per line).
-# check-3 (2026-10-20): the functions the 2026-10-20 tests target (missed in mutants-check-2).
--f protection-pool/src/backer.rs
--f protection-pool/src/settings.rs
--f protection-pool/src/stake.rs
--F 'in (limits|complete_withdrawal|collectable_view|claim_yield|consistent_with_live|withdraw)$'
+# check-4 (2026-10-20): governance apply after the registry-writer signature fix.
+-f protection-pool/src/governance.rs
+-F 'in apply$'

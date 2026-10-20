@@ -202,7 +202,7 @@ fuzz_target!(|ops: std::vec::Vec<Op>| {
 
     let holdings = |a: &Address| -> i128 {
         let staked = pool.get_stake(a).map(|r| if r.withdrawn { 0 } else { r.amount }).unwrap_or(0);
-        let backed = pool.get_backer(a).map(|r| r.amount + r.pending_amount).unwrap_or(0);
+        let backed = pool.get_backer(a).map(|r| r.amount + r.pending.iter().map(|d| d.amount).sum::<i128>()).unwrap_or(0);
         c.usdc.balance(a) + staked + backed
     };
     let snapshot = |accts: &[Address]| -> std::vec::Vec<i128> { accts.iter().map(|a| holdings(a)).collect() };
