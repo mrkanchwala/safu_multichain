@@ -112,7 +112,7 @@ Each shard uploads its caught, missed, timeout and unviable lists as an artifact
 | `mutants-check-3` | `b1c74ce` | 115 | 7 | Re-check of the functions targeted by the 2026-10-20 tests. The 7 left are explained in `docs/MUTATION_EQUIVALENTS.md` |
 | `mutants-check-4` | `76a7796` | 0 | 0 | The filter matched no mutants (only whole-function replacements exist for `apply`). Covered by hand instead: removing the new writer signature check, or emptying `apply`, fails the governance tests |
 | `mutants-check-5` | `6e61cf4` | 177 | 11 | Functions changed by the 2026-10-20 fixes; 2 timeouts. 7 misses closed with new tests (each confirmed to fail on its mutant); 4 equivalent, explained in `docs/MUTATION_EQUIVALENTS.md` |
-| `mutants-check-7` | pending | | | Re-check of `submit_claim` and `emergency_exit` after the new tests |
+| `mutants-check-7` | `e3fccb2` | 53 | 0 | Re-check of `submit_claim` and `emergency_exit` after the new tests: every mutant caught |
 
 A missed mutant is closed in one of two ways: a test that fails on it, or a written reason it cannot change behaviour (equivalent or unreachable). Those reasons are shared with the auditor.
 
