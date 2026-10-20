@@ -109,7 +109,7 @@ Each shard uploads its caught, missed, timeout and unviable lists as an artifact
 |---|---|---|---|---|
 | `mutants-full-1` | `d08eef3` | 876 | 115 | 7 timeouts, 13 unviable |
 | `mutants-check-2` | `999b722` | 375 | 54 | Re-check of every function with a miss, after new tests |
-| `mutants-check-3` | `b1c74ce` | | | Re-check of the functions targeted by the 2026-10-20 tests |
+| `mutants-check-3` | `b1c74ce` | 115 | 7 | Re-check of the functions targeted by the 2026-10-20 tests. The 7 left are explained in `docs/MUTATION_EQUIVALENTS.md` |
 
 A missed mutant is closed in one of two ways: a test that fails on it, or a written reason it cannot change behaviour (equivalent or unreachable). Those reasons are shared with the auditor.
 

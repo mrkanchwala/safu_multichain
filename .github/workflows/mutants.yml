@@ -94,7 +94,10 @@ jobs:
             echo "$f: $n" | tee -a "$GITHUB_STEP_SUMMARY"
           done
           [ -s $d/missed.txt ] && { echo '### missed'; cat $d/missed.txt; } >> "$GITHUB_STEP_SUMMARY"
-          # Real-result gate: something must have been caught.
+          # Real-result gate: something must have been caught, unless this shard got no
+          # mutants at all (a small check run has fewer mutants than shards).
+          n=$(cat $d/caught.txt $d/missed.txt $d/timeout.txt $d/unviable.txt 2>/dev/null | wc -l)
+          [ "$n" -eq 0 ] && { echo "empty shard: no mutants assigned" | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; }
           [ -s $d/caught.txt ] || { echo "NOTHING CAUGHT: treat this shard as a setup fault" | tee -a "$GITHUB_STEP_SUMMARY"; exit 1; }
 
       - uses: actions/upload-artifact@v4

@@ -340,3 +340,26 @@ fn a_dead_claim_in_line_with_a_live_stake_is_expired() {
     });
     assert_eq!(s.client.get_claim(&c).unwrap().status, ClaimStatus::Expired);
 }
+
+/// The line skips at most 16 empty slots per call, so one call can never
+/// walk an unbounded run of holes. A live claim 20 slots past the head is
+/// found on the second call, not the first. Kills claim.rs:323
+/// (`skipped += 1` -> `*= 1`, which never counts a hole).
+#[test]
+fn the_line_skips_at_most_sixteen_holes_per_call() {
+    let env = new_env();
+    let s = setup(&env);
+    let (w, _) = staked_wallet(&env, &s);
+    let _ = staked_wallet(&env, &s);
+    let queued = file(&env, &s, &w, 1, expected_stress_cap(&s) + 1);
+    assert_eq!(s.client.get_claim(&queued).unwrap().status, ClaimStatus::Reserved);
+    env.as_contract(&s.contract_id, || {
+        let h = crate::storage::get_queue_tail(&env) + 100;
+        crate::storage::set_queue_head(&env, h);
+        crate::storage::set_queue_at(&env, h + 20, &queued);
+        crate::storage::set_queue_tail(&env, h + 21);
+        assert_eq!(crate::claim::queue_front(&env), None, "first call stops after 16 holes");
+        assert_eq!(crate::storage::get_queue_head(&env), h + 16);
+        assert_eq!(crate::claim::queue_front(&env), Some(queued.clone()));
+    });
+}
