@@ -32,24 +32,19 @@ the network maximum of 131,072.
 The Solana pool is being brought to the same rules as the Stellar pool. Its commit is pinned before the
 audit starts; the line count above is the current tree and is the one to quote against for now.
 
-## 3. To confirm on the call
-
-| Part | Path | Lines | Note |
-|---|---|---|---|
-| LayerZero registry sender (EVM) | `contracts-evm/src/RegistrySender.sol` | ~340 across the three | Cross-chain covered-wallet registration |
-| LayerZero registry sender (Solana) | `contracts-solana/registry-sender/src/` | | |
-| LayerZero registry OApp (Stellar) | `contracts-layerzero/registry-oapp/src/` | | Builds against vendored LayerZero crates not committed here (`VENDORED.md`) |
-
-## 4. Out of scope
+## 3. Out of scope
 
 - `contracts-evm/src/MockLendingMarket.sol` (test fixture for liquidation tests)
+- The LayerZero registry senders (`contracts-evm/src/RegistrySender.sol`, `contracts-solana/`,
+  `contracts-layerzero/`): an earlier registry design kept for reference. The registry is now written
+  directly on Stellar (`covered-registry`) and money moves over CCTP.
 - The website (`src/`), deploy scripts (`scripts/`), all tests and fuzz targets
 - The off-chain scanner and oracle signer (Python, separate repository). The contract trusts one
   oracle signature per claim and checks it against its own limits; see `docs/ARCHITECTURE.md`
   "Trust boundary".
 - Third-party contracts the pool calls: DeFindex vault, Blend, Circle CCTP, Marinade.
 
-## 5. Read first
+## 4. Read first
 
 | Document | What it covers |
 |---|---|
@@ -61,7 +56,7 @@ audit starts; the line count above is the current tree and is the one to quote a
 | `docs/TESTING.md` | How to build and run every test |
 | STRIDE threat model | Being redone for this pool; sent separately |
 
-## 6. Testing done so far (Stellar pool)
+## 5. Testing done so far (Stellar pool)
 
 - Unit and integration tests across all five contracts (`docs/TESTING.md`).
 - Fuzzing: solvency, backers and override targets, 142,000 runs, no failures.
