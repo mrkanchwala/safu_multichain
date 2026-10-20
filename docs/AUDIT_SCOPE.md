@@ -21,15 +21,7 @@ review the head of `main`. Testnet deployment is due this week.
 Line counts exclude `src/test/`, `fuzz/` and comment/blank lines. The pool WASM is 130,732 bytes against
 the network maximum of 131,072.
 
-## 2. Next phase, for direction only: Solana (Anchor), repository `mrkanchwala/safu_solana`
-
-Not part of this audit request. The Solana pool runs today on devnet with SOL deposits staked through
-Marinade; it has no USDC and no CCTP yet. It is being brought to the same rules as the Stellar pool
-(USDC, deposits from other chains over CCTP, the same claim line, settings and governance) before its
-own audit. For a sense of size only: today's tree is 3,987 lines (program 3,287, shared rule library
-700), and it will grow with that work. A separate scope with a pinned commit follows when it is ready.
-
-## 3. Out of scope
+## 2. Out of scope
 
 - `contracts-evm/src/MockLendingMarket.sol` (test fixture for liquidation tests)
 - The LayerZero registry senders (`contracts-evm/src/RegistrySender.sol`, `contracts-solana/`,
@@ -39,9 +31,9 @@ own audit. For a sense of size only: today's tree is 3,987 lines (program 3,287,
 - The off-chain scanner and oracle signer (Python, separate repository). The contract trusts one
   oracle signature per claim and checks it against its own limits; see `docs/ARCHITECTURE.md`
   "Trust boundary".
-- Third-party contracts the pool calls: DeFindex vault, Blend, Circle CCTP, Marinade.
+- Third-party contracts the pool calls: DeFindex vault, Blend, Circle CCTP.
 
-## 4. Read first
+## 3. Read first
 
 | Document | What it covers |
 |---|---|
@@ -53,7 +45,7 @@ own audit. For a sense of size only: today's tree is 3,987 lines (program 3,287,
 | `docs/TESTING.md` | How to build and run every test |
 | STRIDE threat model | Being redone for this pool; sent separately |
 
-## 5. Testing done so far (Stellar pool)
+## 4. Testing done so far
 
 - Unit and integration tests across all five contracts (`docs/TESTING.md`).
 - Fuzzing: six targets across the pool, registry, account and CCTP adapter, no failures (`docs/TESTING.md` section 2).
