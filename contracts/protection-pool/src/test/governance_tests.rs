@@ -293,3 +293,38 @@ fn every_role_key_signs_its_own_installation() {
         assert!(env.auths().iter().any(|(who, _)| *who == key), "{:?} key did not sign", kind);
     }
 }
+
+/// Stand-in for the covered-registry: records the writer the pool installs.
+#[soroban_sdk::contract]
+struct WriterProbe;
+
+#[soroban_sdk::contractimpl]
+impl WriterProbe {
+    pub fn set_writer(env: soroban_sdk::Env, new_writer: Address) {
+        env.storage().instance().set(&0u32, &new_writer);
+    }
+    pub fn writer(env: soroban_sdk::Env) -> Option<Address> {
+        env.storage().instance().get(&0u32)
+    }
+}
+
+/// A new registry writer key signs its own installation, like the role keys.
+#[test]
+fn a_new_registry_writer_is_installed_only_with_its_own_signature() {
+    let env = new_env();
+    let s = setup(&env);
+    let registry = env.register(WriterProbe, ());
+    let probe = WriterProbeClient::new(&env, &registry);
+    let writer = Address::generate(&env);
+    let change = GovChange::RegistryWriter(registry.clone(), writer.clone());
+    let kind = ready_to_execute(&env, &s, &change, GovKind::RegistryWriter);
+
+    env.set_auths(&[]);
+    assert!(s.client.try_execute_change(&kind).is_err());
+    assert_eq!(probe.writer(), None);
+
+    env.mock_all_auths();
+    s.client.execute_change(&kind);
+    assert!(env.auths().iter().any(|(who, _)| *who == writer));
+    assert_eq!(probe.writer(), Some(writer));
+}

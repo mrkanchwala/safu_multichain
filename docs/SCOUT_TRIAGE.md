@@ -49,4 +49,6 @@ bounds. No change.
 
 `GovChange::RegistryWriter` installs a new registry writer key without that key signing, unlike the
 four role keys. A mistyped writer address would stop new covered-wallet registrations until another
-governance change (7 days) replaces it. No money is at risk.
+governance change (7 days) replaces it. No money is at risk. Fixed on 2026-10-20: the new writer
+now signs its own installation (`governance.rs`, test
+`a_new_registry_writer_is_installed_only_with_its_own_signature`).

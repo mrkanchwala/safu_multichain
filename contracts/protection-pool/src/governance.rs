@@ -317,6 +317,9 @@ fn apply(env: &Env, change: &GovChange) {
         GovChange::Treasury(t) => storage::set_treasury(env, t),
         GovChange::DeployBps(bps) => storage::set_deploy_bps(env, *bps),
         GovChange::RegistryWriter(registry, writer) => {
+            // Same rule as the role keys: the new writer signs its own
+            // installation, so a mistyped address can't be installed.
+            writer.require_auth();
             // The registry checks that THIS pool is the caller.
             let args: Vec<Val> = vec![env, writer.into_val(env)];
             env.invoke_contract::<()>(registry, &Symbol::new(env, "set_writer"), args);

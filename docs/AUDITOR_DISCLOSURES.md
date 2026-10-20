@@ -69,8 +69,8 @@ address + attestation key together, vault, treasury, vault deploy ceiling, the
 registry's writer key, a code upgrade) needs one role to propose, a second role to approve the same
 change, then 7 days in public (`GOV_DELAY_SECONDS`) before anyone can execute it.
 Cancelling also takes two roles. The role a change replaces never counts: it cannot
-propose, approve or cancel its own replacement. A new admin, co-signer, guardian or
-oracle key must sign its own installation, so a mistyped address cannot be installed.
+propose, approve or cancel its own replacement. A new admin, co-signer, guardian,
+oracle or registry writer key must sign its own installation, so a mistyped address cannot be installed.
 
 **Last-resort recovery.** If two roles are lost, the remaining one can propose a role
 replacement alone. It waits 90 days (`RECOVERY_DELAY_SECONDS`), and any other role
