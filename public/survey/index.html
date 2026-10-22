@@ -13,88 +13,17 @@
     <meta property="og:description" content="Onchain insurance with no premium: you only stake. Tell us if you, or your team, would use it." />
     <meta property="og:image" content="https://safustaking.com/og-image.png" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Manrope:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
     <style>
-      :root {
-        --brand-primary: #ff3b3b;
-        --bg: #0a0a0a;
-        --bg-panel: #121212;
-        --border: #232323;
-        --text: #f4f4f2;
-        --text-muted: #c4c4c0;
-        --font-display: "Fraunces", serif;
-        --font-body: "Manrope", sans-serif;
-      }
-      * { box-sizing: border-box; }
-      body {
-        margin: 0;
-        min-height: 100vh;
-        min-height: 100dvh;
-        display: flex;
-        flex-direction: column;
-        background: var(--bg);
-        color: var(--text);
-        font-family: var(--font-body);
-        line-height: 1.55;
-      }
-      header {
-        border-bottom: 1px solid var(--border);
-        padding: 10px 16px;
-      }
-      header .wrap, main { max-width: 760px; margin: 0 auto; }
-      header a { display: inline-flex; align-items: center; gap: 10px; color: var(--text); text-decoration: none; font-weight: 700; }
-      header img { width: 28px; height: 28px; }
-      main { flex: 1; width: 100%; display: flex; flex-direction: column; padding: 16px 16px 8px; }
-      h1 { font-family: var(--font-display); font-size: clamp(24px, 5vw, 36px); line-height: 1.15; margin: 0 0 8px; }
-      h1 span { color: var(--brand-primary); }
-      p.lead { color: var(--text-muted); font-size: clamp(14px, 3.6vw, 16px); margin: 0 0 4px; }
-      p.small { color: var(--text-muted); font-size: 13px; margin: 0 0 12px; }
-      .form {
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        overflow: hidden;
-        flex: 1;
-        min-height: 400px;
-        display: flex;
-      }
-      .form iframe { display: block; flex: 1; width: 100%; border: 0; }
-      footer { text-align: center; color: var(--text-muted); font-size: 13px; padding: 4px 16px 10px; }
-      footer a { color: var(--text); }
-      @media (max-height: 760px) { p.small { display: none; } main { padding-top: 10px; } }
+      html, body { margin: 0; height: 100%; background: #0a0a0a; }
+      iframe { display: block; width: 100%; height: 100vh; height: 100dvh; border: 0; }
     </style>
   </head>
   <body>
-    <header>
-      <div class="wrap">
-        <a href="/"><img src="/logo.png" alt="" />SAFU Staking</a>
-      </div>
-    </header>
-    <main>
-      <h1>Would you use <span>SAFU</span>?</h1>
-      <p class="lead">
-        SAFU is onchain insurance with no premium: you only stake. If a covered wallet gets drained, the pool pays
-        you back, up to 15 times your stake.
-      </p>
-      <p class="small">About 3 minutes. For crypto users and for people who work at a crypto project.</p>
-      <div class="form">
-        <iframe
-          src="https://www.reyel.app/c/BXyXCestj7YsL5JF"
-          title="SAFU survey"
-          loading="lazy"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
-          >Loading the survey…</iframe
-        >
-      </div>
-    </main>
-    <footer>
-      Form not loading?
-      <a href="https://www.reyel.app/c/BXyXCestj7YsL5JF" rel="noopener">Open it in a new page</a>
-      · <a href="/">Back to safustaking.com</a>
-    </footer>
+    <iframe
+      src="https://www.reyel.app/c/BXyXCestj7YsL5JF"
+      title="SAFU survey"
+      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+      ><a href="https://www.reyel.app/c/BXyXCestj7YsL5JF">Open the SAFU survey</a></iframe
+    >
   </body>
 </html>
