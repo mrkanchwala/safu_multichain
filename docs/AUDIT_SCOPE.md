@@ -45,7 +45,33 @@ the network maximum of 131,072.
 | `docs/TESTING.md` | How to build and run every test |
 | STRIDE threat model | `docs/STRIDE_THREAT_MODEL.pdf` (2026-10-20, this pool) |
 
-## 4. Testing done so far
+## 4. Whitelabel deployments and other yield venues
+
+SAFU is sold to wallets, apps and protocols that run their own pool under their own name. We would
+like the audit to cover that use, so a partner deployment does not need a new audit each time.
+
+**Partner pools with their own settings.** A partner pool is a new deployment of the same audited
+WASM (same hash), with its own roles and its own values for the adjustable settings. Every setting
+has hard bounds and ordering rules in the code (`src/settings.rs`) and changes only through the coded
+timelock. No code changes.
+*Question for the auditor:* can a partner deployment of the audited WASM, with any settings inside
+the coded bounds, rely on this audit without a new one? If not, would a short deployment review (WASM
+hash, settings, roles and addresses checked against the audited tag) be enough, and what would it
+cost per pool?
+
+**A different lending protocol.** The pool deposits idle USDC into a DeFindex vault through three
+calls (`deposit`, `withdraw`, `balance`, `src/vault.rs`), and governance can point it at another
+vault (`GovChange::Vault`, two of three roles and 7 days). A partner who wants their own lending market
+has two routes:
+- a DeFindex vault whose strategy lends into their market: no pool code change (the strategy is
+  DeFindex code, outside this scope; the DeFindex strategies we know of today lend on Blend);
+- a direct connector in the pool for their market: new pool code.
+
+*Questions for the auditor:*
+- Does pointing the pool at another DeFindex vault, with the same three calls, stay inside this audit?
+- What would a delta audit of one new direct lending connector cost, on top of this audit?
+
+## 5. Testing done so far
 
 - Unit and integration tests across all five contracts (`docs/TESTING.md`).
 - Fuzzing: six targets across the pool, registry, account and CCTP adapter, no failures (`docs/TESTING.md` section 2).
