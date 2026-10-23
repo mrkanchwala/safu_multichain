@@ -50,6 +50,9 @@ the network maximum of 131,072.
 SAFU is sold to wallets, apps and protocols that run their own pool under their own name. We would
 like the audit to cover that use, so a partner deployment does not need a new audit each time.
 
+The lending protocol's own contracts are out of scope: SAFU only uses audited venues and relies on
+their audits. The audit covers SAFU's code and its settings.
+
 **Partner pools with their own settings.** A partner pool is a new deployment of the same audited
 WASM (same hash), with its own roles and its own values for the adjustable settings. Every setting
 has hard bounds and ordering rules in the code (`src/settings.rs`) and changes only through the coded
