@@ -1228,6 +1228,10 @@ body {
     font-size: 13px;
     padding: 9px 14px;
   }
+  /* Connected label is too wide for a phone header; the chain name goes, address + Disconnect stay. */
+  .connect-kind {
+    display: none;
+  }
   .tabs {
     overflow-x: auto;
     scrollbar-width: none;
@@ -1252,10 +1256,18 @@ body {
   }
 }
 
-/* Smallest phones (iPhone SE, 320px): the header's X/Telegram icons push the wallet button off
-   screen. The footer carries both links, so drop them from the header here. */
-@media (max-width: 380px) {
+/* Phones: the header's X/Telegram icons push the connected wallet button off screen (was 380px,
+   widened 2026-10-27 after a real-phone check). The footer carries both links. */
+@media (max-width: 560px) {
   header .social {
     display: none;
+  }
+}
+
+/* Smallest phones (320px): a connected Stellar address still needs a slightly smaller button. */
+@media (max-width: 380px) {
+  .connect-btn {
+    font-size: 12px;
+    padding: 9px 10px;
   }
 }

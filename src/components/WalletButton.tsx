@@ -62,7 +62,8 @@ export function WalletButton({ client }: { client: AppClient }) {
     return (
       <div className="wallet-menu">
         <button className="connect-btn" onClick={() => client.disconnect()}>
-          {KIND_LABEL[client.kind]} · {short(client.address)} · Disconnect
+          <span className="connect-kind">{KIND_LABEL[client.kind]} · </span>
+          {short(client.address)} · Disconnect
         </button>
       </div>
     );
