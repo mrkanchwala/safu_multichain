@@ -1271,3 +1271,181 @@ body {
     padding: 9px 10px;
   }
 }
+
+/* B19 (2026-10-28, mock v4): numbered steps in the stake panel. 1 Stake folds to one line once
+   staked; 2 Cover your wallets is locked until then. Amber only at 0/3, green from 1/3. */
+.step {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 12px;
+  background: var(--bg-panel);
+}
+.step.active {
+  border-color: rgba(255, 59, 59, 0.6);
+}
+.step.locked {
+  opacity: 0.55;
+}
+.step-h {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 15px;
+  flex-wrap: wrap;
+}
+.step-n {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  border: 1px solid #555;
+  flex-shrink: 0;
+}
+.step.active .step-n {
+  background: var(--brand-primary);
+  border-color: var(--brand-primary);
+  color: #0a0a0a;
+}
+.step.done .step-n {
+  background: var(--brand-success);
+  border-color: var(--brand-success);
+  color: #0a0a0a;
+}
+.step-r {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+.step-r.ok {
+  color: var(--brand-success);
+}
+.step-r.warn {
+  color: var(--brand-warn);
+}
+.step-link {
+  margin-left: auto;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.step-link.inline {
+  margin-left: 0;
+  color: var(--text);
+  font-weight: 700;
+}
+.step-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 8px;
+  line-height: 1.5;
+}
+.step-hint a {
+  color: var(--text);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.step-warn {
+  font-size: 12px;
+  color: var(--brand-warn);
+  margin-top: 8px;
+}
+.step-warn-box {
+  font-size: 13px;
+  color: var(--brand-warn);
+  background: rgba(255, 204, 0, 0.08);
+  border: 1px solid rgba(255, 204, 0, 0.5);
+  border-radius: 8px;
+  padding: 9px 12px;
+  margin-top: 10px;
+}
+.step-wallet {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--bg-panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  margin-top: 8px;
+  font-size: 13px;
+}
+.step-wallet .c {
+  color: var(--text-muted);
+}
+.step-wallet .s {
+  color: var(--brand-success);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.step-wallet .s.checking {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+/* 375px phones: "18.00 USDC" wrapped and the tiles went uneven; the address placeholder was cut off. */
+@media (max-width: 400px) {
+  .side-stat .v {
+    font-size: 16px;
+  }
+  input.cover-addr {
+    font-size: 13px;
+  }
+}
+.step-pending {
+  background: var(--bg-panel-alt);
+  border: 1px dashed #555;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-top: 8px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.step-pending .k {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.step-rows {
+  margin-top: 10px;
+}
+.step-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+.step-row:first-child {
+  border-top: none;
+}
+.step-row .k {
+  color: var(--text-muted);
+}
+.step-row .v {
+  font-family: var(--font-mono);
+  text-align: right;
+}
+.step-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.step-stats .side-stat {
+  margin: 0;
+}

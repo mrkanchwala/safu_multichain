@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 import { DetailsLayout } from "./DetailsLayout";
-import { LINKS } from "../lib/links";
+import { FAQ_ANSWER, LINKS } from "../lib/links";
 
 const EXT = { target: "_blank", rel: "noopener noreferrer" } as const;
 
 // Answers are always open (no accordion) so ctrl+F and search engines see all of them.
-const GROUPS: { id: string; title: string; items: { q: string; a: ReactNode }[] }[] = [
+const GROUPS: { id: string; title: string; items: { q: string; a: ReactNode; id?: string }[] }[] = [
   {
     id: "faq-basics",
     title: "Basics",
@@ -37,10 +37,12 @@ const GROUPS: { id: string; title: string; items: { q: string; a: ReactNode }[] 
         a: "Connect a Stellar, Ethereum or Solana wallet with the button at the top, open the Stake tab and enter an amount. If you stake from Ethereum or Solana, your USDC travels to the Stellar pool through Circle's CCTP, and SAFU pays the Stellar fees for that step. Each stake is currently 1 to 10 USDC, and the Stake tab shows the limits.",
       },
       {
+        id: FAQ_ANSWER.whichWallet,
         q: "Which wallet should I stake from?",
         a: "A fresh wallet that you keep safe, because payouts and withdrawals go back to the wallet you staked from. The wallets you want protected are registered separately as covered wallets, and you never connect those to this site.",
       },
       {
+        id: FAQ_ANSWER.addCovered,
         q: "How do I add the wallets I want covered?",
         a: "After staking, register up to three wallets on any mix of the three chains. To show a wallet is yours, you send a tiny amount from that wallet to itself and we look for that transaction (on Stellar, a past transfer from it to your staking wallet also works). You never sign a message with the covered wallet. Those three wallets stay tied to your stake for good and can't be swapped later. Your staking wallet can't be one of its own covered wallets.",
       },
@@ -169,7 +171,7 @@ export function Faq({ onBack }: { onBack: () => void }) {
         <div className="slide faq-group" id={g.id} key={g.id}>
           <h2>{g.title}</h2>
           {g.items.map((it) => (
-            <div className="faq-item" key={it.q}>
+            <div className="faq-item" key={it.q} id={it.id ? `faq-a-${it.id}` : undefined}>
               <h3>{it.q}</h3>
               <p>{it.a}</p>
             </div>

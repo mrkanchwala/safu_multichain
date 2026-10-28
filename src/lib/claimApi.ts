@@ -155,3 +155,21 @@ export async function addCoveredWallet(
 export async function confirmCoveredWallet(staker: string, chain: string, wallet: string): Promise<CoveredWalletResponse> {
   return postJson("/covered-wallets/confirm", { staker, chain, wallet });
 }
+
+// B19 (2026-10-28): the count is public (one registry hash per wallet), so no signature. The wallets
+// come back only to their own staker, after a signature, and only as their last 4 characters.
+export type CoveredWalletTail = { chain: string; tail: string; registered_at: number };
+
+export async function countCoveredWallets(staker: string): Promise<number> {
+  const body = await postJson("/covered-wallets/count", { staker });
+  if (typeof body.count !== "number") throw new Error("No count in the reply.");
+  return body.count;
+}
+
+export async function listMyCoveredWallets(client: AppClient, staker: string): Promise<CoveredWalletTail[]> {
+  const timestamp = Math.floor(Date.now() / 1000);
+  // Byte-identical with backend/app.py's list_my_covered_wallets.
+  const message = `SAFU_COVERED_LIST:v1:${staker}:${timestamp}`;
+  const body = await postJson("/covered-wallets/mine", { staker, timestamp, ...(await signFor(client, staker, message)) });
+  return body.wallets as CoveredWalletTail[];
+}

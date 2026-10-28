@@ -14,7 +14,7 @@ import type { AppClient } from "./lib/client";
 import { fmtUsdc, readPoolStats } from "./lib/reads";
 import { MAX_STAKE_USDC, MIN_STAKE_USDC, POOL_CAP_USDC } from "./lib/network";
 import { isLive } from "./lib/soroban";
-import { viewFromHash } from "./lib/links";
+import { scrollToFaqAnswer, viewFromHash } from "./lib/links";
 import type { View } from "./lib/links";
 
 // Borrow/Lend/Backstop tabs removed 2026-09-18 -- there is no lending market
@@ -51,7 +51,10 @@ export default function App() {
   // The URL hash picks the page (#faq, #whitepaper), so both explainer
   // pages can be linked directly and browser back/forward works.
   useEffect(() => {
-    const onHash = () => setView(viewFromHash(window.location.hash));
+    const onHash = () => {
+      setView(viewFromHash(window.location.hash));
+      scrollToFaqAnswer(window.location.hash); // already on the FAQ: the view doesn't change
+    };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
@@ -60,6 +63,8 @@ export default function App() {
   useEffect(() => {
     if (view === "main" && window.location.hash === "#about") {
       document.getElementById("about")?.scrollIntoView();
+    } else if (view === "faq" && scrollToFaqAnswer(window.location.hash)) {
+      // "#faq/<id>": landed on that answer
     } else {
       window.scrollTo(0, 0);
     }

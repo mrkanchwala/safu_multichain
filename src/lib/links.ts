@@ -15,8 +15,23 @@ export const LINKS = {
 export type View = "main" | "faq" | "whitepaper" | "protocols";
 
 export function viewFromHash(hash: string): View {
-  if (hash === "#faq" || hash === "#how-it-works") return "faq";
+  if (hash === "#faq" || hash === "#how-it-works" || hash.startsWith("#faq/")) return "faq";
   if (hash === "#whitepaper") return "whitepaper";
   if (hash === "#protocols") return "protocols";
   return "main";
+}
+
+// One FAQ answer, linked from the stake panel (B19): "#faq/<id>" opens the FAQ at that answer.
+export const FAQ_ANSWER = { whichWallet: "which-wallet", addCovered: "add-covered" } as const;
+
+export function faqAnswerHref(id: string): string {
+  return `#faq/${id}`;
+}
+
+/** Scroll to the answer a "#faq/<id>" hash names, if any. True when it found one. */
+export function scrollToFaqAnswer(hash: string): boolean {
+  if (!hash.startsWith("#faq/")) return false;
+  const el = document.getElementById(`faq-a-${hash.slice(5)}`);
+  el?.scrollIntoView();
+  return el !== null;
 }

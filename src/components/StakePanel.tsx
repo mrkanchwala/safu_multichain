@@ -3,8 +3,9 @@ import { POOL } from "../lib/pool";
 import { useAction, useClient } from "../lib/client";
 import type { AppClient } from "../lib/client";
 import { claimStakerYield, stake, withdrawStake } from "../lib/actions";
-import { addCoveredWallet, confirmCoveredWallet } from "../lib/claimApi";
-import type { CoveredWalletResponse } from "../lib/claimApi";
+import { addCoveredWallet, confirmCoveredWallet, countCoveredWallets, listMyCoveredWallets } from "../lib/claimApi";
+import type { CoveredWalletResponse, CoveredWalletTail } from "../lib/claimApi";
+import { FAQ_ANSWER, faqAnswerHref } from "../lib/links";
 import {
   evmBurnToAdapter,
   evmUsdcBalance,
@@ -56,6 +57,28 @@ export function StakePanel() {
   const [pending, setPending] = useState<CoveredWalletResponse | null>(null);
   const [walletMsg, setWalletMsg] = useState<string | null>(null);
   const [walletBusy, setWalletBusy] = useState(false);
+  // B19: the count comes from the server (any browser); null = still checking or the read failed,
+  // which never shows green. Tails = last 4 characters, only after the staker signs.
+  const [coveredCount, setCoveredCount] = useState<number | null>(null);
+  const [tails, setTails] = useState<CoveredWalletTail[] | null>(null);
+  const [tailsMsg, setTailsMsg] = useState<string | null>(null);
+  const [tailsBusy, setTailsBusy] = useState(false);
+  const [manageOpen, setManageOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setCoveredCount(null);
+    setTails(staker ? readCachedTails(staker) : null);
+    if (staker) {
+      countCoveredWallets(staker)
+        .then((count) => !cancelled && setCoveredCount(count))
+        .catch(() => !cancelled && setCoveredCount(null));
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [staker, refreshKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -144,6 +167,24 @@ export function StakePanel() {
     setPending(null);
     setNewWallet("");
     setWalletMsg(r.method === "link" ? "Registered (linked by a past transfer)." : "Registered.");
+    setAddOpen(false);
+    setRefreshKey((k) => k + 1);
+  }
+
+  async function showAddresses() {
+    if (!staker) return;
+    setTailsBusy(true);
+    setTailsMsg("Sign once to see the last 4 characters. Only you can see them.");
+    try {
+      const t = await listMyCoveredWallets(client, staker);
+      setTails(t);
+      cacheTails(staker, t);
+      setTailsMsg(null);
+    } catch {
+      setTailsMsg("Couldn't load them. Try again.");
+    } finally {
+      setTailsBusy(false);
+    }
   }
 
   async function addWallet() {
@@ -183,173 +224,248 @@ export function StakePanel() {
 
   const chainLabel = (id: string) => CHAINS.find((c) => c.id === id)?.label ?? id;
 
+  // Section 2 state. Green needs an active stake AND at least one wallet the server counts.
+  const staked = myStake !== null;
+  const n = coveredCount;
+  const protectedNow = staked && n !== null && n > 0;
+  const coverEnded = !staked && n !== null && n > 0;
+  const full = n !== null && n >= MAX_COVERED_WALLETS;
+
+  // Rows: wallets this browser added (full address known), then the server's last-4 list for the
+  // rest, then plain "Wallet N" rows for any the count has that neither of those can name.
+  const rows: { key: string; label: string; addr: string }[] = coveredWallets.map((w, i) => ({
+    key: `l-${w.chain}-${w.wallet}-${i}`, label: chainLabel(w.chain), addr: shortAddr(w.wallet),
+  }));
+  for (const t of tails ?? []) {
+    if (!coveredWallets.some((w) => w.chain === t.chain && w.wallet.endsWith(t.tail))) {
+      rows.push({ key: `t-${t.chain}-${t.tail}`, label: chainLabel(t.chain), addr: `…${t.tail}` });
+    }
+  }
+  // Never more rows than the server counts: a stale cache must not show "Covered" under 0/3.
+  if (n !== null) rows.length = Math.min(rows.length, n);
+  const unnamed = n !== null ? Math.max(0, n - rows.length) : 0;
+  for (let i = 0; i < unnamed; i++) rows.push({ key: `u-${i}`, label: `Wallet ${rows.length + 1}`, addr: "" });
+
+  let s2Right: { text: string; cls: string };
+  if (!staked) s2Right = { text: n !== null ? `${n}/${MAX_COVERED_WALLETS}` : `0/${MAX_COVERED_WALLETS}`, cls: "" };
+  else if (n === null) s2Right = { text: "Checking…", cls: "" };
+  else if (n === 0) s2Right = { text: `0/${MAX_COVERED_WALLETS} · Not protected yet`, cls: "warn" };
+  else s2Right = { text: `${n}/${MAX_COVERED_WALLETS} · Protected`, cls: "ok" };
+
+  const addForm = (
+    <>
+      <div className="ramp-toggle" style={{ marginTop: 10, marginBottom: 8 }}>
+        {CHAINS.map((c) => (
+          <button key={c.id} className={`ramp-toggle-btn${newChain === c.id ? " active" : ""}`} onClick={() => setNewChain(c.id)}>
+            {c.label}
+          </button>
+        ))}
+      </div>
+      <div className="field-input">
+        <input className="cover-addr" placeholder="Wallet address on that chain" value={newWallet} onChange={(e) => setNewWallet(e.target.value)} />
+      </div>
+      <button className="secondary-action" style={{ width: "100%" }} disabled={walletBusy} onClick={addWallet}>
+        {walletBusy ? "Checking..." : "Add covered wallet"}
+      </button>
+      <div className="step-hint">
+        Up to {MAX_COVERED_WALLETS} wallets on any chain. Each one sends a tiny amount to itself to prove it's yours.
+        Add them before anything happens.{" "}
+        <a href={faqAnswerHref(FAQ_ANSWER.addCovered)}>What's a covered wallet?</a>
+      </div>
+    </>
+  );
+
   return (
     <div className="panel">
       <div>
-        <div className="field-group">
-          <div className="field-label">
-            <span>Stake</span>
-            <span>${MIN_STAKE_USDC}–${MAX_STAKE_USDC.toLocaleString()}</span>
-          </div>
-          <div className="field-input">
-            <input placeholder="0" value={stakeAmount} onChange={(e) => setStakeAmount(e.target.value)} inputMode="decimal" />
-            <span className="unit">USDC</span>
-          </div>
-        </div>
-        <button
-          className="primary-action"
-          disabled={!client.address || !amountValid || stakeAction.isRunning}
-          onClick={() => stakeAction.dispatch()}
-        >
-          {stakeAction.isRunning ? "Staking..." : crossChain ? "Stake via Circle" : "Stake"}
-        </button>
-        {progress ? <div className="ramp-disclosure" style={{ marginTop: 8 }}>{progress}</div> : null}
-        <TxStatus action={stakeAction} />
-        <div className="ramp-disclosure" style={{ marginTop: 8 }}>
-          {crossChain
-            ? `Your USDC crosses to Stellar on Circle's bridge and your own safu-account stakes it. Only your wallet's signature can move it.${homeUsdc !== null ? ` USDC in your wallet: ${(Number(homeUsdc) / 1e6).toFixed(2)}.` : ""}`
-            : "Payouts go back to this same wallet. Stake from a wallet you're comfortable connecting here, and cover your other wallets below without ever connecting them."}
-        </div>
-
-        <div className="field-group" style={{ marginTop: 20 }}>
-          <div className="field-label">
-            <span>Your stake</span>
-            <span>&nbsp;</span>
-          </div>
-          {!myStake ? (
-            <div className="side-stat">
-              <div className="k">Status</div>
-              <div className="v">No active stake</div>
+        {/* 1 Stake: open until staked, then one line; Manage stake reopens it. */}
+        {!staked ? (
+          <div className="step active">
+            <div className="step-h">
+              <span className="step-n">1</span>Stake
+              <span className="step-r">${MIN_STAKE_USDC}–${MAX_STAKE_USDC.toLocaleString()}</span>
             </div>
-          ) : (
-            <>
-              <div className="side-stat">
-                <div className="k">Principal (entitlement basis)</div>
-                <div className="v">{fmtUsdc(myStake.amount)} USDC</div>
-              </div>
-              <div className="side-stat">
-                <div className="k">Withdrawable now (principal + yield)</div>
-                <div className="v">
-                  {fmtExact(myStake.withdrawable)} USDC{" "}
-                  <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                    (+{yieldStripPct(myStake.withdrawable, myStake.amount)}%)
-                  </span>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-        <button
-          className="secondary-action"
-          style={{ width: "100%" }}
-          disabled={!client.address || !myStake || withdrawAction.isRunning}
-          onClick={() => withdrawAction.dispatch()}
-        >
-          {withdrawAction.isRunning ? "Withdrawing..." : crossChain ? "Withdraw to my wallet" : "Withdraw principal + yield"}
-        </button>
-        <TxStatus action={withdrawAction} />
-        {myStake && myStake.yieldOwed >= (crossChain ? MIN_BRIDGEABLE_RAW : 1n) ? (
-          <button
-            className="secondary-action"
-            style={{ width: "100%", marginTop: 8 }}
-            disabled={takeYieldAction.isRunning}
-            onClick={() => takeYieldAction.dispatch()}
-          >
-            {takeYieldAction.isRunning ? "Sending..." : `Take ${fmtYield(myStake.yieldOwed)} USDC yield, keep my stake`}
-          </button>
-        ) : null}
-        <TxStatus action={takeYieldAction} />
-
-        <div className="field-group" style={{ marginTop: 20 }}>
-          <div className="field-label">
-            <span>Covered wallets</span>
-            <span>{coveredWallets.length}/{MAX_COVERED_WALLETS}</span>
-          </div>
-          <div className="ramp-disclosure">
-            Register a wallet before it's drained, because a claim can only name a wallet already on this list.
-            Any mix of chains, up to {MAX_COVERED_WALLETS}. To prove it's yours, that wallet sends a tiny
-            amount to itself.
-          </div>
-          {coveredWallets.map((w, i) => (
-            <div className="side-stat" key={`${w.chain}-${w.wallet}-${i}`}>
-              <div className="k">{chainLabel(w.chain)}</div>
-              <div className="v" style={{ fontFamily: "var(--font-body)", fontSize: 13 }}>{w.wallet}</div>
+            <div className="field-input" style={{ marginTop: 12 }}>
+              <input placeholder="0" value={stakeAmount} onChange={(e) => setStakeAmount(e.target.value)} inputMode="decimal" />
+              <span className="unit">USDC</span>
             </div>
-          ))}
+            <button
+              className="primary-action"
+              disabled={!client.address || !amountValid || stakeAction.isRunning}
+              onClick={() => stakeAction.dispatch()}
+            >
+              {stakeAction.isRunning ? "Staking..." : crossChain ? "Stake via Circle" : "Stake"}
+            </button>
+            {progress ? <div className="ramp-disclosure" style={{ marginTop: 8 }}>{progress}</div> : null}
+            <TxStatus action={stakeAction} />
+            <div className="step-hint">
+              Use a fresh wallet you keep safe. It gets your payouts but isn't covered itself.{" "}
+              <a href={faqAnswerHref(FAQ_ANSWER.whichWallet)}>Which wallet?</a>
+            </div>
+            {crossChain ? (
+              <div className="step-hint">
+                Your USDC crosses to Stellar on Circle's bridge and your own safu-account stakes it.
+                {homeUsdc !== null ? ` USDC in your wallet: ${(Number(homeUsdc) / 1e6).toFixed(2)}.` : ""}
+              </div>
+            ) : null}
+          </div>
+        ) : !manageOpen ? (
+          <div className="step done">
+            <div className="step-h">
+              <span className="step-n">✓</span>Staked {fmtUsdc(myStake.amount)} USDC
+              <button className="step-link" onClick={() => setManageOpen(true)}>Manage stake</button>
+            </div>
+          </div>
+        ) : (
+          <div className="step active">
+            <div className="step-h">
+              <span className="step-n">1</span>Your stake
+              <button className="step-link" onClick={() => setManageOpen(false)}>Close ✕</button>
+            </div>
+            <div className="step-rows">
+              <div className="step-row"><span className="k">Staked</span><span className="v">{fmtUsdc(myStake.amount)} USDC</span></div>
+              <div className="step-row">
+                <span className="k">Withdrawable now</span>
+                <span className="v">{fmtExact(myStake.withdrawable)} USDC (+{yieldStripPct(myStake.withdrawable, myStake.amount)}%)</span>
+              </div>
+              {staker && crossChain ? (
+                <div className="step-row"><span className="k">Your safu-account (Stellar)</span><span className="v">{shortAddr(staker)}</span></div>
+              ) : null}
+            </div>
+            {myStake.yieldOwed >= (crossChain ? MIN_BRIDGEABLE_RAW : 1n) ? (
+              <button className="secondary-action" style={{ width: "100%", marginTop: 8 }} disabled={takeYieldAction.isRunning}
+                onClick={() => takeYieldAction.dispatch()}>
+                {takeYieldAction.isRunning ? "Sending..." : `Take ${fmtYield(myStake.yieldOwed)} USDC yield, keep my stake`}
+              </button>
+            ) : null}
+            <TxStatus action={takeYieldAction} />
+            <button className="secondary-action" style={{ width: "100%", marginTop: 8 }} disabled={withdrawAction.isRunning}
+              onClick={() => withdrawAction.dispatch()}>
+              {withdrawAction.isRunning ? "Withdrawing..." : crossChain ? "Withdraw to my wallet" : "Withdraw principal + yield"}
+            </button>
+            {progress ? <div className="ramp-disclosure" style={{ marginTop: 8 }}>{progress}</div> : null}
+            <TxStatus action={withdrawAction} />
+            <div className="step-warn">Withdrawing ends cover for all your wallets.</div>
+          </div>
+        )}
 
-          {pending ? (
-            <div className="side-stat" style={{ marginTop: 10 }}>
-              <div className="k">Prove you own this {chainLabel(pending.chain)} wallet</div>
-              <div className="v" style={{ fontFamily: "var(--font-body)", fontSize: 13 }}>
-                From <b>{pending.wallet}</b>, send exactly <b>{pending.amount} {pending.asset}</b> to the same
-                address (to itself). Then press Sent.
+        {/* 2 Cover your wallets: locked until staked; folds to one line while Manage stake is open. */}
+        {staked && manageOpen ? (
+          <div className={`step${protectedNow ? " done" : ""}`}>
+            <div className="step-h">
+              <span className="step-n">{protectedNow ? "✓" : "2"}</span>Cover your wallets
+              <span className={`step-r ${s2Right.cls}`}>{s2Right.text}</span>
+            </div>
+          </div>
+        ) : !staked ? (
+          <div className="step locked">
+            <div className="step-h">
+              <span className="step-n">2</span>Cover your wallets
+              <span className="step-r">{s2Right.text}</span>
+            </div>
+            <div className="step-hint">
+              {coverEnded ? "Cover ended when you withdrew. Stake again to bring it back." : "Stake first, then add the wallets you want covered."}
+            </div>
+          </div>
+        ) : (
+          <div className={`step ${protectedNow ? "done" : "active"}`}>
+            <div className="step-h">
+              <span className="step-n">{protectedNow ? "✓" : "2"}</span>Cover your wallets
+              <span className={`step-r ${s2Right.cls}`}>{s2Right.text}</span>
+            </div>
+            {n === 0 ? <div className="step-warn-box">Add a wallet below and confirm it's yours.</div> : null}
+
+            {rows.map((r) => (
+              <div className="step-wallet" key={r.key}>
+                <span><span className="c">{r.label}</span>{r.addr ? <>&nbsp; {r.addr}</> : null}</span>
+                {/* A cached row while the count can't be read: never green (B19 edge case). */}
+                <span className={n === null ? "s checking" : "s"}>{n === null ? "Checking…" : "Covered ✓"}</span>
+              </div>
+            ))}
+            {unnamed > 0 ? (
+              <div className="step-hint">
+                <button className="step-link inline" disabled={tailsBusy} onClick={showAddresses}>
+                  {tailsBusy ? "Waiting for your signature..." : "Show addresses"}
+                </button>
+              </div>
+            ) : null}
+            {tailsMsg ? <div className="step-hint">{tailsMsg}</div> : null}
+
+            {pending ? (
+              <div className="step-pending">
+                <div className="k">Confirm this {chainLabel(pending.chain)} wallet is yours</div>
+                From <b>{shortAddr(pending.wallet)}</b>, send exactly <b>{pending.amount} {pending.asset}</b> to itself, then press Sent.
                 {pending.expires_at ? ` Expires ${new Date(pending.expires_at * 1000).toLocaleTimeString()}.` : ""}
+                <button className="secondary-action" style={{ width: "100%", marginTop: 8 }} disabled={walletBusy} onClick={confirmSent}>
+                  {walletBusy ? "Checking..." : "Sent"}
+                </button>
+                <button className="secondary-action" style={{ width: "100%", marginTop: 8 }} disabled={walletBusy}
+                  onClick={() => setPending(null)}>
+                  Cancel
+                </button>
               </div>
-              <button className="secondary-action" style={{ width: "100%", marginTop: 8 }} disabled={walletBusy} onClick={confirmSent}>
-                {walletBusy ? "Checking..." : "Sent"}
-              </button>
-              <button className="secondary-action" style={{ width: "100%", marginTop: 8 }} disabled={walletBusy}
-                onClick={() => setPending(null)}>
-                Cancel
-              </button>
-            </div>
-          ) : coveredWallets.length < MAX_COVERED_WALLETS ? (
-            <>
-              <div className="ramp-toggle" style={{ marginTop: 10, marginBottom: 8 }}>
-                {CHAINS.map((c) => (
-                  <button key={c.id} className={`ramp-toggle-btn${newChain === c.id ? " active" : ""}`} onClick={() => setNewChain(c.id)}>
-                    {c.label}
-                  </button>
-                ))}
+            ) : full || n === null ? null : n === 0 || addOpen ? (
+              addForm
+            ) : (
+              <div className="step-hint">
+                <button className="step-link inline" onClick={() => setAddOpen(true)}>Add another wallet</button>
               </div>
-              <div className="field-input">
-                <input placeholder="Wallet address on that chain" value={newWallet} onChange={(e) => setNewWallet(e.target.value)} />
+            )}
+            {walletMsg ? (
+              <div className="tx-status" style={{ marginTop: 8 }}>
+                <div>{walletMsg}</div>
               </div>
-              <button className="secondary-action" style={{ width: "100%" }} disabled={walletBusy} onClick={addWallet}>
-                {walletBusy ? "Checking..." : "Add covered wallet"}
-              </button>
-            </>
-          ) : null}
-          {walletMsg ? (
-            <div className="tx-status" style={{ marginTop: 8 }}>
-              <div>{walletMsg}</div>
-            </div>
-          ) : null}
-        </div>
+            ) : null}
+          </div>
+        )}
       </div>
 
       <div>
-        <div className="side-stat">
-          <div className="k">Pool cap</div>
-          <div className="v">${POOL_CAP_USDC.toLocaleString()}</div>
-        </div>
-        <div className="side-stat">
-          <div className="k">Total staked</div>
-          <div className="v">{fmtUsdc(poolStats.totalStaked)} USDC</div>
-        </div>
-        <div className="side-stat">
-          <div className="k">Stakers</div>
-          <div className="v">{poolStats.totalStakers}</div>
-        </div>
-        {staker && crossChain ? (
+        <div className="step-stats">
           <div className="side-stat">
-            <div className="k">Your safu-account (Stellar)</div>
-            <div className="v" style={{ fontFamily: "var(--font-body)", fontSize: 12 }}>{staker}</div>
+            <div className="k">Pool cap</div>
+            <div className="v">${POOL_CAP_USDC.toLocaleString()}</div>
           </div>
-        ) : null}
-        <div className="side-stat">
-          <div className="k">Yield earned so far</div>
-          <div className="v" style={{ fontFamily: "var(--font-body)", fontSize: 14 }}>
-            +{((Number(yieldIndex) / Number(YIELD_INDEX_PRECISION) - 1) * 100).toFixed(2)}%
+          <div className="side-stat">
+            <div className="k">Total staked</div>
+            <div className="v">{fmtUsdc(poolStats.totalStaked)} USDC</div>
           </div>
-        </div>
-        <div className="side-stat">
-          <div className="k">Coverage ceilings</div>
-          <div className="v" style={{ fontFamily: "var(--font-body)", fontSize: 13 }}>
-            Up to 15x (Tier A) &middot; up to 10x (Tier B) &middot; up to 5x (Tier C) of your principal, never more.
+          <div className="side-stat">
+            <div className="k">Stakers</div>
+            <div className="v">{poolStats.totalStakers}</div>
+          </div>
+          <div className="side-stat">
+            <div className="k">Yield so far</div>
+            <div className="v">+{((Number(yieldIndex) / Number(YIELD_INDEX_PRECISION) - 1) * 100).toFixed(2)}%</div>
           </div>
         </div>
       </div>
     </div>
   );
+}
+
+function shortAddr(a: string): string {
+  return a.length > 10 ? `${a.slice(0, 4)}…${a.slice(-4)}` : a;
+}
+
+// Last-4 list, cached per staker in this browser after the one signature (display only).
+function tailsKey(staker: string): string {
+  return `safu_covered_tails:${staker}`;
+}
+
+function readCachedTails(staker: string): CoveredWalletTail[] | null {
+  try {
+    const raw = localStorage.getItem(tailsKey(staker));
+    return raw ? (JSON.parse(raw) as CoveredWalletTail[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+function cacheTails(staker: string, t: CoveredWalletTail[]): void {
+  try {
+    localStorage.setItem(tailsKey(staker), JSON.stringify(t));
+  } catch {
+    // Display cache only.
+  }
 }
