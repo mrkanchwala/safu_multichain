@@ -118,4 +118,9 @@ describe("toFriendlyError", () => {
     expect(toFriendlyError(new Error(noTrust)).message).toContain("isn't set up for USDC");
     expect(toFriendlyError(new Error(noFunds)).message).toBe("You don't have enough USDC in this wallet.");
   });
+
+  it("explains a blocked or busy Solana RPC instead of the generic fallback", () => {
+    const f = toFriendlyError(new Error("HTTP error (403): Forbidden"));
+    expect(f.message).toMatch(/couldn't reach the network/);
+  });
 });

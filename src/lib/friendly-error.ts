@@ -171,6 +171,8 @@ const PATTERNS: [RegExp, string][] = [
   [/insufficient lamports|no record of a prior credit/i, "Not enough SOL in the wallet to cover the network fee."],
   [/exceeds balance|insufficient (funds|balance)/i, "You don't have enough USDC in this wallet."],
   [/failed to fetch|networkerror|load failed|request failed \(5\d\d\)/i, "We couldn't reach SAFU. Check your connection and try again."],
+  // @solana/kit transport errors, e.g. "HTTP error (403): Forbidden" from a blocked or busy RPC.
+  [/HTTP error \((403|429|5\d\d)\)/i, "We couldn't reach the network. Wait a minute and try again, and tell the SAFU team if it keeps happening."],
 ];
 
 // Messages this app throws itself, already written for a user: shown as-is.

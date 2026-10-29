@@ -169,14 +169,14 @@ export async function solanaAta(owner: string): Promise<{ ata: SolAddress; bump:
   return { ata, bump };
 }
 
+/** 0 only when the wallet has no USDC account yet. Any other failure throws, so the panel shows no
+ *  balance instead of a false 0.00 (2026-10-29: a blocked RPC read as an empty wallet). */
 export async function solanaUsdcBalance(owner: string): Promise<bigint> {
   const { ata } = await solanaAta(owner);
-  try {
-    const r = await solRpc.getTokenAccountBalance(ata, { commitment: "confirmed" }).send();
-    return BigInt(r.value.amount);
-  } catch {
-    return 0n;
-  }
+  const info = await solRpc.getAccountInfo(ata, { encoding: "base64", commitment: "confirmed" }).send();
+  if (!info.value) return 0n;
+  const r = await solRpc.getTokenAccountBalance(ata, { commitment: "confirmed" }).send();
+  return BigInt(r.value.amount);
 }
 
 function le(n: bigint | number, size: 4 | 8): Uint8Array {
