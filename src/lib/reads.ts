@@ -112,7 +112,9 @@ export async function readMyStake(_rpc: unknown, owner: string): Promise<MyStake
     "get_stake",
     [addr(owner)],
   );
-  if (!record) return null;
+  // A fully withdrawn stake keeps its record (withdrawn, amount 0); the pool takes a new stake on
+  // it, so the site must show the stake form again, not a 0 stake (2026-10-29).
+  if (!record || record.withdrawn === true || !(BigInt(String(record.amount ?? 0)) > 0n)) return null;
   const [withdrawable, yieldOwed] = await Promise.all([
     readContract<bigint>(poolId(), "get_withdrawable_amount", [addr(owner)]),
     // The stake's beneficiary is the staker itself (Stellar wallets and safu-accounts alike).
