@@ -11,6 +11,7 @@ import {
   evmUsdcBalance,
   finishOnStellar,
   relayHomeAction,
+  burnForStake,
   solanaBurnToAdapter,
   solanaUsdcBalance,
 } from "../lib/crosschain";
@@ -122,11 +123,22 @@ export function StakePanel() {
       }
       const kind = client.kind as "evm" | "solana";
       const usdc6 = BigInt(Math.round(Number(stakeAmount) * 1e6));
-      setProgress(`Burning ${stakeAmount} USDC on ${kind === "evm" ? POOL.evm.label : POOL.solana.label}...`);
+      // Circle's fee comes out of the burn, so it is sent on top: the typed amount is what gets staked.
+      const burn6 = burnForStake(usdc6, BigInt(MIN_STAKE_USDC * 1e6), BigInt(MAX_STAKE_USDC * 1e6));
+      const sending = String(Number(burn6) / 1e6);
+      if (homeUsdc !== null && burn6 > homeUsdc) {
+        throw new Error(`You don't have enough USDC in this wallet. Staking ${stakeAmount} USDC sends ${sending}, including Circle's fee.`);
+      }
+      setProgress(`Sending ${sending} USDC on ${kind === "evm" ? POOL.evm.label : POOL.solana.label} (${stakeAmount} to stake + Circle's fee)...`);
       const burn = kind === "evm"
-        ? await evmBurnToAdapter(client, usdc6, "stake", setProgress)
-        : await solanaBurnToAdapter(client, usdc6, "stake");
+        ? await evmBurnToAdapter(client, burn6, "stake", setProgress)
+        : await solanaBurnToAdapter(client, burn6, "stake");
       const account = await finishOnStellar("stake", kind, burn, setProgress, signal);
+      // A deposit that doesn't fit the pool's limits waits in the safu-account unstaked (cctp-adapter),
+      // so "Staked" is said only once the pool has the stake.
+      if (!(await stakeLanded(client, account))) {
+        throw new Error("Your USDC reached your safu-account but wasn't staked. It's safe there. Message the SAFU team and we'll help you finish it.");
+      }
       return `Staked from your safu-account ${account.slice(0, 6)}...`;
     } finally {
       setProgress(null);
@@ -468,4 +480,14 @@ function cacheTails(staker: string, t: CoveredWalletTail[]): void {
   } catch {
     // Display cache only.
   }
+}
+
+/** The pool holds a stake for this account. Re-read a few times: the RPC can lag the relay's tx. */
+async function stakeLanded(client: AppClient, account: string): Promise<boolean> {
+  for (let i = 0; i < 3; i++) {
+    const s = await readMyStake(client, account).catch(() => null);
+    if (s && s.amount > 0n) return true;
+    await new Promise((r) => setTimeout(r, 3000));
+  }
+  return false;
 }

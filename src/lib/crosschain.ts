@@ -79,6 +79,23 @@ export async function safuAccountFor(kind: "evm" | "solana", owner: string, mode
   return String(v);
 }
 
+// --- Circle's fee on deposits ----------------------------------------------------------------------
+
+/** Circle's fast-transfer fee on the deposit routes (iris fees API, 2026-10-29: 1 bp for Ethereum ->
+ *  Stellar and Solana -> Stellar). It comes out of the burned amount, so a 1 USDC burn lands 0.9999
+ *  and misses the 1 USDC minimum stake (live, 2026-10-29). */
+export const CCTP_FAST_FEE_BPS = 1n;
+
+/** The burn that lands `stake6` on Stellar after Circle's fee, kept inside [min6, max6] whichever
+ *  way Circle rounds the fee. All amounts in 6-decimal USDC units. */
+export function burnForStake(stake6: bigint, min6: bigint, max6: bigint, feeBps = CCTP_FAST_FEE_BPS): bigint {
+  const landed = (b: bigint) => [b - (b * feeBps + 9_999n) / 10_000n, b - (b * feeBps) / 10_000n] as const;
+  let burn = (stake6 * 10_000n + 10_000n - feeBps - 1n) / (10_000n - feeBps);
+  while (landed(burn)[1] > max6) burn -= 1n;
+  while (landed(burn)[0] < min6) burn += 1n;
+  return burn;
+}
+
 // --- EVM burn (Ethereum -> Stellar) -----------------------------------------------------------------
 
 const ERC20 = parseAbi(["function approve(address spender, uint256 amount) returns (bool)",
