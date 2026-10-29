@@ -214,11 +214,20 @@ const concat = (...parts: Uint8Array[]) => {
   return out;
 };
 
+/** Lamports a Solana deposit needs: 5,000-10,000 fee + 2,992,120 rent for Circle's message account. */
+const SOL_NEEDED_FOR_BURN = 3_100_000n;
+
 /** CCTP v2 `deposit_for_burn_with_hook`: hook data = the owner's own USDC ATA + bump, which the
  *  adapter stores as the payout account (cctp-adapter solana_payout_account). */
 export async function solanaBurnToAdapter(client: AppClient, usdc6: bigint, mode: Mode): Promise<string> {
   if (!client.address) throw new Error("Connect a Solana wallet first.");
   const owner = solAddress(client.address);
+  // The burn pays Solana's fee plus rent for Circle's message account (~0.00299 SOL, measured on
+  // mainnet 2026-10-29). Without it the send fails in preflight with a message no user can read.
+  const { value: lamports } = await solRpc.getBalance(owner, { commitment: "confirmed" }).send();
+  if (lamports < SOL_NEEDED_FOR_BURN) {
+    throw new Error(`Your wallet needs about ${Number(SOL_NEEDED_FOR_BURN) / 1e9} SOL for Solana's fees on this step. Add a little SOL and try again.`);
+  }
   const adapter32 = StrKey.decodeContract(adapterFor(mode));
   const { ata, bump } = await solanaAta(client.address);
   const hook = concat(bytes(ata), Uint8Array.from([bump]));
