@@ -125,6 +125,7 @@ const ACTION_HINTS: Record<string, string> = {
   // Covered wallets (registry)
   TooManyWallets: "You've already added the most wallets you can cover. Remove one before adding another.",
   WalletTaken: "This wallet is already covered by someone else.",
+  WRONG_CHAIN: "That address doesn't match the chain you picked, so check the chain above.",
   "already covered by another staker": "This wallet is already covered by someone else.",
   "one of your covered wallets": "That address is one of your covered wallets, so choose a different one.",
   NoActiveStake: "Stake first, then add the wallets you want covered.",

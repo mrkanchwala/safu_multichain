@@ -4,6 +4,7 @@ import { useAction, useClient } from "../lib/client";
 import type { AppClient } from "../lib/client";
 import { claimStakerYield, stake, withdrawStake } from "../lib/actions";
 import { addCoveredWallet, confirmCoveredWallet, countCoveredWallets, listMyCoveredWallets } from "../lib/claimApi";
+import { walletChainMismatch } from "../lib/wallet-chain";
 import type { CoveredWalletResponse, CoveredWalletTail } from "../lib/claimApi";
 import { FAQ_ANSWER, faqAnswerHref } from "../lib/links";
 import {
@@ -204,6 +205,8 @@ export function StakePanel() {
     if (!staker) return setWalletMsg(crossChain ? "Stake first: your safu-account covers the wallets." : "Connect a wallet first.");
     if (coveredWallets.length >= MAX_COVERED_WALLETS) return setWalletMsg(`You can cover at most ${MAX_COVERED_WALLETS} wallets.`);
     if (!newWallet.trim()) return setWalletMsg("Enter a wallet address.");
+    const mismatch = walletChainMismatch(newChain, newWallet);
+    if (mismatch) return setWalletMsg(mismatch);
     if (newChain === "stellar" && newWallet.trim() === staker) {
       return setWalletMsg("A covered wallet can't be the same as your staking wallet.");
     }
