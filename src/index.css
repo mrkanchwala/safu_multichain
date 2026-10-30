@@ -1436,6 +1436,48 @@ body {
 .step-row .k {
   color: var(--text-muted);
 }
+.addr-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+/* Icon-only, no border: 14px mark, 32px tap target (negative margin keeps the row height). */
+.copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 32px;
+  min-height: 32px;
+  margin: -8px -8px -8px 0;
+  padding: 0 8px;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-muted);
+  font: inherit;
+  font-family: var(--font-body);
+  font-size: 12px;
+  cursor: pointer;
+}
+.copy-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.copy-btn:hover,
+.copy-btn:focus-visible {
+  color: var(--text);
+  background: var(--bg-panel-alt);
+  outline: none;
+}
+.copy-btn.copied {
+  color: var(--brand-success);
+}
 .step-row .v {
   font-family: var(--font-mono);
   text-align: right;

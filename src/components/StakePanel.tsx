@@ -344,7 +344,10 @@ export function StakePanel() {
                 <span className="v">{fmtExact(myStake.withdrawable)} USDC (+{yieldStripPct(myStake.withdrawable, myStake.amount)}%)</span>
               </div>
               {staker && crossChain ? (
-                <div className="step-row"><span className="k">Your safu-account (Stellar)</span><span className="v">{shortAddr(staker)}</span></div>
+                <div className="step-row">
+                  <span className="k">Your safu-account (Stellar)</span>
+                  <span className="v addr-copy"><span title={staker}>{shortAddr(staker)}</span><CopyButton text={staker} /></span>
+                </div>
               ) : null}
             </div>
             {myStake.yieldOwed >= (crossChain ? MIN_BRIDGEABLE_RAW : 1n) ? (
@@ -461,6 +464,29 @@ export function StakePanel() {
 
 function shortAddr(a: string): string {
   return a.length > 10 ? `${a.slice(0, 4)}…${a.slice(-4)}` : a;
+}
+
+// The safu-account is shown shortened (a full 56-char address breaks the phone layout, B18),
+// so this copies the full address. Only for the safu-account: covered wallets are never exposed.
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(false), 1500);
+    return () => clearTimeout(t);
+  }, [copied]);
+  const copy = () => navigator.clipboard?.writeText(text).then(() => setCopied(true), () => {});
+  return (
+    <button type="button" className={copied ? "copy-btn copied" : "copy-btn"} onClick={copy}
+      aria-label={copied ? "Copied" : "Copy full safu-account address"} title={copied ? "Copied" : "Copy address"}>
+      {copied ? (
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+      ) : (
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3" /></svg>
+      )}
+      {copied ? <span className="copy-label">Copied</span> : null}
+    </button>
+  );
 }
 
 // Last-4 list, cached per staker in this browser after the one signature (display only).
