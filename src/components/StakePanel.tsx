@@ -412,7 +412,7 @@ export function StakePanel() {
             {pending ? (
               <div className="step-pending">
                 <div className="k">Confirm this {chainLabel(pending.chain)} wallet is yours</div>
-                From <b>{shortAddr(pending.wallet)}</b>, send exactly <b>{pending.amount} {pending.asset}</b> to itself, then press Sent.
+                Open <b>{shortAddr(pending.wallet)}</b> in your wallet app and send exactly <b>{pending.amount} {pending.asset}</b> to that same address, then press Sent. A send from any other wallet won't count.
                 {pending.expires_at ? ` Expires ${new Date(pending.expires_at * 1000).toLocaleTimeString()}.` : ""}
                 <button className="secondary-action" style={{ width: "100%", marginTop: 8 }} disabled={walletBusy} onClick={confirmSent}>
                   {walletBusy ? "Checking..." : "Sent"}

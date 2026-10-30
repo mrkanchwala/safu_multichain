@@ -123,4 +123,9 @@ describe("toFriendlyError", () => {
     const f = toFriendlyError(new Error("HTTP error (403): Forbidden"));
     expect(f.message).toMatch(/couldn't reach the network/);
   });
+
+  it("names an expired covered-wallet check (B29)", () => {
+    const result = toFriendlyError(new Error("Request failed (400): CHALLENGE_EXPIRED: this check expired; add the wallet again for a new amount"));
+    expect(result.message).toBe("This check expired. Add the wallet again to get a new amount.");
+  });
 });

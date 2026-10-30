@@ -123,6 +123,7 @@ const ACTION_HINTS: Record<string, string> = {
   "Signature does not match": "That signature doesn't match your staking wallet. Connect the wallet you staked with.",
   "owner_chain": OUR_SIDE,
   // Covered wallets (registry)
+  CHALLENGE_EXPIRED: "This check expired. Add the wallet again to get a new amount.",
   TooManyWallets: "You've already added the most wallets you can cover. Remove one before adding another.",
   WalletTaken: "This wallet is already covered by someone else.",
   WRONG_CHAIN: "That address doesn't match the chain you picked, so check the chain above.",
