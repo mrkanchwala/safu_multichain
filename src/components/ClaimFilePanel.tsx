@@ -9,6 +9,7 @@ const MAX_DRAINS = 20; // MAX_TXIDS_PER_CLAIM (SAFU3.0 safu/config.py), enforced
 import type { ChainId } from "../lib/network";
 import { useStaker } from "../lib/useStaker";
 import { toFriendlyError } from "../lib/friendly-error";
+import { LINKS } from "../lib/links";
 
 // File a claim tab. v3, 2026-09-24: ONE claim per stake, bundling up to 20 drain transactions across
 // the covered wallets, any chain mix (locked rule, key-decisions.md). The TOTAL payout is capped at
@@ -168,6 +169,14 @@ export function ClaimFilePanel() {
                 <li key={i}>{rowLine(i, r.status, r.code)}</li>
               ))}
             </ul>
+          ) : null}
+          {check.outcome === "refused" || check.outcome === "none_accepted" || check.outcome === "incoherent" ||
+          check.results.some((r) => r.status === "not_accepted") ? (
+            // Founder 2026-10-30: every refusal points to the team for more info. Info only: the
+            // team explains, it never re-checks a drain by hand to get it paid.
+            <div className="ramp-disclosure" style={{ marginTop: 8 }}>
+              Want to know more? <a href={LINKS.telegram} target="_blank" rel="noopener noreferrer">Ask the SAFU team on Telegram</a>.
+            </div>
           ) : null}
           {check.outcome === "ready" ? (
             <button className="primary-action" disabled={running} onClick={fileAccepted}>
