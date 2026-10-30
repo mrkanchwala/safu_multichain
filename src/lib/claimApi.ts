@@ -126,6 +126,28 @@ export async function fileClaim(client: AppClient, staker: string, entries: Clai
   };
 }
 
+// B6 (2026-10-30): "ask first". Checks each drain on its own and files nothing. The user then
+// files only the accepted ones with fileClaim, which the backend re-checks from scratch. Its own
+// message prefix, so this signature can never file a claim. Byte-identical with backend/app.py.
+export type CheckStatus = "accepted" | "not_accepted" | "fix_input" | "try_later";
+export type CheckOutcome = "ready" | "none_accepted" | "fix_input" | "try_later" | "incoherent" | "refused";
+export type CheckRow = { chain: ChainId; txHash: string; status: CheckStatus; code: string | null };
+export type CheckClaimResult = { outcome: CheckOutcome; results: CheckRow[] };
+
+export async function checkClaim(client: AppClient, staker: string, entries: ClaimEntry[]): Promise<CheckClaimResult> {
+  const clean = entries.map((e) => ({ chain: e.chain, tx_hash: e.txHash.trim() }));
+  const timestamp = Math.floor(Date.now() / 1000);
+  const canon = clean.map((e) => `${e.chain}:${e.tx_hash}`).join(",");
+  const message = `SAFU_CLAIM_CHECK:v1:${staker}:${canon}:${timestamp}`;
+  const body = await postJson("/claim/check", { staker, entries: clean, timestamp, ...(await signFor(client, staker, message)) });
+  return {
+    outcome: body.outcome,
+    results: (body.results as { chain: ChainId; tx_hash: string; status: CheckStatus; code: string | null }[]).map((r) => ({
+      chain: r.chain, txHash: r.tx_hash, status: r.status, code: r.code,
+    })),
+  };
+}
+
 // Covered wallets (ownership proof, 2026-09-23): step 1 registers straight away only on a same-chain
 // link; otherwise it returns a tiny amount the covered wallet must send TO ITSELF, then step 2
 // (/covered-wallets/confirm) finds that transfer on-chain and registers. No list endpoint, by design.

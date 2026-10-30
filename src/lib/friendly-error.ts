@@ -113,6 +113,7 @@ const ACTION_HINTS: Record<string, string> = {
   HACK_TIME_UNAVAILABLE: "We couldn't read when this transaction happened. Check the transaction ID and try again.",
   TIER_UNASSESSABLE: "We couldn't check this wallet's history right now. Try again shortly.",
   WALLET_INELIGIBLE: "This wallet can't be covered.",
+  CHECK_LIMIT: "You've checked claims too many times today. Try again tomorrow.",
   CHAIN_UNSUPPORTED: "That chain isn't supported yet.",
   // WalletConnect 5100: the phone wallet refused the network (usually a test network it has off).
   // Must stay above "Unsupported chain", which is a substring of it.
