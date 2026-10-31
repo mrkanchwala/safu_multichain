@@ -16,7 +16,7 @@ import {
   solanaBurnToAdapter,
   solanaUsdcBalance,
 } from "../lib/crosschain";
-import { fmtExact, fmtUsdc, fmtYield, readCoveredWallets, readMyStake, readPoolStats, readYieldIndex, rememberCoveredWallet } from "../lib/reads";
+import { fmtExact, fmtUsdc, fmtYield, readCoveredWallets, readMyBacking, readMyStake, readPoolStats, readYieldIndex, rememberCoveredWallet } from "../lib/reads";
 import type { CoveredWallet, MyStake } from "../lib/reads";
 import { CHAINS, MAX_STAKE_USDC, MIN_BRIDGEABLE_RAW, MIN_STAKE_USDC, POOL_CAP_USDC, YIELD_INDEX_PRECISION } from "../lib/network";
 import type { ChainId } from "../lib/network";
@@ -117,6 +117,15 @@ export function StakePanel() {
 
   const stakeAction = useAction(async (signal) => {
     if (!client.address) throw new Error("Connect a wallet first.");
+    if (!staker) throw new Error("Still loading your account. Try again in a moment.");
+    // Read the stake fresh before sending anything (2026-10-31: a Solana user staked 3 times; the
+    // pool took one, the other two waited in the safu-account). A failed read stops here too:
+    // never send money on a guess.
+    const before = await depositSnapshot(client, staker).catch(() => null);
+    if (!before) throw new Error("Couldn't check your stake right now. Try again in a moment.");
+    if (before.stake > 0n) {
+      throw new Error("You already have a stake. A wallet holds one stake: withdraw it first to stake a new amount.");
+    }
     try {
       if (client.kind === "stellar") {
         // Beneficiary == staker (stake.rs, 2026-09-19): payouts land back on the wallet that staked.
@@ -135,12 +144,18 @@ export function StakePanel() {
         ? await evmBurnToAdapter(client, burn6, "stake", setProgress)
         : await solanaBurnToAdapter(client, burn6, "stake");
       const account = await finishOnStellar("stake", kind, burn, setProgress, signal);
-      // A deposit that doesn't fit the pool's limits waits in the safu-account unstaked (cctp-adapter),
-      // so "Staked" is said only once the pool has the stake.
-      if (!(await stakeLanded(client, account))) {
+      // A deposit the pool refuses (already staked, full, paused) waits in the safu-account
+      // (cctp-adapter). Say where THIS deposit went by comparing before and after, never by
+      // "a stake exists". New pool: above the max stake, the rest becomes backing (stake.rs A7).
+      const out = await depositOutcome(client, account, before);
+      if (out.staked <= 0n && out.backed <= 0n) {
         throw new Error("Your USDC reached your safu-account but wasn't staked. It's safe there. Message the SAFU team and we'll help you finish it.");
       }
-      return `Staked from your safu-account ${account.slice(0, 6)}...`;
+      const parts = [
+        out.staked > 0n ? `Staked ${fmtUsdc(out.staked)} USDC` : null,
+        out.backed > 0n ? `${fmtUsdc(out.backed)} USDC went to backing` : null,
+      ].filter(Boolean);
+      return `${parts.join(", ")} from your safu-account ${account.slice(0, 6)}...`;
     } finally {
       setProgress(null);
       setStakeAmount("");
@@ -511,12 +526,37 @@ function cacheTails(staker: string, t: CoveredWalletTail[]): void {
   }
 }
 
-/** The pool holds a stake for this account. Re-read a few times: the RPC can lag the relay's tx. */
-async function stakeLanded(client: AppClient, account: string): Promise<boolean> {
+type DepositSnapshot = { stake: bigint; backing: bigint | null };
+
+/** Stake and backing for this account. The stake read must succeed (it throws otherwise); a failed
+ *  backing read is null, so it never blocks a stake or fakes a backing result. */
+async function depositSnapshot(client: AppClient, account: string): Promise<DepositSnapshot> {
+  const [s, b] = await Promise.all([
+    readMyStake(client, account),
+    readMyBacking(account).catch(() => undefined),
+  ]);
+  return {
+    stake: s?.amount ?? 0n,
+    backing: b === undefined ? null : b ? b.amount + b.pendingAmount : 0n,
+  };
+}
+
+/** How much of THIS deposit the pool took as stake and as backing. Re-read a few times: the RPC
+ *  can lag the relay's tx. */
+async function depositOutcome(
+  client: AppClient, account: string, before: DepositSnapshot,
+): Promise<{ staked: bigint; backed: bigint }> {
+  let out = { staked: 0n, backed: 0n };
   for (let i = 0; i < 3; i++) {
-    const s = await readMyStake(client, account).catch(() => null);
-    if (s && s.amount > 0n) return true;
+    const now = await depositSnapshot(client, account).catch(() => null);
+    if (now) {
+      out = {
+        staked: now.stake - before.stake,
+        backed: now.backing !== null && before.backing !== null ? now.backing - before.backing : 0n,
+      };
+      if (out.staked > 0n || out.backed > 0n) return out;
+    }
     await new Promise((r) => setTimeout(r, 3000));
   }
-  return false;
+  return out;
 }
