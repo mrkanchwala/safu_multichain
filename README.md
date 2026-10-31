@@ -1,6 +1,6 @@
 # SAFU Staking Multichain
 
-One USDC pool on Stellar that pays you back when a wallet you registered is drained, or when a loan in one of those wallets is wrongfully liquidated. Covered wallets can sit on Ethereum, Solana or Stellar. Payouts follow rules set in advance, and nobody votes on a claim.
+One USDC pool on Stellar that pays you back when crypto is stolen from a wallet you registered, or when a loan in one of those wallets is wrongfully liquidated. Covered wallets can sit on Ethereum, Solana or Stellar. Payouts follow rules set in advance, and nobody votes on a claim.
 
 This is the new version of the pool: adjustable settings, upgrades behind two-of-three governance, a backer withdrawal drip, a first-come claim line and upkeep inside every user call. It is on Stellar testnet (tag `audit-freeze-2026-10-20`, addresses in [docs/TESTNET.md](docs/TESTNET.md)) and goes to audit next. The pool live today at [safustaking.com](https://safustaking.com) is the earlier version (tag `mainnet-build-2026-09-29-r3`), and its stakers move to the new pool after the audit.
 

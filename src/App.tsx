@@ -101,7 +101,7 @@ export default function App() {
       <section className="hero">
         <div className="wrap">
           <h1>
-            SAFU pays back stolen crypto.
+            SAFU pays you back when your crypto is stolen.
             <br />
             <em>Automatically. No vote. No appeal.</em>
           </h1>
