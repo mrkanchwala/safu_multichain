@@ -1491,3 +1491,33 @@ body {
 .step-stats .side-stat {
   margin: 0;
 }
+
+/* Crimson sky, 2026-10-31 (founder): the deck + survey background, used on every SAFU surface
+   (safustaking.com, solana.safustaking.com, link preview, decks). Values from the Demo Day deck. */
+body {
+  position: relative;
+}
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+body::before {
+  background: radial-gradient(ellipse 70% 60% at 50% 8%, rgba(140, 24, 24, 0.55), rgba(56, 14, 14, 0.35) 45%, transparent 78%);
+}
+body::after {
+  opacity: 0.5;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 120px 120px;
+  mask-image: radial-gradient(ellipse 70% 70% at 50% 30%, #000 30%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 70% at 50% 30%, #000 30%, transparent 80%);
+}
+#root {
+  position: relative;
+  z-index: 1;
+}
