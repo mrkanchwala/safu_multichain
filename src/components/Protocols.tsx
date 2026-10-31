@@ -9,14 +9,14 @@ const SECTIONS: { id: string; label: string; title: string; intro: string; items
     label: "For platforms",
     title: "Protect your own users' wallets.",
     intro:
-      "You hold your users' funds, or your users hold their own wallet through your product. A verified drain or wrongful liquidation triggers an automatic payout, up to a set multiple of the stake, sized to the wallet's risk tier and never more than the loss itself.",
+      "You hold your users' funds, or your users hold their own wallet through your product. A verified theft or wrongful liquidation triggers an automatic payout, up to a set multiple of the stake, sized to the wallet's risk tier and never more than the loss itself.",
     items: [
       {
         t: "Your pool, your brand.",
         d: "Your users stake through your product and the pool carries your name. The engine underneath is ours, so you ship coverage without building a claims system to run it.",
       },
       {
-        t: "Wallet-level loss covered.",
+        t: "Wallet thefts covered.",
         d: "Phishing, approval exploits, key compromise and wrongful liquidations are how users actually lose money, and the pool covers them whether a person or an autonomous agent runs the wallet.",
       },
       {
@@ -32,17 +32,17 @@ const SECTIONS: { id: string; label: string; title: string; intro: string; items
   {
     id: "pr-ecosystems",
     label: "For ecosystems",
-    title: "Protect the protocols in your ecosystem.",
+    title: "Next: protect the protocols in your ecosystem.",
     intro:
-      "A chain or a foundation can also deploy one level up, with a pool that covers the protocols built on its ecosystem. It works like a reserve ratio: when a protocol in the pool is hacked, the payout goes to the protocol itself, deterministically and fast, so it can absorb the loss and keep honoring withdrawals. Their end-users are protected because the protocol stays solvent.",
+      "Planned next. A chain or a foundation will be able to deploy one level up, with a pool that covers the protocols built on its ecosystem. It works like a reserve ratio: when a protocol in the pool is hacked, the payout would go to the protocol itself, deterministically and fast, so it can absorb the loss and keep honoring withdrawals. Their end-users are protected because the protocol stays solvent.",
     items: [
       {
         t: "Stops a bank run before it starts.",
         d: "The payout lands fast enough that the protocol keeps honoring withdrawals, so its users never see a locked balance.",
       },
       {
-        t: "Protocol-level exploits covered.",
-        d: "Oracle and governance manipulation: the attacks an audit looks for, covered for the day one slips through.",
+        t: "Protocol thefts, next.",
+        d: "Oracle and governance manipulation: the attacks an audit looks for, to be covered for the day one slips through.",
       },
       {
         t: "Member protocols stake in too.",
@@ -59,7 +59,7 @@ const SECTIONS: { id: string; label: string; title: string; intro: string; items
     label: "Any chain",
     title: "Built once, ported per chain.",
     intro:
-      "The same deterministic mechanism runs on Ethereum's EVM and Stellar's Soroban, and one pool on Stellar already covers wallets on Ethereum, Solana and Stellar through Circle's CCTP. Those are the proof that it ports, and more chains can follow.",
+      "The same deterministic mechanism runs on Stellar's Soroban, and one pool on Stellar already covers wallets on Ethereum, Solana and Stellar through Circle's CCTP. That is the proof it ports, and more chains can follow.",
     items: [
       {
         t: "One engine for every chain.",
@@ -87,10 +87,10 @@ export function Protocols({ onBack }: { onBack: () => void }) {
       <div className="wp-head">
         <h1>Run this pool under your own name.</h1>
         <div className="sub-line">
-          SAFU gives protocols, wallet providers and platforms holding user funds a way to protect their users,
-          people or autonomous agents alike, from phishing, approval exploits, key compromise and wrongful
-          liquidations. An ecosystem can deploy the same pool one level up and protect the protocols built on it
-          instead: when one is hacked, the payout goes to the protocol itself, fast enough to stop a bank run
+          SAFU gives protocols, consumer dApps and platforms holding user funds a way to protect their users,
+          people or autonomous agents alike, from crypto theft (phishing, approval exploits, key compromise) and
+          wrongful liquidations. Planned next: an ecosystem will be able to deploy the same pool one level up and
+          protect the protocols built on it: when one is hacked, the payout would go to the protocol itself, fast enough to stop a bank run
           before it starts. Neither flow has a vote or a claim form, because the contract enforces the payout rule
           itself.
         </div>

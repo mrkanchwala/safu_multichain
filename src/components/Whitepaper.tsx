@@ -38,15 +38,15 @@ export function Whitepaper({ onBack }: { onBack: () => void }) {
       <div className="wp">
         <Slide id="wp-summary" title="Summary">
           <p>
-            SAFU is a shared pool that pays people back when their wallets are drained or their loans are liquidated at a price that wasn't real. Stakers put USDC into one pool
-            on Stellar, register up to three wallets on Ethereum, Solana or Stellar, and if one of those wallets is drained or wrongly liquidated, the pool pays up to a set multiple of their stake, capped at the real loss. The rules that decide a
-            payout are written into the contract and the claim checks, and nobody votes on claims. This paper describes the multichain version of SAFU.
+            SAFU is a shared pool that pays people back when crypto is stolen from their wallets or their loans are liquidated at a price that wasn't real. Stakers put USDC into one pool
+            on Stellar, register up to three wallets on Ethereum, Solana or Stellar, and if crypto is stolen from one of those wallets, or it's wrongly liquidated, the pool pays up to a set multiple of their stake, capped at the real loss. The rules that decide a
+            payout are written into the contract and the claim checks, and nobody votes on claims. This paper describes the multichain version of SAFU. Today SAFU pays back crypto stolen from wallets; cover for thefts from protocols comes next.
           </p>
         </Slide>
 
         <Slide id="wp-problem" title="The problem">
           <p>
-            Every week, people lose money to phishing links, malicious token approvals and stolen keys. When it
+            Every week, people have crypto stolen through phishing links, malicious token approvals and stolen keys. When it
             happens, the options are thin. A wallet provider or exchange might look at the case, or a committee might
             vote on it weeks later, and the rules they use are rarely published, so most people only learn whether
             they'll be paid long after the loss. Lending has the same gap: when a loan is liquidated on a price that
@@ -147,7 +147,7 @@ export function Whitepaper({ onBack }: { onBack: () => void }) {
           </div>
           <p>
             The payout is the smaller of that ceiling and the real loss. The ceilings are fixed in the contract and
-            can't be raised. Each stake covers one claim, and that claim can bundle up to 20 drains across the three
+            can't be raised. Each stake covers one claim, and that claim can bundle up to 20 theft transactions across the three
             wallets. After it's paid, the stake that backed it is used up, even if the payout came in under the
             ceiling. A staking wallet that has had a claim paid can't stake again.
           </p>
@@ -175,13 +175,13 @@ export function Whitepaper({ onBack }: { onBack: () => void }) {
 
         <Slide id="wp-checks" title="How a claim is checked">
           <p>
-            Ownership comes first: a covered wallet must be registered before the drain, and you show it's yours by
+            Ownership comes first: a covered wallet must be registered before the theft, and you show it's yours by
             sending a tiny amount from that wallet to itself (on Stellar, a past transfer from it to your staking wallet
             is enough). You never sign a message with the covered wallet, because a wallet whose key was stolen would
             let the thief sign too.
           </p>
           <p>
-            The scanner then reads each drain or liquidation transaction on its own chain and prices a drain with Reflector,
+            The scanner then reads each theft or liquidation transaction on its own chain and prices a theft with Reflector,
             Stellar's price oracle, and a liquidation with independent market price history. If the claim checks out, the oracle signs the result. The
             oracle key sits in a cloud key-management service and never leaves it. The scoring details stay private,
             because publishing them would make the checks easier to game. The time rules above are public.
@@ -199,7 +199,7 @@ export function Whitepaper({ onBack }: { onBack: () => void }) {
                 </tr>
                 <tr>
                   <td>Rejecting any payout above the ceiling</td>
-                  <td>Scanning the drain or liquidation transaction</td>
+                  <td>Scanning the theft or liquidation transaction</td>
                 </tr>
                 <tr>
                   <td>Checking the oracle signature</td>
@@ -246,7 +246,7 @@ export function Whitepaper({ onBack }: { onBack: () => void }) {
 
         <Slide id="wp-protocols" title="For protocols">
           <p>
-            Wallets, exchanges and platforms that hold user funds can run a SAFU pool under their own name, for their
+            Consumer dApps, exchanges and platforms that hold user funds can run a SAFU pool under their own name, for their
             own users.
           </p>
           <p className="inline-links">

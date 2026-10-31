@@ -101,14 +101,14 @@ export default function App() {
       <section className="hero">
         <div className="wrap">
           <h1>
-            SAFU pays your wallet back.
+            SAFU pays back stolen crypto.
             <br />
             <em>Automatically. No vote. No appeal.</em>
           </h1>
           <p>
             A shared USDC pool on Stellar. Register a wallet on Ethereum, Solana or
-            Stellar, and if it's drained through phishing, an approval exploit or a stolen
-            key, or a loan in it is liquidated at a price that wasn't real, the payout lands
+            Stellar, and if crypto is stolen from it through phishing, an approval exploit or a
+            stolen key, or a loan in it is liquidated at a price that wasn't real, the payout lands
             automatically, in USDC.
           </p>
           <div className="hero-links">

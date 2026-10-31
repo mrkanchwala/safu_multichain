@@ -12,11 +12,11 @@ const GROUPS: { id: string; title: string; items: { q: string; a: ReactNode; id?
     items: [
       {
         q: "What is SAFU?",
-        a: "SAFU is a shared pool that pays you back if a wallet you registered gets drained. You stake USDC into one pool on Stellar, choose up to three wallets to cover on Ethereum, Solana or Stellar, and if one of them is drained, the pool pays you in USDC by rules that are fixed in advance.",
+        a: "SAFU is a shared pool that pays you back if crypto is stolen from a wallet you registered. You stake USDC into one pool on Stellar, choose up to three wallets to cover on Ethereum, Solana or Stellar, and if crypto is stolen from one of them, the pool pays you in USDC by rules that are fixed in advance.",
       },
       {
         q: "What kind of losses are covered?",
-        a: "Two kinds: wallet drains (phishing, a malicious token approval, or a stolen private key or seed phrase) and wrongful liquidations of a loan held in one of your covered wallets. Covered assets are ETH, USDC and USDT on Ethereum, SOL, USDC and USDT on Solana, and XLM, USDC and USDT on Stellar.",
+        a: "Two kinds: theft from your wallet (phishing, a malicious token approval, or a stolen private key or seed phrase) and wrongful liquidations of a loan held in one of your covered wallets. Covered assets are ETH, USDC and USDT on Ethereum, SOL, USDC and USDT on Solana, and XLM, USDC and USDT on Stellar.",
       },
       {
         q: "What is a wrongful liquidation?",
@@ -76,7 +76,7 @@ const GROUPS: { id: string; title: string; items: { q: string; a: ReactNode; id?
       },
       {
         q: "How do I file a claim?",
-        a: "Open the File a claim tab within 30 days of the drain and paste the drain transaction. One claim can include up to 20 drains across your three covered wallets, so if you were hit more than once, put them all in the same claim.",
+        a: "Open the File a claim tab within 30 days of the theft and paste the theft transaction. One claim can include up to 20 theft transactions across your three covered wallets, so if you were hit more than once, put them all in the same claim.",
       },
       {
         q: "How long until I'm paid?",
@@ -102,7 +102,7 @@ const GROUPS: { id: string; title: string; items: { q: string; a: ReactNode; id?
       },
       {
         q: "Can someone else claim for my wallet?",
-        a: "No, because a claim can only name a wallet that was registered to your stake before the drain happened, so citing someone else's public drain afterwards gets nothing.",
+        a: "No, because a claim can only name a wallet that was registered to your stake before the theft happened, so citing someone else's public theft afterwards gets nothing.",
       },
       {
         q: "Who holds the keys?",
@@ -123,7 +123,7 @@ const GROUPS: { id: string; title: string; items: { q: string; a: ReactNode; id?
         a: "Backers add USDC that helps the pool pay large claims on time, without registering any wallets of their own. Backed money matures after 7 days and can then be withdrawn, and backers always get back exactly what they put in, but they can only take out money that open claims don't need.",
       },
       {
-        q: "I run a wallet or platform. Can we use SAFU?",
+        q: "I run a consumer dApp or platform. Can we use SAFU?",
         a: (
           <>
             Yes, you can run a SAFU pool under your own name for your own users. See{" "}
