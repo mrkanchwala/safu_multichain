@@ -390,9 +390,6 @@ header .social {
   outline: 2px solid var(--brand-primary);
   outline-offset: 2px;
 }
-.switch-bar {
-  padding-top: 20px;
-}
 
 .hero-links {
   display: flex;
@@ -449,14 +446,6 @@ header .social {
   display: grid;
   grid-template-columns: 1.15fr 0.85fr;
   gap: 28px;
-}
-.panel-note {
-  font-size: 12px;
-  color: var(--text-muted);
-  border-top: 1px solid var(--border);
-  padding-top: 16px;
-  margin-top: 4px;
-  line-height: 1.5;
 }
 /* A grid column won't shrink below its content by default, so one long address (the 56-character
    safu-account shown after connecting) widened the column past a phone screen and the card clipped

@@ -1,6 +1,4 @@
 import type { ComponentType, ReactNode } from "react";
-import type { PoolFacts } from "../shell/lib/facts";
-import type { PoolFaq } from "../shell/components/Faq";
 
 export type PoolTab = "stake" | "back" | "file" | "collect";
 
@@ -20,10 +18,4 @@ export interface ChainAdapter {
   panels: Record<PoolTab, ComponentType>;
   /** The "The pool" numbers section. */
   Numbers: ComponentType;
-  /** Facts the copy links to or quotes, read from the pool's contract. */
-  useFacts: () => PoolFacts;
-  /** This pool's answer to every rule-dependent FAQ question (null hides one that doesn't apply). */
-  faq: PoolFaq;
-  /** A line above the whitepaper and protocols pages when they describe a different pool, or nothing. */
-  ExplainerNote?: ComponentType;
 }

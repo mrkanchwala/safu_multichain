@@ -5,9 +5,7 @@ import { AboutSection } from "./shell/components/AboutSection";
 import { Whitepaper } from "./shell/components/Whitepaper";
 import { Protocols } from "./shell/components/Protocols";
 import { Faq } from "./shell/components/Faq";
-import { PoolFactsContext } from "./shell/lib/facts";
 import { SITE } from "./shell/lib/site";
-import type { PoolFaq } from "./shell/components/Faq";
 import { scrollToFaqAnswer, viewFromHash } from "./shell/lib/links";
 import type { View } from "./shell/lib/links";
 import type { ChainAdapter, PoolTab } from "./chains/types";
@@ -47,10 +45,11 @@ function useHashView(): [View, (v: View) => void] {
   return [view, setView];
 }
 
-function ExplainerPage({ view, onBack, faq }: { view: View; onBack: () => void; faq: PoolFaq }) {
+/** Whitepaper, FAQ and For protocols are the same for every pool: no switcher, no pool-specific copy (founder 16 Nov). */
+function ExplainerPage({ view, onBack }: { view: View; onBack: () => void }) {
   if (view === "whitepaper") return <Whitepaper onBack={onBack} />;
   if (view === "protocols") return <Protocols onBack={onBack} />;
-  return <Faq onBack={onBack} answers={faq} />;
+  return <Faq onBack={onBack} />;
 }
 
 /** The pool switcher (B42): one button per enabled chain, hidden when only one is enabled. Switching loads
@@ -93,8 +92,7 @@ export default function App({ adapter }: { adapter: ChainAdapter }) {
   const [view, setView] = useHashView();
   // Held here, not in Dapp, so the chosen tab survives a visit to the FAQ or whitepaper.
   const [tab, setTab] = useState<PoolTab>("stake");
-  const facts = adapter.useFacts();
-  const { Badge, Wallet, Hero, Numbers, ExplainerNote } = adapter;
+  const { Badge, Wallet, Hero, Numbers } = adapter;
 
   const backToApp = () => {
     history.pushState(null, "", window.location.pathname + window.location.search);
@@ -105,22 +103,16 @@ export default function App({ adapter }: { adapter: ChainAdapter }) {
 
   if (view !== "main") {
     return (
-      <PoolFactsContext.Provider value={facts}>
+      <>
         <Badge />
         {header}
-        {SITE.chains.enabled.length > 1 ? (
-          <div className="wrap switch-bar">
-            <ChainSwitcher current={adapter.id} />
-            {ExplainerNote && view !== "faq" ? <ExplainerNote /> : null}
-          </div>
-        ) : null}
-        <ExplainerPage view={view} onBack={backToApp} faq={adapter.faq} />
-      </PoolFactsContext.Provider>
+        <ExplainerPage view={view} onBack={backToApp} />
+      </>
     );
   }
 
   return (
-    <PoolFactsContext.Provider value={facts}>
+    <>
       <Badge />
       {header}
 
@@ -151,6 +143,6 @@ export default function App({ adapter }: { adapter: ChainAdapter }) {
       <AboutSection />
 
       <SiteFooter />
-    </PoolFactsContext.Provider>
+    </>
   );
 }

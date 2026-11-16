@@ -22,4 +22,3 @@ export interface PoolConfig {
 export const POOL: PoolConfig = __POOL__;
 export const IS_MAINNET = POOL.network === "mainnet";
 export const explorerTx = (template: string, tx: string): string => template.replace("{tx}", tx);
-export const stellarContractUrl = (id: string): string => POOL.stellar.explorer_contract.replace("{id}", id);

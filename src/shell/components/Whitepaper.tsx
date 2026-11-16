@@ -1,6 +1,7 @@
 import { DetailsLayout } from "./DetailsLayout";
 
-// v1 multichain whitepaper. The ETH-era one stays on safustaking.com/whitepaper.html.
+// v1 whitepaper, the same for every pool and chain (founder 16 Nov): no chain, asset or vendor names.
+// The ETH-era one stays on safustaking.com/whitepaper.html.
 const SECTIONS = [
   { id: "wp-summary", label: "Summary" },
   { id: "wp-problem", label: "The problem" },
@@ -32,15 +33,18 @@ export function Whitepaper({ onBack }: { onBack: () => void }) {
     <DetailsLayout sections={SECTIONS} cross={{ label: "Read the FAQ →", href: "#faq" }} onBack={onBack}>
       <div className="wp-head">
         <h1>SAFU whitepaper</h1>
-        <div className="wp-meta">Multichain v1 · September 2026</div>
+        <div className="wp-meta">v1 · November 2026</div>
       </div>
 
       <div className="wp">
         <Slide id="wp-summary" title="Summary">
           <p>
-            SAFU is a shared pool that pays people back when crypto is stolen from their wallets or their loans are liquidated at a price that wasn't real. Stakers put USDC into one pool
-            on Stellar, register up to three wallets on Ethereum, Solana or Stellar, and if crypto is stolen from one of those wallets, or it's wrongly liquidated, the pool pays up to a set multiple of their stake, capped at the real loss. The rules that decide a
-            payout are written into the contract and the claim checks, and nobody votes on claims. This paper describes the multichain version of SAFU. Today SAFU pays back crypto stolen from wallets; cover for thefts from protocols comes next.
+            SAFU is a shared pool that pays people back when crypto is stolen from their wallets or their loans are
+            liquidated at a price that wasn't real. Stakers put money into a pool and register the wallets they want
+            covered, on the pool's own chain or on other chains it supports. If crypto is stolen from one of those
+            wallets, the pool pays automatically, up to 15 times the stake and capped at the real loss. The rules that
+            decide a payout are written into the contract and the claim checks, and nobody votes on claims. Today SAFU
+            pays back crypto stolen from wallets; cover for thefts from protocols comes next.
           </p>
         </Slide>
 
@@ -57,16 +61,16 @@ export function Whitepaper({ onBack }: { onBack: () => void }) {
 
         <Slide id="wp-what" title="What SAFU is">
           <p>
-            One USDC pool, held on Stellar, covering wallets on three chains. The payout always settles in USDC from this pool, whichever chain the loss happened on. Stellar holds the money
-            and the price data for every covered chain. Anyone can stake within the pool's limits, and there is no
-            whitelist.
+            A pool contract that holds the stakes and pays the claims. One pool can cover wallets on several chains,
+            and the payout always comes from that pool, whichever chain the loss happened on. Anyone can stake within
+            the pool's limits, and there is no whitelist.
           </p>
         </Slide>
 
         <Slide id="wp-covered" title="What's covered">
           <p>
-            SAFU covers four kinds of loss across Ethereum, Solana and Stellar. Every one of them goes through the same
-            claim path and the same ceilings, and whatever was lost, the payout settles in USDC from the pool.
+            SAFU covers four kinds of loss, and all four go through the same claim path and the same ceilings. Each pool
+            lists its chains and assets in its app.
           </p>
           <div className="table-scroll">
             <table className="mini-table">
@@ -93,28 +97,6 @@ export function Whitepaper({ onBack }: { onBack: () => void }) {
                     A loan held in a covered wallet was liquidated at a price that wasn't real, checked against independent
                     market price history (the exact window and threshold stay private).
                   </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <div className="table-scroll">
-            <table className="mini-table">
-              <tbody>
-                <tr>
-                  <th>Chain</th>
-                  <th>Covered assets</th>
-                </tr>
-                <tr>
-                  <td>Ethereum</td>
-                  <td>ETH, USDC, USDT</td>
-                </tr>
-                <tr>
-                  <td>Solana</td>
-                  <td>SOL, USDC, USDT</td>
-                </tr>
-                <tr>
-                  <td>Stellar</td>
-                  <td>XLM, USDC, USDT</td>
                 </tr>
               </tbody>
             </table>
@@ -146,29 +128,29 @@ export function Whitepaper({ onBack }: { onBack: () => void }) {
             </table>
           </div>
           <p>
-            The payout is the smaller of that ceiling and the real loss. The ceilings are fixed in the contract and
-            can't be raised. Each stake covers one claim, and that claim can bundle up to 20 theft transactions across the three
-            wallets. After it's paid, the stake that backed it is used up, even if the payout came in under the
+            The payout is the smaller of that ceiling and the real loss. The ceilings are set in the pool contract, and
+            nobody can raise the ceiling on a stake that's already in. Each stake covers one claim, and that claim can
+            bundle several theft transactions across the covered wallets. After it's paid, the stake that backed it is used up, even if the payout came in under the
             ceiling. A staking wallet that has had a claim paid can't stake again.
           </p>
         </Slide>
 
         <Slide id="wp-clock" title="The clock">
           <p>
-            A loss has to be claimed within 30 days. A claim on a stake younger than 90 days is recorded and held at
-            its full amount until the stake turns 90, and nothing is taken while it waits. Once you approve a claim, a
-            7-day cooldown starts, and then the payout streams to you over 45 days. A daily payout limit spreads large
-            incidents out, so when many claims arrive at once they wait in a queue and are paid in order.
+            A loss has to be claimed within the pool's claim window. A claim on a new stake is recorded and held at its
+            full amount until the stake has been in the pool long enough, and nothing is taken while it waits. Once you
+            approve a claim, a cooldown starts, and then the payout streams to you. A daily payout limit spreads large
+            incidents out, so when many claims arrive at once they wait in a queue and are paid in order. Each pool
+            shows its own windows in its app.
           </p>
         </Slide>
 
         <Slide id="wp-chains" title="Across chains">
           <p>
-            Stakers on Ethereum and Solana send USDC to Stellar through Circle's CCTP. SAFU pays the Stellar fees for
-            that inbound step, since those stakers don't hold a Stellar key. Payouts and withdrawals go back to the
-            wallet you staked from, on its own chain: the pool burns USDC on Stellar, and your wallet signs one receive
-            transaction on Ethereum or Solana, paying that chain's gas. If you leave that last step unfinished, it can
-            still be completed later.
+            You can stake from a wallet on a different chain from the pool: your stake moves to the pool's chain over a
+            standard bridge for stablecoins, and SAFU pays the fees for that inbound step. Payouts and withdrawals go back
+            to the wallet you staked from, on its own chain, where your wallet signs one receive transaction. If you leave
+            that last step unfinished, it can still be completed later.
           </p>
           <p>We recommend staking from a fresh, secure wallet, since the payout goes back to it.</p>
         </Slide>
@@ -176,13 +158,12 @@ export function Whitepaper({ onBack }: { onBack: () => void }) {
         <Slide id="wp-checks" title="How a claim is checked">
           <p>
             Ownership comes first: a covered wallet must be registered before the theft, and you show it's yours by
-            sending a tiny amount from that wallet to itself (on Stellar, a past transfer from it to your staking wallet
-            is enough). You never sign a message with the covered wallet, because a wallet whose key was stolen would
+            sending a tiny amount from that wallet to itself. You never sign a message with the covered wallet, because a wallet whose key was stolen would
             let the thief sign too.
           </p>
           <p>
-            The scanner then reads each theft or liquidation transaction on its own chain and prices a theft with Reflector,
-            Stellar's price oracle, and a liquidation with independent market price history. If the claim checks out, the oracle signs the result. The
+            The scanner then reads each theft or liquidation transaction on its own chain and prices a theft with an on-chain
+            price oracle, and a liquidation with independent market price history. If the claim checks out, the oracle signs the result. The
             oracle key sits in a cloud key-management service and never leaves it. The scoring details stay private,
             because publishing them would make the checks easier to game. The time rules above are public.
           </p>
@@ -206,7 +187,7 @@ export function Whitepaper({ onBack }: { onBack: () => void }) {
                   <td>Price reads and the wrongful-liquidation check</td>
                 </tr>
                 <tr>
-                  <td>90-day hold, cooldown, 45-day stream</td>
+                  <td>New-stake hold, cooldown, payout stream</td>
                   <td>The payout number itself</td>
                 </tr>
                 <tr>
@@ -221,26 +202,24 @@ export function Whitepaper({ onBack }: { onBack: () => void }) {
 
         <Slide id="wp-backing" title="Backing the pool">
           <p>
-            Backers add USDC to help the pool pay large claims on time, without registering any wallets. Backing
-            matures after 7 days and can then be withdrawn. Backers always get back exactly what they put in, but they can
-            only take out money that open claims don't need.
-            Backers can come in from Ethereum or Solana through CCTP as well.
+            Backers add funds to help the pool pay large claims on time, without registering any wallets. Backing
+            matures after a short period and can then be withdrawn. Backers always get back exactly what they put in,
+            but they can only take out money that open claims don't need. Backers can come in from other chains too.
           </p>
         </Slide>
 
         <Slide id="wp-yield" title="Yield">
           <p>
-            The pool keeps some cash on hand and can put the rest into a yield vault that lends on Blend's Fixed pool on
-            Stellar, moving money back automatically when a withdrawal or payout needs it. By default the yield on your
-            own stake goes to you, and backers get the yield on their matured backing.
+            The pool keeps some cash on hand and can lend the rest on an established lending market, moving money back
+            automatically when a withdrawal or payout needs it. By default the yield on your own stake goes to you, and
+            backers get the yield on their matured backing.
           </p>
         </Slide>
 
         <Slide id="wp-security" title="Where the security work stands">
           <p>
-            The contracts
-            have their own test suites and fuzz testing, and design choices we already know about are written up for
-            the auditors. The Stellar contract gets an independent audit after launch. The report will be linked here.
+            Each pool contract has its own test suites and fuzz testing, and design choices we already know about are
+            written up for the auditors. Independent audits are being arranged, and the reports will be linked here.
           </p>
         </Slide>
 

@@ -1,17 +1,14 @@
 import { useEffect, useState } from "react";
 import type { ChainAdapter } from "../types";
-import type { PoolFacts } from "../../shell/lib/facts";
 import { BackPanel } from "./components/BackPanel";
 import { ClaimFilePanel } from "./components/ClaimFilePanel";
 import { ClaimsPanel } from "./components/ClaimsPanel";
 import { StakePanel } from "./components/StakePanel";
 import { WalletButton } from "./components/WalletButton";
-import { STELLAR_FAQ } from "./faq";
 import { ClientProvider, useClient } from "./lib/client";
 import type { AppClient } from "./lib/client";
 import { MAX_STAKE_USDC, MIN_STAKE_USDC, POOL_CAP_USDC } from "./lib/network";
-import { stellarContractUrl } from "./lib/pool";
-import { fmtUsdc, readPoolStats, readVault } from "./lib/reads";
+import { fmtUsdc, readPoolStats } from "./lib/reads";
 import { isLive } from "./lib/soroban";
 
 function Wallet() {
@@ -86,24 +83,6 @@ function Numbers() {
   );
 }
 
-function useFacts(): PoolFacts {
-  const [facts, setFacts] = useState<PoolFacts>({});
-  useEffect(() => {
-    let cancelled = false;
-    readVault()
-      .then((vault) => {
-        if (!cancelled && vault) setFacts({ yieldVaultUrl: stellarContractUrl(vault) });
-      })
-      .catch(() => {
-        // Unreachable RPC: the copy shows the vault name without a link.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  return facts;
-}
-
 /** The Stellar pool (USDC on Stellar; Ethereum and Solana wallets stake in over CCTP). */
 export const stellar: ChainAdapter = {
   id: "stellar",
@@ -113,6 +92,4 @@ export const stellar: ChainAdapter = {
   Hero,
   panels: { stake: StakePanel, back: BackPanel, file: FilePanel, collect: ClaimsPanel },
   Numbers,
-  useFacts,
-  faq: STELLAR_FAQ,
 };

@@ -65,12 +65,6 @@ export async function readPoolStats(
   return { totalStaked, totalStakers };
 }
 
-/** `get_vault` (lib.rs:711): the yield vault the pool lends through; null before one is set. */
-export async function readVault(): Promise<string | null> {
-  if (!isLive()) return null;
-  return (await readContract<string | null | undefined>(poolId(), "get_vault")) ?? null;
-}
-
 export type MyStake = {
   amount: bigint; // fixed admission-time principal -- the entitlement basis
   withdrawable: bigint; // principal + accrued yield -- get_withdrawable_amount

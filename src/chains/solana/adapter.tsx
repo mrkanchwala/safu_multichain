@@ -1,11 +1,9 @@
 import type { ChainAdapter } from "../types";
-import type { PoolFacts } from "../../shell/lib/facts";
 import { BackPanel } from "./components/BackPanel";
 import { ClaimFilePanel } from "./components/ClaimFilePanel";
 import { ClaimsPanel } from "./components/ClaimsPanel";
 import { StakePanel } from "./components/StakePanel";
 import { WalletButton } from "./components/WalletButton";
-import { SOLANA_FAQ } from "./faq";
 import { ClientProvider, useClient } from "./lib/client";
 import { POOL } from "./lib/pool";
 import { fmtSol, stakeBounds } from "./lib/reads";
@@ -71,16 +69,6 @@ function Numbers() {
   );
 }
 
-function ExplainerNote() {
-  return (
-    <p className="panel-note">
-      These pages describe SAFU's Stellar pool. For how the Solana test pool differs, see the <a href="#faq">FAQ</a>.
-    </p>
-  );
-}
-
-const noFacts = (): PoolFacts => ({});
-
 /** The Solana test pool (SOL on Solana devnet, Marinade yield). */
 export const solana: ChainAdapter = {
   id: "solana",
@@ -90,7 +78,4 @@ export const solana: ChainAdapter = {
   Hero,
   panels: { stake: StakePanel, back: BackPanel, file: FilePanel, collect: ClaimsPanel },
   Numbers,
-  useFacts: noFacts,
-  faq: SOLANA_FAQ,
-  ExplainerNote,
 };

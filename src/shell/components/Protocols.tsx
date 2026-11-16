@@ -59,7 +59,7 @@ const SECTIONS: { id: string; label: string; title: string; intro: string; items
     label: "Any chain",
     title: "Built once, ported per chain.",
     intro:
-      "The same deterministic mechanism runs on Stellar's Soroban, and one pool on Stellar already covers wallets on Ethereum, Solana and Stellar through Circle's CCTP. That is the proof it ports, and more chains can follow.",
+      "The same deterministic mechanism already runs on more than one chain, and a single pool can cover wallets on several chains at once. That is the proof it ports, and more chains can follow.",
     items: [
       {
         t: "One engine for every chain.",
