@@ -12,6 +12,7 @@ import { getWallets } from "@wallet-standard/app";
 import type { Wallet, WalletAccount } from "@wallet-standard/base";
 import { EVM_CHAIN_ID } from "./network";
 import { IS_MAINNET, POOL } from "./pool";
+import { WALLET_METADATA } from "../../../shell/lib/site";
 
 // Stellar wallet network follows the pool file (C1, 2026-09-29).
 const STELLAR_WALLET_NETWORK = IS_MAINNET ? Networks.PUBLIC : Networks.TESTNET;
@@ -75,12 +76,7 @@ function loadStellarWalletConnect(): Promise<void> {
     ]);
     const wc = new WalletConnectModule({
       projectId: WALLETCONNECT_PROJECT_ID,
-      metadata: {
-        name: "SAFU",
-        description: "Stake into a SAFU pool and get covered.",
-        url: "https://safustaking.com",
-        icons: ["https://safustaking.com/favicon.svg"],
-      },
+      metadata: WALLET_METADATA,
       allowedChains: [IS_MAINNET ? WalletConnectTargetChain.PUBLIC : WalletConnectTargetChain.TESTNET],
       // Own storage: lib/walletconnect.ts runs a separate client for Ethereum/Solana.
       signClientOptions: { customStoragePrefix: "safu-stellar" },

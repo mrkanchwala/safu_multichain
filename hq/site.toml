@@ -1,0 +1,25 @@
+# Site HQ (B42, 2026-11-16): the site's own values, defined once.
+# Not here: network values (config/pool.<network>.json, written by deploy) and pool rules
+# (read from the contract, never typed). Loaded at build time by vite.config.ts as __SITE__;
+# a missing key fails the build.
+
+[site]
+name = "SAFU"
+url = "https://safustaking.com"
+icon = "https://safustaking.com/favicon.svg"
+wallet_description = "Stake into a SAFU pool and get covered."
+# WalletConnect project, allowlisted to the domain above (not a secret: it ships in the page).
+walletconnect_project_id = "3824772bb6c01d55a924dac308a3cb3e"
+
+[links]
+feedback = "https://docs.google.com/forms/d/1qD9IrIkfs39Wupaw5y-zvCS46Ppq4JQiIsRgV9D3s80/viewform"
+x = "https://x.com/safu_staking"
+telegram = "https://t.me/+sza3oozmzzJlNzk0"
+github = "https://github.com/mrkanchwala"
+bd_intake = "https://docs.google.com/forms/d/e/1FAIpQLSefYrJjgxzJrHJe59U7BFottI7KrQMwgiq_txmShbxBBmWk9w/viewform"
+
+[chains]
+# The pools this build serves. Only enabled chains are bundled (B42 review A3: a disabled
+# chain's code and addresses must never reach the public site).
+enabled = ["stellar"]
+default = "stellar"

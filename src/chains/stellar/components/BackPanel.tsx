@@ -16,7 +16,7 @@ import { TxStatus } from "./TxStatus";
 import { MIN_BRIDGEABLE_RAW } from "../lib/network";
 import { evmBurnToAdapter, finishOnStellar, relayAction, relayHomeAction, relayMature, solanaBurnToAdapter } from "../lib/crosschain";
 import { useStaker } from "../lib/useStaker";
-import { useTick } from "../lib/useTick";
+import { useTick } from "../../../shell/lib/useTick";
 
 // Back the pool tab (2026-09-24): like Stake, without covered wallets. Backing adds
 // capacity for claims; it earns no coverage. Stellar wallets act directly. EVM/Solana wallets back

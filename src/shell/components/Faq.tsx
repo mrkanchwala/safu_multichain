@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { DetailsLayout } from "./DetailsLayout";
 import { FAQ_ANSWER, LINKS } from "../lib/links";
+import { FactLink } from "../lib/facts";
 
 const EXT = { target: "_blank", rel: "noopener noreferrer" } as const;
 
@@ -55,9 +56,7 @@ const GROUPS: { id: string; title: string; items: { q: string; a: ReactNode; id?
         a: (
           <>
             Yes. The pool keeps some USDC on hand and puts the rest into a{" "}
-            <a href="https://stellar.expert/explorer/public/contract/CCLJT2O4FP7JUB6ITJQRC7CDL6N4K7CN74ALTMFWX232MWHGD47BDAMC" {...EXT}>
-              DeFindex vault
-            </a>{" "}
+            <FactLink fact="yieldVaultUrl">DeFindex vault</FactLink>{" "}
             that lends it on Blend's Fixed pool on Stellar. By default the yield on your own stake goes to you, and
             you'll see it in the Stake tab, added to what you can withdraw. Lending on Blend carries Blend's own
             smart-contract risk.

@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import react from '@vitejs/plugin-react'
+import { parse as parseToml } from 'smol-toml'
 import { defineConfig } from 'vite'
 import { nodePolyfills } from 'vite-plugin-node-polyfills'
 
@@ -20,6 +21,24 @@ function poolConfig(mode: string) {
   return cfg
 }
 
+// Site HQ (B42): hq/site.toml, the site's own values. Every key the site reads must be present,
+// and the default chain must be an enabled one; anything else fails the build.
+const SITE_KEYS = {
+  site: ['name', 'url', 'icon', 'wallet_description', 'walletconnect_project_id'],
+  links: ['feedback', 'x', 'telegram', 'github', 'bd_intake'],
+  chains: ['enabled', 'default'],
+} as const
+// Which chains have an adapter is checked by src/chains/registry.test.ts (one list: the registry).
+
+function siteConfig() {
+  const cfg = parseToml(readFileSync(new URL('./hq/site.toml', import.meta.url), 'utf8')) as Record<string, Record<string, unknown>>
+  const missing = Object.entries(SITE_KEYS).flatMap(([t, keys]) => keys.filter((k) => cfg[t]?.[k] == null).map((k) => `${t}.${k}`))
+  if (missing.length) throw new Error(`hq/site.toml is missing: ${missing.join(', ')}`)
+  const enabled = cfg.chains.enabled as string[]
+  if (!enabled.includes(cfg.chains.default as string)) throw new Error('hq/site.toml: chains.default is not enabled')
+  return cfg
+}
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => ({
   // Served from the safustaking.com domain root (since 2026-09-25;
@@ -31,6 +50,7 @@ export default defineConfig(({ mode }) => ({
   define: {
     'process.env.NODE_ENV': JSON.stringify(mode),
     __POOL__: JSON.stringify(poolConfig(mode)),
+    __SITE__: JSON.stringify(siteConfig()),
   },
   server: {
     // backend/app.py (demo claim API), run separately with uvicorn.

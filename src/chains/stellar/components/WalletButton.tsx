@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import type { AppClient, WalletKind } from "../lib/client";
 import { WALLETCONNECT_ID, evmWallets, solanaWallets } from "../lib/client";
 import { toFriendlyError } from "../lib/friendly-error";
-import { EthereumIcon, SolanaIcon, StellarIcon, WalletConnectIcon } from "./Icons";
+import { EthereumIcon, SolanaIcon, StellarIcon, WalletConnectIcon } from "../../../shell/components/Icons";
 import { POOL } from "../lib/pool";
 
 // One Connect button, two steps (redesigned 2026-09-25): step 1 picks the chain, step 2

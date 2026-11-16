@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { WalletButton } from "./WalletButton";
+import type { ReactNode } from "react";
 import { TelegramIcon, XIcon } from "./Icons";
 import { LINKS } from "../lib/links";
 import type { View } from "../lib/links";
-import type { AppClient } from "../lib/client";
 
 const NAV: { label: string; href: string; view?: View; external?: boolean }[] = [
   { label: "FAQ", href: "#faq", view: "faq" },
@@ -15,7 +14,8 @@ const NAV: { label: string; href: string; view?: View; external?: boolean }[] = 
 
 const EXT = { target: "_blank", rel: "noopener noreferrer" } as const;
 
-export function SiteHeader({ client, view }: { client: AppClient; view: View }) {
+/** `wallet` is the active pool's wallet button (the chain adapter's), so the header holds no chain code. */
+export function SiteHeader({ wallet, view }: { wallet: ReactNode; view: View }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -65,7 +65,7 @@ export function SiteHeader({ client, view }: { client: AppClient; view: View }) 
               <TelegramIcon />
             </a>
           </div>
-          <WalletButton client={client} />
+          {wallet}
         </div>
       </div>
     </header>

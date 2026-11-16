@@ -8,7 +8,8 @@
   "horizon": "https://horizon.stellar.org",
   "usdc_issuer": "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
   "usdc_sac": "CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75",
-  "explorer_tx": "https://stellar.expert/explorer/public/tx/{tx}"
+  "explorer_tx": "https://stellar.expert/explorer/public/tx/{tx}",
+    "explorer_contract": "https://stellar.expert/explorer/public/contract/{id}"
  },
  "evm": {
   "chain_key": "eth",

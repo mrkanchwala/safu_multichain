@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useAction, useClient } from "../lib/client";
 import { relayAction, relayHomeAction } from "../lib/crosschain";
 import { useStaker } from "../lib/useStaker";
-import { useTick } from "../lib/useTick";
+import { useTick } from "../../../shell/lib/useTick";
 import type { AppClient } from "../lib/client";
 import { approveClaim, pullClaimPayout } from "../lib/actions";
 import { ClaimStatus, fmtUsdc, readActiveClaim } from "../lib/reads";

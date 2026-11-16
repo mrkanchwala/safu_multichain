@@ -6,7 +6,7 @@ import { claimStakerYield, stake, withdrawStake } from "../lib/actions";
 import { addCoveredWallet, confirmCoveredWallet, countCoveredWallets, listMyCoveredWallets } from "../lib/claimApi";
 import { walletChainMismatch } from "../lib/wallet-chain";
 import type { CoveredWalletResponse, CoveredWalletTail } from "../lib/claimApi";
-import { FAQ_ANSWER, faqAnswerHref } from "../lib/links";
+import { FAQ_ANSWER, faqAnswerHref } from "../../../shell/lib/links";
 import {
   evmBurnToAdapter,
   evmUsdcBalance,
@@ -21,7 +21,7 @@ import type { CoveredWallet, MyStake } from "../lib/reads";
 import { CHAINS, MAX_STAKE_USDC, MIN_BRIDGEABLE_RAW, MIN_STAKE_USDC, POOL_CAP_USDC, YIELD_INDEX_PRECISION } from "../lib/network";
 import type { ChainId } from "../lib/network";
 import { useStaker } from "../lib/useStaker";
-import { useTick } from "../lib/useTick";
+import { useTick } from "../../../shell/lib/useTick";
 import { toFriendlyError } from "../lib/friendly-error";
 import { TxStatus } from "./TxStatus";
 

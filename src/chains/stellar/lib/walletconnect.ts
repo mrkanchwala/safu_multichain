@@ -27,8 +27,10 @@ import {
 import type { Address, SignatureBytes } from "@solana/kit";
 import { EVM_CHAIN_ID } from "./network";
 import { IS_MAINNET, POOL } from "./pool";
+import { SITE, WALLET_METADATA } from "../../../shell/lib/site";
 
-export const WALLETCONNECT_PROJECT_ID = "3824772bb6c01d55a924dac308a3cb3e";
+// Domain-allowlisted to the site's own domain, so it lives in hq/site.toml with the domain.
+export const WALLETCONNECT_PROJECT_ID = SITE.site.walletconnect_project_id;
 
 const EVM_CHAIN = `eip155:${EVM_CHAIN_ID}`;
 // Networks follow the pool file (C1, 2026-09-29): Sepolia + Solana devnet on testnet, mainnets on mainnet.
@@ -44,12 +46,7 @@ const SOL_CHAIN = SOL_NETWORK.caipNetworkId;
 //    so a wallet that only approves mainnet can still sign our devnet transactions.
 const EVM_MAINNET = "eip155:1";
 const SOL_MAINNETS = ["solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp", "solana:4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZ"];
-const METADATA = {
-  name: "SAFU",
-  description: "Stake into a SAFU pool and get covered.",
-  url: "https://safustaking.com",
-  icons: ["https://safustaking.com/favicon.svg"],
-};
+const METADATA = WALLET_METADATA;
 
 type Kind = "evm" | "solana";
 export type WcSession = { kind: Kind; address: string; topic: string; chainId: string };

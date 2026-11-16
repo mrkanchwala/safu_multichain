@@ -5,7 +5,7 @@ declare const __POOL__: PoolConfig;
 export interface PoolConfig {
   network: "testnet" | "mainnet";
   stellar: { label: string; short: string; passphrase: string; soroban_rpc: string; horizon: string;
-    usdc_issuer: string; usdc_sac: string; explorer_tx: string };
+    usdc_issuer: string; usdc_sac: string; explorer_tx: string; explorer_contract: string };
   evm: { chain_key: "sepolia" | "eth"; label: string; short: string; chain_id: number; public_rpc: string;
     usdc: `0x${string}`; token_messenger_v2: `0x${string}`; message_transmitter_v2: `0x${string}`; explorer_tx: string };
   solana: { label: string; short: string; cluster: "devnet" | "mainnet-beta"; wallet_chain: `solana:${string}`;
@@ -19,3 +19,4 @@ export interface PoolConfig {
 export const POOL: PoolConfig = __POOL__;
 export const IS_MAINNET = POOL.network === "mainnet";
 export const explorerTx = (template: string, tx: string): string => template.replace("{tx}", tx);
+export const stellarContractUrl = (id: string): string => POOL.stellar.explorer_contract.replace("{id}", id);

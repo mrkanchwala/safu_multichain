@@ -8,7 +8,8 @@
   "horizon": "https://horizon-testnet.stellar.org",
   "usdc_issuer": "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
   "usdc_sac": "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
-  "explorer_tx": "https://stellar.expert/explorer/testnet/tx/{tx}"
+  "explorer_tx": "https://stellar.expert/explorer/testnet/tx/{tx}",
+    "explorer_contract": "https://stellar.expert/explorer/testnet/contract/{id}"
  },
  "evm": {
   "chain_key": "sepolia",

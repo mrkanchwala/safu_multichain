@@ -1,13 +1,16 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import "./index.css";
+import "./shell/index.css";
 import App from "./App.tsx";
-import { ClientProvider } from "./lib/client.tsx";
+import { loadAdapter } from "./chains/registry";
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <ClientProvider>
-      <App />
-    </ClientProvider>
-  </StrictMode>,
-);
+loadAdapter(window.location.search).then((adapter) => {
+  const { Provider } = adapter;
+  createRoot(document.getElementById("root")!).render(
+    <StrictMode>
+      <Provider>
+        <App adapter={adapter} />
+      </Provider>
+    </StrictMode>,
+  );
+});

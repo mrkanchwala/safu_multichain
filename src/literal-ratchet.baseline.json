@@ -1,0 +1,9 @@
+{
+  "chains/stellar/components/ClaimsPanel.tsx": 4,
+  "chains/stellar/lib/crosschain.ts": 3,
+  "chains/stellar/lib/friendly-error.ts": 1,
+  "chains/stellar/lib/network.ts": 1,
+  "chains/stellar/lib/soroban.ts": 1,
+  "shell/components/Faq.tsx": 6,
+  "shell/components/Whitepaper.tsx": 13
+}

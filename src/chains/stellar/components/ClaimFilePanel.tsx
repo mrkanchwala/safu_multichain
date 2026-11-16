@@ -9,7 +9,7 @@ const MAX_DRAINS = 20; // MAX_TXIDS_PER_CLAIM (SAFU3.0 safu/config.py), enforced
 import type { ChainId } from "../lib/network";
 import { useStaker } from "../lib/useStaker";
 import { toFriendlyError } from "../lib/friendly-error";
-import { LINKS } from "../lib/links";
+import { LINKS } from "../../../shell/lib/links";
 
 // File a claim tab. v3, 2026-09-24: ONE claim per stake, bundling up to 20 drain transactions across
 // the covered wallets, any chain mix (locked rule, key-decisions.md). The TOTAL payout is capped at
