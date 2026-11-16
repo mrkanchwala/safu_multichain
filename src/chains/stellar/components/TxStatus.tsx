@@ -1,12 +1,6 @@
+import { makeTxStatus } from "../../../shell/components/TxStatus";
 import { toFriendlyError } from "../lib/friendly-error";
 import { POOL, explorerTx } from "../lib/pool";
-
-type Action = {
-  isError: boolean;
-  isSuccess?: boolean;
-  error: unknown;
-  data: unknown;
-};
 
 // The explorer for a result, by its shape (2026-09-25: every result used to become a
 // stellar.expert link, including EVM hashes, Solana signatures and plain text).
@@ -17,32 +11,5 @@ function explorerUrl(ref: string): string | null {
   return null;
 }
 
-// Plain-English only, no exceptions. No raw error text, stack trace, or "technical details"
-// toggle is ever shown -- every branch below reduces to one short sentence a non-technical user
-// can act on. See lib/friendly-error.ts for where the raw error gets translated.
-export function TxStatus({ action }: { action: Action }) {
-  if (action.isError) {
-    const friendly = toFriendlyError(action.error);
-    return (
-      <div className="tx-status error">
-        <div>{friendly.message}</div>
-        {friendly.action ? <div className="tx-status-hint">{friendly.action}</div> : null}
-      </div>
-    );
-  }
-  if (action.data && typeof action.data === "string") {
-    const url = explorerUrl(action.data);
-    return (
-      <div className="tx-status">
-        {url ? (
-          <a href={url} target="_blank" rel="noreferrer">
-            view on explorer
-          </a>
-        ) : (
-          <div>{action.data}</div>
-        )}
-      </div>
-    );
-  }
-  return null;
-}
+/** The shared result line (shell/components/TxStatus.tsx) with this pool's errors and explorers. */
+export const TxStatus = makeTxStatus(toFriendlyError, explorerUrl);

@@ -12,5 +12,5 @@
   },
   "apiBase": "/api/solana",
   "explorerTx": "https://explorer.solana.com/tx/{tx}?cluster=devnet",
-  "_note": "Solana side of safustaking.com (B42, 16 Nov): the live Colosseum devnet SOL pool. Copied from safu_solana e32e0af config/pool.devnet.json; paths moved under /api/solana (nginx -> colosseum-app :8002). Program id + rule numbers come from src/chains/solana/idl.json, never from here."
+  "_note": "Solana side of safustaking.com (B42, 16 Nov): the live Colosseum devnet SOL pool. ONE file for the site build (vite.config.ts) and its claim API (backend/solana_pool.py, shipped by deploy_colosseum.sh). Paths sit under /api/solana (nginx -> colosseum-app :8002). Program id + rule numbers come from config/solana.idl.json, never from here."
 }

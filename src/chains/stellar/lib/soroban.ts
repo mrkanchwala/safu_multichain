@@ -10,7 +10,7 @@ import {
 } from "@stellar/stellar-sdk";
 import { StellarWalletsKit } from "@creit.tech/stellar-wallets-kit";
 
-import { NETWORK_PASSPHRASE, POOL_CONTRACT_ID, SOROBAN_RPC_URL } from "./network";
+import { NETWORK_PASSPHRASE, POOL_CONTRACT_ID, SOROBAN_RPC_URLS } from "./network";
 
 // Stage 6 wiring.
 //
@@ -23,7 +23,30 @@ import { NETWORK_PASSPHRASE, POOL_CONTRACT_ID, SOROBAN_RPC_URL } from "./network
 // ONE contract now, not two -- the pivot's forked protection-pool replaces the
 // old vault+backstop pair (2026-09-18).
 
-const server = new rpc.Server(SOROBAN_RPC_URL);
+// One server per RPC in the pool file, primary first (CIE A-1, B42). `onRpc` moves to the next only when one
+// can't be reached (no answer, HTTP 429 or 5xx); an answer, including a contract error, is final. A resent
+// signed transaction keeps its hash, so a send retried on another RPC can't land twice.
+const servers = SOROBAN_RPC_URLS.map((url) => new rpc.Server(url));
+
+function unreachable(e: unknown): boolean {
+  const err = e as { response?: { status?: number }; isAxiosError?: boolean } | null;
+  const status = err?.response?.status;
+  if (status !== undefined) return status === 429 || status >= 500;
+  return err?.isAxiosError === true || e instanceof TypeError; // no answer at all: network, DNS, CORS
+}
+
+async function onRpc<T>(call: (server: rpc.Server) => Promise<T>): Promise<T> {
+  let last: unknown;
+  for (const server of servers) {
+    try {
+      return await call(server);
+    } catch (e) {
+      if (!unreachable(e)) throw e;
+      last = e;
+    }
+  }
+  throw last;
+}
 
 export function isLive(): boolean {
   return POOL_CONTRACT_ID !== "";
@@ -92,7 +115,7 @@ export async function readContract<T = unknown>(
     .setTimeout(30)
     .build();
 
-  const sim = await server.simulateTransaction(tx);
+  const sim = await onRpc((s) => s.simulateTransaction(tx));
   if (rpc.Api.isSimulationError(sim)) {
     throw new Error(`${method}: ${sim.error}`);
   }
@@ -116,7 +139,7 @@ export async function invokeContract(
   args: xdr.ScVal[],
   signerAddress: string,
 ): Promise<string> {
-  const account = await server.getAccount(signerAddress);
+  const account = await onRpc((s) => s.getAccount(signerAddress));
 
   const built = new TransactionBuilder(account, {
     fee: BASE_FEE,
@@ -126,7 +149,7 @@ export async function invokeContract(
     .setTimeout(60)
     .build();
 
-  const sim = await server.simulateTransaction(built);
+  const sim = await onRpc((s) => s.simulateTransaction(built));
   if (rpc.Api.isSimulationError(sim)) {
     throw new Error(`${method}: ${sim.error}`);
   }
@@ -138,9 +161,8 @@ export async function invokeContract(
     address: signerAddress,
   });
 
-  const sent = await server.sendTransaction(
-    TransactionBuilder.fromXDR(signedTxXdr, NETWORK_PASSPHRASE),
-  );
+  const signed = TransactionBuilder.fromXDR(signedTxXdr, NETWORK_PASSPHRASE);
+  const sent = await onRpc((s) => s.sendTransaction(signed));
   if (sent.status === "ERROR") {
     throw new Error(`${method}: submission rejected (${resultCode(sent.errorResult)})`);
   }
@@ -178,7 +200,7 @@ function resultCode(result?: xdr.TransactionResult): string {
 async function waitForTransaction(hash: string, method: string): Promise<string> {
   const deadline = Date.now() + 45_000;
   while (Date.now() < deadline) {
-    const result = await server.getTransaction(hash);
+    const result = await onRpc((s) => s.getTransaction(hash));
     if (result.status === rpc.Api.GetTransactionStatus.SUCCESS) {
       return hash;
     }

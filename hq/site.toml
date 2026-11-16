@@ -33,3 +33,8 @@ solana = "Solana · test network, no real money"
 # Strings that must never appear in the built site (checked after every build by scripts/check-dist.mjs).
 # The Solana USDC pool (B10) stays hidden until grant news; this is its program id (safu_solana target/idl).
 never_ship = ["6nE296ZjUgVifngxv1Z5jWp4xvBexaBiepFHA8UVYC7X"]
+# Size budget per built JS file, in KB, uncompressed (CIE P-2, 16 Nov). Set just above today's sizes:
+# entry 258 KB, largest chunk 565 KB (the Stellar adapter). Growth past either fails the build; raise one
+# only on purpose, in the same commit as the code that needs it.
+max_entry_kb = 300
+max_chunk_kb = 600

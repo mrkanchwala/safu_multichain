@@ -44,7 +44,8 @@ function siteConfig() {
   return forPage
 }
 
-// The Solana pool (B42): its config + the deployed program's pinned IDL are baked in only when hq/site.toml
+// The Solana pool (B42): config/solana.devnet.json + the deployed program's pinned IDL (config/solana.idl.json,
+// the same two files its claim API reads) are baked in only when hq/site.toml
 // enables Solana. __CHAIN_SOLANA__ is a build constant, so with Solana off the registry's import is dead
 // code and none of the Solana pool's code or addresses reach the bundle (review A3).
 function solanaDefines(enabled: string[]) {
@@ -53,7 +54,7 @@ function solanaDefines(enabled: string[]) {
   return {
     __CHAIN_SOLANA__: JSON.stringify(on),
     __SOL_POOL__: on ? JSON.stringify(read('./config/solana.devnet.json')) : 'null',
-    __SOL_IDL__: on ? JSON.stringify(read('./src/chains/solana/idl.json')) : 'null',
+    __SOL_IDL__: on ? JSON.stringify(read('./config/solana.idl.json')) : 'null',
   }
 }
 

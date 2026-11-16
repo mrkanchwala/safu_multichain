@@ -1,22 +1,17 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { getWallets } from "@wallet-standard/app";
-import type { Wallet, WalletAccount } from "@wallet-standard/base";
+import {
+  connectSolanaWallet,
+  onSolanaWalletRegistered,
+  signSolanaMessage,
+  signSolanaTransaction,
+  solanaWallets,
+} from "../../shared/solana-wallet";
+import type { SolanaSession } from "../../shared/solana-wallet";
 import { WALLET_CHAIN } from "./pool";
 
-// Solana only: any wallet-standard extension that can sign Solana transactions (browser extensions,
-// and the in-app browsers of phone wallets such as Phantom and Solflare). No WalletConnect. From the multichain site's
-// lib/client.tsx with the Stellar and Ethereum halves removed.
-
-export type SolanaWalletOption = { id: string; name: string; icon?: string; wallet: Wallet };
-
-export function solanaWallets(): SolanaWalletOption[] {
-  return getWallets()
-    .get()
-    .filter((w) => "standard:connect" in w.features && "solana:signTransaction" in w.features)
-    .filter((w) => w.chains.some((c) => c.startsWith("solana:")))
-    .map((w) => ({ id: w.name, name: w.name, icon: w.icon, wallet: w }));
-}
+// Solana only: any wallet-standard wallet (chains/shared/solana-wallet.ts), on this pool's cluster.
+// No WalletConnect.
 
 // The last wallet connected here, so a reload reconnects to it without a popup (silent connect).
 const LAST_WALLET_KEY = "safu-solana:last-wallet";
@@ -38,16 +33,6 @@ function lastWallet(): string | null {
   }
 }
 
-async function connectExtension(opt: SolanaWalletOption, silent = false): Promise<WalletAccount> {
-  const feature = opt.wallet.features["standard:connect"] as {
-    connect: (input?: { silent?: boolean }) => Promise<{ accounts: readonly WalletAccount[] }>;
-  };
-  const { accounts } = await feature.connect(silent ? { silent: true } : undefined);
-  const acct = accounts.find((a) => a.chains.some((c) => c.startsWith("solana:"))) ?? accounts[0];
-  if (!acct) throw new Error("The wallet returned no account.");
-  return acct;
-}
-
 export type AppClient = {
   /** The connected wallet's address (base58); null when nothing is connected. */
   address: string | null;
@@ -63,20 +48,18 @@ export type AppClient = {
 
 const ClientContext = createContext<AppClient | null>(null);
 
-const toHex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
-
 export function ClientProvider({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState<string | null>(null);
   const [walletName, setWalletName] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
-  const solRef = useRef<{ opt: SolanaWalletOption; account: WalletAccount } | null>(null);
+  const solRef = useRef<SolanaSession | null>(null);
 
   const connect = useCallback(async (walletId?: string) => {
     setConnecting(true);
     try {
       const opt = solanaWallets().find((w) => w.id === walletId) ?? solanaWallets()[0];
       if (!opt) throw new Error("No Solana wallet found. Install Phantom, Solflare or Backpack.");
-      const account = await connectExtension(opt);
+      const account = await connectSolanaWallet(opt);
       solRef.current = { opt, account };
       setAddress(account.address);
       setWalletName(opt.name);
@@ -96,7 +79,7 @@ export function ClientProvider({ children }: { children: ReactNode }) {
       const opt = solanaWallets().find((w) => w.id === id);
       if (!opt || done) return;
       done = true;
-      connectExtension(opt, true)
+      connectSolanaWallet(opt, true)
         .then((account) => {
           if (solRef.current) return; // the user connected by hand meanwhile
           solRef.current = { opt, account };
@@ -106,7 +89,7 @@ export function ClientProvider({ children }: { children: ReactNode }) {
         .catch(() => rememberWallet(null));
     };
     tryReconnect();
-    const off = getWallets().on("register", tryReconnect);
+    const off = onSolanaWalletRegistered(tryReconnect);
     return () => {
       done = true;
       off();
@@ -126,23 +109,13 @@ export function ClientProvider({ children }: { children: ReactNode }) {
     const bytes = typeof message === "string" ? new TextEncoder().encode(message) : message;
     const sol = solRef.current;
     if (!sol) throw new Error("Connect a wallet first.");
-    const feature = sol.opt.wallet.features["solana:signMessage"] as
-      | { signMessage: (...i: { account: WalletAccount; message: Uint8Array }[]) => Promise<{ signature: Uint8Array }[]> }
-      | undefined;
-    if (!feature) throw new Error("This wallet can't sign SAFU requests. Use Phantom or Solflare.");
-    const [out] = await feature.signMessage({ account: sol.account, message: bytes });
-    return toHex(out.signature);
+    return signSolanaMessage(sol, bytes);
   }, []);
 
   const solanaSignTransaction = useCallback(async (tx: Uint8Array): Promise<Uint8Array> => {
     const sol = solRef.current;
     if (!sol) throw new Error("Connect a wallet first.");
-    const feature = sol.opt.wallet.features["solana:signTransaction"] as
-      | { signTransaction: (...i: { account: WalletAccount; transaction: Uint8Array; chain?: string }[]) => Promise<{ signedTransaction: Uint8Array }[]> }
-      | undefined;
-    if (!feature) throw new Error("This wallet can't sign Solana transactions. Use Phantom or Solflare.");
-    const [out] = await feature.signTransaction({ account: sol.account, transaction: tx, chain: WALLET_CHAIN });
-    return out.signedTransaction;
+    return signSolanaTransaction(sol, tx, WALLET_CHAIN);
   }, []);
 
   const value = useMemo(

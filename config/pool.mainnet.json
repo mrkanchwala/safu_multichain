@@ -5,11 +5,15 @@
   "short": "Mainnet",
   "passphrase": "Public Global Stellar Network ; September 2015",
   "soroban_rpc": "https://mainnet.sorobanrpc.com",
+  "soroban_rpc_fallbacks": [
+   "https://soroban-rpc.mainnet.stellar.gateway.fm",
+   "https://rpc.lightsail.network"
+  ],
   "horizon": "https://horizon.stellar.org",
   "usdc_issuer": "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
   "usdc_sac": "CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75",
   "explorer_tx": "https://stellar.expert/explorer/public/tx/{tx}",
-    "explorer_contract": "https://stellar.expert/explorer/public/contract/{id}"
+  "explorer_contract": "https://stellar.expert/explorer/public/contract/{id}"
  },
  "evm": {
   "chain_key": "eth",
@@ -17,6 +21,10 @@
   "short": "Mainnet",
   "chain_id": 1,
   "public_rpc": "https://ethereum-rpc.publicnode.com",
+  "public_rpc_fallbacks": [
+   "https://cloudflare-eth.com",
+   "https://1rpc.io/eth"
+  ],
   "usdc": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
   "token_messenger_v2": "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d",
   "message_transmitter_v2": "0x81D40F21F12A8F0E3252Bccb954D722d4c464B64",

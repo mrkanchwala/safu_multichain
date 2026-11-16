@@ -6,6 +6,7 @@ import { ClaimFilePanel } from "./components/ClaimFilePanel";
 import { ClaimsPanel } from "./components/ClaimsPanel";
 import { StakePanel } from "./components/StakePanel";
 import { WalletButton } from "./components/WalletButton";
+import { STELLAR_FAQ } from "./faq";
 import { ClientProvider, useClient } from "./lib/client";
 import type { AppClient } from "./lib/client";
 import { MAX_STAKE_USDC, MIN_STAKE_USDC, POOL_CAP_USDC } from "./lib/network";
@@ -113,4 +114,5 @@ export const stellar: ChainAdapter = {
   panels: { stake: StakePanel, back: BackPanel, file: FilePanel, collect: ClaimsPanel },
   Numbers,
   useFacts,
+  faq: STELLAR_FAQ,
 };

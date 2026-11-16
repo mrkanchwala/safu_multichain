@@ -8,8 +8,8 @@ import { xBullModule } from "@creit.tech/stellar-wallets-kit/modules/xbull";
 import { LobstrModule } from "@creit.tech/stellar-wallets-kit/modules/lobstr";
 import { RabetModule } from "@creit.tech/stellar-wallets-kit/modules/rabet";
 import { HanaModule } from "@creit.tech/stellar-wallets-kit/modules/hana";
-import { getWallets } from "@wallet-standard/app";
-import type { Wallet, WalletAccount } from "@wallet-standard/base";
+import { connectSolanaWallet, signSolanaMessage, signSolanaTransaction, solanaWallets, toHex } from "../../shared/solana-wallet";
+import type { SolanaSession } from "../../shared/solana-wallet";
 import { EVM_CHAIN_ID } from "./network";
 import { IS_MAINNET, POOL } from "./pool";
 import { WALLET_METADATA } from "../../../shell/lib/site";
@@ -109,7 +109,6 @@ export type WalletKind = "stellar" | "evm" | "solana";
 
 type Eip1193 = { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> };
 export type EvmWalletOption = { id: string; name: string; icon?: string; provider: Eip1193 };
-export type SolanaWalletOption = { id: string; name: string; icon?: string; wallet: Wallet };
 
 /** Id used in the picker for the WalletConnect option on Ethereum and Solana. */
 export const WALLETCONNECT_ID = "walletconnect";
@@ -131,14 +130,6 @@ export function evmWallets(): EvmWalletOption[] {
   return list;
 }
 
-export function solanaWallets(): SolanaWalletOption[] {
-  return getWallets()
-    .get()
-    .filter((w) => "standard:connect" in w.features && "solana:signTransaction" in w.features)
-    .filter((w) => w.chains.some((c) => c.startsWith("solana:")))
-    .map((w) => ({ id: w.name, name: w.name, icon: w.icon, wallet: w }));
-}
-
 async function connectEvm(opt: EvmWalletOption): Promise<string> {
   const accounts = (await opt.provider.request({ method: "eth_requestAccounts" })) as string[];
   if (!accounts?.length) throw new Error("The wallet returned no account.");
@@ -151,16 +142,6 @@ async function connectEvm(opt: EvmWalletOption): Promise<string> {
     }
   }
   return accounts[0];
-}
-
-async function connectSolana(opt: SolanaWalletOption): Promise<WalletAccount> {
-  const feature = opt.wallet.features["standard:connect"] as {
-    connect: () => Promise<{ accounts: readonly WalletAccount[] }>;
-  };
-  const { accounts } = await feature.connect();
-  const acct = accounts.find((a) => a.chains.some((c) => c.startsWith("solana:"))) ?? accounts[0];
-  if (!acct) throw new Error("The wallet returned no account.");
-  return acct;
 }
 
 export type AppClient = {
@@ -182,15 +163,13 @@ export type AppClient = {
 
 const ClientContext = createContext<AppClient | null>(null);
 
-const toHex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
-
 export function ClientProvider({ children }: { children: ReactNode }) {
   const [kind, setKind] = useState<WalletKind | null>(null);
   const [address, setAddress] = useState<string | null>(null);
   const [walletName, setWalletName] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const evmRef = useRef<EvmWalletOption | null>(null);
-  const solRef = useRef<{ opt: SolanaWalletOption; account: WalletAccount } | null>(null);
+  const solRef = useRef<SolanaSession | null>(null);
   const wcRef = useRef<WcSession | null>(null);
 
   const connect = useCallback(async (k: WalletKind, walletId?: string) => {
@@ -218,7 +197,7 @@ export function ClientProvider({ children }: { children: ReactNode }) {
       } else {
         const opt = solanaWallets().find((w) => w.id === walletId) ?? solanaWallets()[0];
         if (!opt) throw new Error("No Solana wallet found. Install Phantom, Solflare or Backpack.");
-        const account = await connectSolana(opt);
+        const account = await connectSolanaWallet(opt);
         solRef.current = { opt, account };
         setAddress(account.address);
         setWalletName(opt.name);
@@ -256,12 +235,7 @@ export function ClientProvider({ children }: { children: ReactNode }) {
         return sig.replace(/^0x/, "");
       }
       if (kind === "solana" && solRef.current) {
-        const feature = solRef.current.opt.wallet.features["solana:signMessage"] as
-          | { signMessage: (...i: { account: WalletAccount; message: Uint8Array }[]) => Promise<{ signature: Uint8Array }[]> }
-          | undefined;
-        if (!feature) throw new Error("This wallet can't sign SAFU requests. For Solana, use Phantom or Solflare.");
-        const [out] = await feature.signMessage({ account: solRef.current.account, message: bytes });
-        return toHex(out.signature);
+        return signSolanaMessage(solRef.current, bytes);
       }
       throw new Error("Message signing is only used for EVM and Solana wallets here.");
     },
@@ -278,12 +252,7 @@ export function ClientProvider({ children }: { children: ReactNode }) {
     if (wcRef.current?.kind === "solana") return (await import("./walletconnect")).solanaSignTransaction(wcRef.current, tx);
     const sol = solRef.current;
     if (!sol) throw new Error("Connect a Solana wallet first.");
-    const feature = sol.opt.wallet.features["solana:signTransaction"] as
-      | { signTransaction: (...i: { account: WalletAccount; transaction: Uint8Array; chain?: string }[]) => Promise<{ signedTransaction: Uint8Array }[]> }
-      | undefined;
-    if (!feature) throw new Error("This wallet can't sign Solana transactions. Use Phantom or Solflare.");
-    const [out] = await feature.signTransaction({ account: sol.account, transaction: tx, chain: POOL.solana.wallet_chain });
-    return out.signedTransaction;
+    return signSolanaTransaction(sol, tx, POOL.solana.wallet_chain);
   }, []);
 
   const value = useMemo(

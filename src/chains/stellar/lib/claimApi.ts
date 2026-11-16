@@ -35,6 +35,7 @@
 // 64-byte limit; the full message does not). This must stay in lockstep
 // with backend/app.py's `_verify_signed_request`.
 
+import { CHECK_MS, SCAN_MS, postJson } from "../../../shell/lib/http";
 import { Account, Operation, TransactionBuilder } from "@stellar/stellar-sdk";
 import { StellarWalletsKit } from "@creit.tech/stellar-wallets-kit";
 
@@ -90,29 +91,27 @@ export type FileClaimResult = {
   broadcastResult: string;
 };
 
-export class ClaimApiError extends Error {
-  status: number;
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
-  }
-}
-
-async function postJson(path: string, body: unknown) {
-  const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  const out = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ClaimApiError(res.status, out.detail || `Request failed (${res.status})`);
-  return out;
-}
-
 /** v3 (2026-09-24): ONE claim over drains on up to three chains -- one entry per chain, the real
  *  shape of a stolen seed phrase. Message format MUST stay byte-identical with backend/app.py. */
+/** /claim's reply (backend/app.py ClaimResponse), snake_case as sent. */
+type ClaimReply = {
+  claim_id_hex: FileClaimResult["claimIdHex"];
+  wallet: FileClaimResult["wallet"];
+  staker: FileClaimResult["staker"];
+  entitlement_usdc: FileClaimResult["entitlementUsdc"];
+  tier: FileClaimResult["tier"];
+  signature_hex: FileClaimResult["signatureHex"];
+  deadline: FileClaimResult["deadline"];
+  demo_mode: FileClaimResult["demoMode"];
+  broadcast_result: FileClaimResult["broadcastResult"];
+};
+
 export async function fileClaim(client: AppClient, staker: string, entries: ClaimEntry[]): Promise<FileClaimResult> {
   const clean = entries.map((e) => ({ chain: e.chain, tx_hash: e.txHash.trim() }));
   const timestamp = Math.floor(Date.now() / 1000);
   const canon = clean.map((e) => `${e.chain}:${e.tx_hash}`).join(",");
   const message = `SAFU_CLAIM:v3:${staker}:${canon}:${timestamp}`;
-  const body = await postJson("/claim", { staker, entries: clean, timestamp, ...(await signFor(client, staker, message)) });
+  const body = await postJson<ClaimReply>("/claim", { staker, entries: clean, timestamp, ...(await signFor(client, staker, message)) }, SCAN_MS);
   return {
     claimIdHex: body.claim_id_hex,
     wallet: body.wallet,
@@ -139,10 +138,10 @@ export async function checkClaim(client: AppClient, staker: string, entries: Cla
   const timestamp = Math.floor(Date.now() / 1000);
   const canon = clean.map((e) => `${e.chain}:${e.tx_hash}`).join(",");
   const message = `SAFU_CLAIM_CHECK:v1:${staker}:${canon}:${timestamp}`;
-  const body = await postJson("/claim/check", { staker, entries: clean, timestamp, ...(await signFor(client, staker, message)) });
+  const body = await postJson<{ outcome: CheckOutcome; results: { chain: ChainId; tx_hash: string; status: CheckStatus; code: string | null }[] }>("/claim/check", { staker, entries: clean, timestamp, ...(await signFor(client, staker, message)) }, CHECK_MS);
   return {
     outcome: body.outcome,
-    results: (body.results as { chain: ChainId; tx_hash: string; status: CheckStatus; code: string | null }[]).map((r) => ({
+    results: body.results.map((r) => ({
       chain: r.chain, txHash: r.tx_hash, status: r.status, code: r.code,
     })),
   };
@@ -175,7 +174,7 @@ export async function addCoveredWallet(
 }
 
 export async function confirmCoveredWallet(staker: string, chain: string, wallet: string): Promise<CoveredWalletResponse> {
-  return postJson("/covered-wallets/confirm", { staker, chain, wallet });
+  return postJson("/covered-wallets/confirm", { staker, chain, wallet }, SCAN_MS);
 }
 
 // B19 (2026-10-28): the count is public (one registry hash per wallet), so no signature. The wallets
@@ -183,7 +182,7 @@ export async function confirmCoveredWallet(staker: string, chain: string, wallet
 export type CoveredWalletTail = { chain: string; tail: string; registered_at: number };
 
 export async function countCoveredWallets(staker: string): Promise<number> {
-  const body = await postJson("/covered-wallets/count", { staker });
+  const body = await postJson<{ count?: unknown }>("/covered-wallets/count", { staker });
   if (typeof body.count !== "number") throw new Error("No count in the reply.");
   return body.count;
 }
@@ -192,6 +191,6 @@ export async function listMyCoveredWallets(client: AppClient, staker: string): P
   const timestamp = Math.floor(Date.now() / 1000);
   // Byte-identical with backend/app.py's list_my_covered_wallets.
   const message = `SAFU_COVERED_LIST:v1:${staker}:${timestamp}`;
-  const body = await postJson("/covered-wallets/mine", { staker, timestamp, ...(await signFor(client, staker, message)) });
-  return body.wallets as CoveredWalletTail[];
+  const body = await postJson<{ wallets: CoveredWalletTail[] }>("/covered-wallets/mine", { staker, timestamp, ...(await signFor(client, staker, message)) });
+  return body.wallets;
 }

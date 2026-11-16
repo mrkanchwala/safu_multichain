@@ -1,6 +1,6 @@
 /**
- * Turns a raw wallet/backend/contract error into one plain sentence a user can act on: what
- * happened, whether their money is safe, and what to do next.
+ * The Stellar pool's error table for the shared matcher (shell/lib/friendly-error.ts, CIE H3, B42):
+ * turns a raw wallet/backend/contract error into one plain sentence a user can act on.
  *
  * Rewritten 2026-09-18 (dropped lending contract) and again 2026-09-25 after a live
  * test: relayed actions, contract errors and the app's own crosschain messages all reached users
@@ -14,16 +14,16 @@
  * IMPORTANT: an unmatched error still falls through to a plain-English generic message at the
  * bottom, never to the raw string. A missing entry here is a worse message, not a leaked code.
  */
+import { DAILY_LIMIT, OUR_SIDE, TRY_LATER, makeFriendlyError } from "../../../shell/lib/friendly-error";
 import { MAX_STAKE_USDC, MIN_STAKE_USDC } from "./network";
 
-const TRY_LATER = "Nothing was lost. Try again in a few minutes.";
-const OUR_SIDE = "Something went wrong on our side. Nothing was lost. Try again, and tell the SAFU team if it keeps happening.";
+export type { FriendlyError } from "../../../shell/lib/friendly-error";
+
 const NOT_CONFIRMED =
   "The network hasn't confirmed this yet. Wait a minute and check your balance before trying again, so it doesn't happen twice.";
 const NETWORK_REFUSED = "The network turned this transaction down. Nothing was taken. Try again.";
 const PAYOUT_NOT_STARTED = "Your payout hasn't started yet. There's a waiting period after you approve a claim. Try again later.";
 const IN_WAITING_PERIOD = "Your claim is still in its 90-day waiting period. Nothing is lost, it pays once that ends.";
-const DAILY_LIMIT = "The pool has reached its payout limit for today. Try again tomorrow.";
 
 /** Protection-pool contract errors (error.rs) a user can actually hit. Admin/governance/oracle
  *  errors are left out on purpose: a user can't cause them, so they get OUR_SIDE. Codes 1-9 are
@@ -198,54 +198,12 @@ const OWN_MESSAGES = [
   "The same transaction",
 ];
 
-export type FriendlyError = {
-  message: string;
-  action?: string;
-  raw: string;
-  /** The user closed the wallet window themselves: not an error, show nothing. */
-  cancelled?: boolean;
-};
-
-// Wallet SDKs don't always throw Errors: stellar-wallets-kit rejects with a
-// plain `{ code: -1, message: "The user closed the modal." }` (esm/sdk/kit.js).
-function rawText(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (error && typeof error === "object" && typeof (error as { message?: unknown }).message === "string") {
-    return (error as { message: string }).message;
-  }
-  return String(error);
-}
-
-export function toFriendlyError(error: unknown): FriendlyError {
-  const raw = rawText(error);
-
-  if (/closed the modal|user closed|modal closed|cancell?ed by (the )?user/i.test(raw)) {
-    return { message: "Wallet window closed.", raw, cancelled: true };
-  }
-
-  if (OWN_MESSAGES.some((m) => raw.startsWith(m))) {
-    return { message: raw, raw };
-  }
-
-  const contract = /Error\(Contract, #(\d+)\)/.exec(raw);
-  if (contract && CONTRACT_ERRORS[Number(contract[1])]) {
-    return { message: CONTRACT_ERRORS[Number(contract[1])], raw };
-  }
-
-  for (const [reason, message] of Object.entries(ACTION_HINTS)) {
-    if (raw.includes(reason)) {
-      return { message, raw };
-    }
-  }
-
-  for (const [pattern, message] of PATTERNS) {
-    if (pattern.test(raw)) {
-      return { message, raw };
-    }
-  }
-
-  return {
-    message: "This didn't go through. Try again in a moment, and tell the SAFU team if it keeps happening.",
-    raw,
-  };
-}
+export const toFriendlyError = makeFriendlyError({
+  own: OWN_MESSAGES,
+  special: (raw) => {
+    const contract = /Error\(Contract, #(\d+)\)/.exec(raw);
+    return contract ? CONTRACT_ERRORS[Number(contract[1])] : undefined;
+  },
+  hints: ACTION_HINTS,
+  patterns: PATTERNS,
+});

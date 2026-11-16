@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { AppClient } from "../lib/client";
-import { solanaWallets } from "../lib/client";
+import { solanaWallets } from "../../shared/solana-wallet";
 import { toFriendlyError } from "../lib/friendly-error";
 import { POOL } from "../lib/pool";
 import { SolanaIcon } from "../../../shell/components/Icons";

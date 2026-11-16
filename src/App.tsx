@@ -7,7 +7,7 @@ import { Protocols } from "./shell/components/Protocols";
 import { Faq } from "./shell/components/Faq";
 import { PoolFactsContext } from "./shell/lib/facts";
 import { SITE } from "./shell/lib/site";
-import type { FaqOverrides } from "./shell/components/Faq";
+import type { PoolFaq } from "./shell/components/Faq";
 import { scrollToFaqAnswer, viewFromHash } from "./shell/lib/links";
 import type { View } from "./shell/lib/links";
 import type { ChainAdapter, PoolTab } from "./chains/types";
@@ -47,10 +47,10 @@ function useHashView(): [View, (v: View) => void] {
   return [view, setView];
 }
 
-function ExplainerPage({ view, onBack, faq }: { view: View; onBack: () => void; faq?: FaqOverrides }) {
+function ExplainerPage({ view, onBack, faq }: { view: View; onBack: () => void; faq: PoolFaq }) {
   if (view === "whitepaper") return <Whitepaper onBack={onBack} />;
   if (view === "protocols") return <Protocols onBack={onBack} />;
-  return <Faq onBack={onBack} overrides={faq} />;
+  return <Faq onBack={onBack} answers={faq} />;
 }
 
 /** The pool switcher (B42): one button per enabled chain, hidden when only one is enabled. Switching loads

@@ -9,7 +9,7 @@
 // solana_cctp.burn_with_hook (Solana burn), e2e_lib.EvmOwner / SolanaOwner (owner signatures).
 
 import { StrKey, nativeToScVal, xdr } from "@stellar/stellar-sdk";
-import { createPublicClient, encodeFunctionData, http, parseAbi } from "viem";
+import { createPublicClient, encodeFunctionData, fallback, http, parseAbi } from "viem";
 import { mainnet, sepolia } from "viem/chains";
 import { IS_MAINNET } from "./pool";
 import {
@@ -37,13 +37,14 @@ import {
 } from "@solana/kit";
 import type { Address as SolAddress, SignatureBytes, Transaction } from "@solana/kit";
 
+import { postJson } from "../../../shell/lib/http";
 import type { AppClient } from "./client";
 import {
   BACK_ADAPTER_ID,
   CCTP_DOMAIN,
   CCTP_FINALITY_FAST,
   EVM_MESSAGE_TRANSMITTER_V2,
-  EVM_RPC_URL,
+  EVM_RPC_URLS,
   EVM_TOKEN_MESSENGER_V2,
   EVM_USDC,
   SOLANA_MESSAGE_TRANSMITTER,
@@ -104,7 +105,7 @@ const ERC20 = parseAbi(["function approve(address spender, uint256 amount) retur
 const MESSENGER = parseAbi([
   "function depositForBurn(uint256 amount, uint32 destinationDomain, bytes32 mintRecipient, address burnToken, bytes32 destinationCaller, uint256 maxFee, uint32 minFinalityThreshold)",
 ]);
-const evmClient = createPublicClient({ chain: IS_MAINNET ? mainnet : sepolia, transport: http(EVM_RPC_URL) });
+const evmClient = createPublicClient({ chain: IS_MAINNET ? mainnet : sepolia, transport: fallback(EVM_RPC_URLS.map((u) => http(u))) });
 
 export async function evmUsdcBalance(owner: string): Promise<bigint> {
   return evmClient.readContract({ address: EVM_USDC, abi: ERC20, functionName: "balanceOf", args: [owner as `0x${string}`] });
@@ -283,13 +284,6 @@ export async function solanaBurnToAdapter(client: AppClient, usdc6: bigint, mode
 
 // --- relayer (backend/relay.py) ----------------------------------------------------------------
 
-async function post<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  const out = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(out.detail || `Request failed (${res.status})`);
-  return out as T;
-}
-
 /** Waits for Circle to attest the burn, then has the relayer finish it on Stellar. Deposits use Fast
  *  Transfer, so this is usually seconds to a minute. */
 export async function finishOnStellar(
@@ -298,7 +292,7 @@ export async function finishOnStellar(
   const deadline = Date.now() + 35 * 60_000;
   while (Date.now() < deadline) {
     if (signal?.aborted) throw new Error("Stopped.");
-    const r = await post<{ status: string; account?: string; circle_status?: string }>("/relay/mint", {
+    const r = await postJson<{ status: string; account?: string; circle_status?: string }>("/relay/mint", {
       adapter: mode, source_domain: kind === "evm" ? CCTP_DOMAIN.evm : CCTP_DOMAIN.solana, burn_tx: burnTx });
     if (r.status === "done" && r.account) return r.account;
     onWait?.("Waiting for Circle to confirm (usually under a minute)...");
@@ -333,17 +327,17 @@ async function checkSolanaSignature(owner: string, payload: Uint8Array, signatur
 export async function relayAction(
   client: AppClient, account: string, action: RelayAction, extra: { claim_id?: string; amount?: string } = {},
 ): Promise<string> {
-  const p = await post<{ id: string; payload: string }>("/relay/prepare", { action, account, ...extra });
+  const p = await postJson<{ id: string; payload: string }>("/relay/prepare", { action, account, ...extra });
   const payload = unhex(p.payload);
   const signature = await client.signMessage(payload);
   if (client.kind === "solana" && client.address) await checkSolanaSignature(client.address, payload, signature);
-  const r = await post<{ tx_hash: string }>("/relay/submit", { id: p.id, signature });
+  const r = await postJson<{ tx_hash: string }>("/relay/submit", { id: p.id, signature });
   return r.tx_hash;
 }
 
 /** `mature_backing` needs no signature at all; the relayer just pays the fee. */
 export async function relayMature(account: string): Promise<string> {
-  return (await post<{ tx_hash: string }>("/relay/mature", { account })).tx_hash;
+  return (await postJson<{ tx_hash: string }>("/relay/mature", { account })).tx_hash;
 }
 
 // --- money going home: the user's own wallet finishes it (docs/CCTP.md "Option A") -----------------
@@ -369,7 +363,7 @@ const DISC_RECEIVE = Uint8Array.from([38, 144, 127, 225, 31, 225, 238, 25]);
 async function waitHomeMessage(stellarTx: string, onWait?: (msg: string) => void) {
   const deadline = Date.now() + 20 * 60_000;
   while (Date.now() < deadline) {
-    const r = await post<{ status: string; message?: string; attestation?: string; destination_domain?: number }>(
+    const r = await postJson<{ status: string; message?: string; attestation?: string; destination_domain?: number }>(
       "/relay/home", { tx_hash: stellarTx });
     if (r.status === "ready" && r.message && r.attestation) return r as { message: string; attestation: string; destination_domain: number };
     onWait?.("Waiting for Circle to confirm the transfer home...");

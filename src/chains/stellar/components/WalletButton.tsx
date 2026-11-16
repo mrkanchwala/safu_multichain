@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { AppClient, WalletKind } from "../lib/client";
-import { WALLETCONNECT_ID, evmWallets, solanaWallets } from "../lib/client";
+import { solanaWallets } from "../../shared/solana-wallet";
+import { WALLETCONNECT_ID, evmWallets } from "../lib/client";
 import { toFriendlyError } from "../lib/friendly-error";
 import { EthereumIcon, SolanaIcon, StellarIcon, WalletConnectIcon } from "../../../shell/components/Icons";
 import { POOL } from "../lib/pool";

@@ -1,13 +1,16 @@
-import type { FaqOverrides } from "../../shell/components/Faq";
+import type { PoolFaq } from "../../shell/components/Faq";
 import { num, setting } from "./lib/pool";
 import { fmtDuration } from "./lib/reads";
 import { usePool } from "./lib/usePool";
 
-// FAQ answers for the Solana test pool (B42, founder 16 Nov): only where its rules differ from the default
-// answers. Every number is read from the program's IDL or the pool's live settings, never typed here.
+// The Solana test pool's FAQ answers (B42, founder 16 Nov; CIE M1): every question whose answer depends on
+// this pool's rules. Every number is read from the program's IDL or the pool's live settings, never typed here.
 
 const wallets = () => num("MAX_COVERED_WALLETS").toString();
 const days = (name: string) => fmtDuration(Number(num(name)));
+/** A tier's ceiling as a multiple of the stake, as the program computes it (pool_core::claim::tier_cap). */
+const ceiling = (tier: "A" | "B" | "C") =>
+  (Number(num(`TIER_${tier}_RATIO`)) * Number(num("TIER_COVERAGE_BPS"))) / Number(num("BPS_DENOMINATOR"));
 
 /** A live pool setting as a duration ("4 minutes"); "a short" while the pool is still loading. */
 function LiveDuration({ name }: { name: string }) {
@@ -15,7 +18,7 @@ function LiveDuration({ name }: { name: string }) {
   return <>{pool ? fmtDuration(Number(setting(pool, name))) : "a short"}</>;
 }
 
-export const SOLANA_FAQ: FaqOverrides = {
+export const SOLANA_FAQ: PoolFaq = {
   what: (
     <>
       This is SAFU's Solana pool, running on Solana devnet: a test network, so no real money is involved. You stake
@@ -34,8 +37,18 @@ export const SOLANA_FAQ: FaqOverrides = {
       with the covered wallet. Your staking wallet can't be one of its own covered wallets.
     </>
   ),
+  withdraw:
+    "Yes, whenever there's no claim open on it. It goes back to the wallet you staked from, in SOL, and your wallets stop being covered until you stake again.",
   yield:
     "Yes. Most of the pool's SOL is staked through Marinade, and your share of that yield shows in the Stake tab. Taking SOL back out of Marinade costs Marinade's unstake fee, and the Stake tab shows it before you withdraw.",
+  amount: (
+    <>
+      Up to {ceiling("A")} times your stake for a Tier A wallet, {ceiling("B")} times for Tier B and {ceiling("C")}{" "}
+      times for Tier C, and never more than you actually lost. Each covered wallet's tier comes from its own history,
+      so older, steadier wallets rank higher. These are ceilings: the payout is the smaller of the ceiling and your
+      real loss.
+    </>
+  ),
   file: (
     <>
       Open the File a claim tab within {days("CLAIM_WINDOW_SECS")} of the theft and paste the theft transaction. One
@@ -52,6 +65,8 @@ export const SOLANA_FAQ: FaqOverrides = {
     </>
   ),
   payoutWhere: "To the wallet you staked from, in SOL.",
+  afterPaid:
+    "One stake covers one claim, so it's used up, even if the payout came in under the ceiling. A staking wallet that has had a claim paid can't stake again.",
   safe:
     "This pool runs on Solana devnet, a test network, so no real money is at risk. The program has its own test suites and fuzz testing. Your keys never leave your wallet, and the pool only pays out against a signed, rule-checked result.",
   fake: (

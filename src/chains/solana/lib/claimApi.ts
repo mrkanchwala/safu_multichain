@@ -3,6 +3,7 @@
 //   SAFU_SOLANA_CLAIM:v1:{staker}:{tx1,tx2,...}:{ts}
 // The staking wallet signs each one (Solana signMessage). Nothing about the payout is typed in: the
 // backend reads the loss, the hack time and the tier from the chain, and the oracle submits the claim.
+import { SCAN_MS, postJson } from "../../../shell/lib/http";
 import type { AppClient } from "./client";
 import { POOL } from "./pool";
 
@@ -35,21 +36,6 @@ export type FileClaimResult = {
   demo_mode: Record<string, string>;
 };
 
-export class ClaimApiError extends Error {
-  status: number;
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
-  }
-}
-
-async function postJson<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  const out = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ClaimApiError(res.status, typeof out.detail === "string" ? out.detail : `Request failed (${res.status})`);
-  return out as T;
-}
-
 const now = () => Math.floor(Date.now() / 1000);
 
 export async function addCoveredWallet(
@@ -64,12 +50,12 @@ export async function addCoveredWallet(
 }
 
 export function confirmCoveredWallet(staker: string, chain: CoverChain, wallet: string): Promise<CoveredWalletResponse> {
-  return postJson(`${POOL.apiBase}/covered-wallets/confirm`, { staker, chain, wallet });
+  return postJson(`${POOL.apiBase}/covered-wallets/confirm`, { staker, chain, wallet }, SCAN_MS);
 }
 
 export async function fileClaim(client: AppClient, staker: string, txHashes: string[]): Promise<FileClaimResult> {
   const tx_hashes = txHashes.map((t) => t.trim());
   const timestamp = now();
   const signature = await client.signMessage(`SAFU_SOLANA_CLAIM:v1:${staker}:${tx_hashes.join(",")}:${timestamp}`);
-  return postJson(`${POOL.apiBase}/claim`, { staker, tx_hashes, timestamp, signature });
+  return postJson(`${POOL.apiBase}/claim`, { staker, tx_hashes, timestamp, signature }, SCAN_MS);
 }

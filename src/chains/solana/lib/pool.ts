@@ -1,5 +1,5 @@
 // The Solana pool's file (config/solana.<cluster>.json) and the deployed program's IDL
-// (src/chains/solana/idl.json, pinned), both baked in at build time by vite.config.ts, only when
+// (config/solana.idl.json, pinned; the claim API reads the same file), both baked in at build time by vite.config.ts, only when
 // hq/site.toml enables Solana. Read network values and rule numbers from here, never hard-code them.
 declare const __SOL_POOL__: PoolConfig;
 declare const __SOL_IDL__: Idl;

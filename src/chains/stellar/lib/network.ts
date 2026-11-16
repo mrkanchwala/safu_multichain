@@ -11,7 +11,8 @@ import { POOL } from "./pool";
 
 export const CLUSTER = POOL.network;
 export const HORIZON_URL = POOL.stellar.horizon;
-export const SOROBAN_RPC_URL = POOL.stellar.soroban_rpc;
+/** Primary first, then the fallbacks (CIE A-1, B42): soroban.ts moves on when one can't be reached. */
+export const SOROBAN_RPC_URLS = [POOL.stellar.soroban_rpc, ...POOL.stellar.soroban_rpc_fallbacks];
 export const NETWORK_PASSPHRASE = POOL.stellar.passphrase;
 
 // Single contract: the protection pool. Ids are written into the pool file by deploy_v1.sh.
@@ -80,7 +81,8 @@ export const CHAINS: readonly { id: ChainId; label: string }[] = [
 // --- CCTP (Circle) ---------------------------------------------------------------------------
 export const CCTP_DOMAIN = POOL.cctp.domains;
 export const EVM_CHAIN_ID = POOL.evm.chain_id;
-export const EVM_RPC_URL = POOL.evm.public_rpc;
+/** Primary first, then the fallbacks: viem's fallback transport moves on when one fails. */
+export const EVM_RPC_URLS = [POOL.evm.public_rpc, ...POOL.evm.public_rpc_fallbacks];
 export const EVM_USDC = POOL.evm.usdc;
 export const EVM_TOKEN_MESSENGER_V2 = POOL.evm.token_messenger_v2;
 export const EVM_MESSAGE_TRANSMITTER_V2 = POOL.evm.message_transmitter_v2;

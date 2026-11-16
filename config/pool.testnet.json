@@ -5,11 +5,12 @@
   "short": "Testnet",
   "passphrase": "Test SDF Network ; September 2015",
   "soroban_rpc": "https://soroban-testnet.stellar.org",
+  "soroban_rpc_fallbacks": [],
   "horizon": "https://horizon-testnet.stellar.org",
   "usdc_issuer": "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
   "usdc_sac": "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
   "explorer_tx": "https://stellar.expert/explorer/testnet/tx/{tx}",
-    "explorer_contract": "https://stellar.expert/explorer/testnet/contract/{id}"
+  "explorer_contract": "https://stellar.expert/explorer/testnet/contract/{id}"
  },
  "evm": {
   "chain_key": "sepolia",
@@ -17,6 +18,9 @@
   "short": "Sepolia",
   "chain_id": 11155111,
   "public_rpc": "https://ethereum-sepolia-rpc.publicnode.com",
+  "public_rpc_fallbacks": [
+   "https://1rpc.io/sepolia"
+  ],
   "usdc": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
   "token_messenger_v2": "0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA",
   "message_transmitter_v2": "0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275",

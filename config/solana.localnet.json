@@ -1,0 +1,13 @@
+{
+  "cluster": "localnet",
+  "rpcUrl": "http://127.0.0.1:8899",
+  "poolCapLamports": 50000000000,
+  "computeUnitLimit": 200000,
+  "crankMinLamports": 10000000,
+  "marinade": {
+    "program": "MarBmsSgKXdrN1egZf5sqe1TMai9K1rChYNDJgjq7aD",
+    "state": "8szGkuLTAux9XMgZ2vtY39jVSowEcpBfFfD8hXSEqdGC",
+    "msolMint": "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So"
+  },
+  "_note": "Local validator for the backend tests and e2e (safu_solana scripts/localnet.sh), same Marinade accounts from the test fixtures. The program interface is config/solana.idl.json; the site never reads this file."
+}

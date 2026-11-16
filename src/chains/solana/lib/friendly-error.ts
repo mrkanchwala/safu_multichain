@@ -1,7 +1,6 @@
 /**
- * Turns a raw wallet/backend/program error into one plain sentence a user can act on: what happened,
- * whether their money is safe, and what to do next. From the multichain site's friendly-error.ts,
- * rewritten for the Solana pool:
+ * The Solana pool's error table for the shared matcher (shell/lib/friendly-error.ts, CIE H3, B42):
+ * turns a raw wallet/backend/program error into one plain sentence a user can act on. Sources:
  *   - program errors: `PROGRAM_ERROR:<name>` from lib/program.ts, names from the IDL (PROGRAM_ERRORS);
  *   - backend reason codes: backend/colosseum_app.py (ACTION_HINTS);
  *   - wallet errors: rejections, missing SOL (PATTERNS);
@@ -11,10 +10,11 @@
  * bottom, never to the raw string. A missing entry here is a worse message, not a leaked code.
  */
 
-const TRY_LATER = "Nothing was lost. Try again in a few minutes.";
-const OUR_SIDE = "Something went wrong on our side. Nothing was lost. Try again, and tell the SAFU team if it keeps happening.";
+import { DAILY_LIMIT, OUR_SIDE, TRY_LATER, makeFriendlyError } from "../../../shell/lib/friendly-error";
+
+export type { FriendlyError } from "../../../shell/lib/friendly-error";
+
 const NETWORK_BUSY = `The network isn't responding right now. ${TRY_LATER}`;
-const DAILY_LIMIT = "The pool has reached its payout limit for today. Try again tomorrow.";
 const NO_LIQUIDITY = "The pool can't pay this out right now. Nothing was lost. Try again later.";
 
 /** Program errors (IDL `errors`) a user can actually hit. Admin/oracle ones are left out on purpose:
@@ -121,58 +121,19 @@ const OWN_MESSAGES = [
   "No transactions given",
 ];
 
-export type FriendlyError = {
-  message: string;
-  action?: string;
-  raw: string;
-  /** The user closed the wallet window themselves: not an error, show nothing. */
-  cancelled?: boolean;
-};
-
-// Wallet SDKs don't always throw Errors: some reject with a plain `{ code, message }` object.
-function rawText(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (error && typeof error === "object" && typeof (error as { message?: unknown }).message === "string") {
-    return (error as { message: string }).message;
-  }
-  return String(error);
-}
-
-export function toFriendlyError(error: unknown): FriendlyError {
-  const raw = rawText(error);
-
-  if (/closed the modal|user closed|modal closed|cancell?ed by (the )?user/i.test(raw)) {
-    return { message: "Wallet window closed.", raw, cancelled: true };
-  }
-  if (OWN_MESSAGES.some((m) => raw.startsWith(m))) return { message: raw, raw };
-
-  // The covered wallet fails the history floors (backend tier_common.check_eligible); keep its numbers.
+/** Program errors, plus the covered-wallet history floors with their numbers kept
+ *  (backend tier_common.check_eligible). */
+function special(raw: string): string | undefined {
   const txs = /WALLET_INELIGIBLE: covered wallet had (\d+) transactions at the hack; at least (\d+)/.exec(raw);
   if (txs) {
-    return {
-      message: `This wallet had only ${txs[1]} transactions before the hack. A covered wallet needs at least ${txs[2]}, so this loss can't be paid.`,
-      raw,
-    };
+    return `This wallet had only ${txs[1]} transactions before the hack. A covered wallet needs at least ${txs[2]}, so this loss can't be paid.`;
   }
   const age = /WALLET_INELIGIBLE: covered wallet was (\d+)d old at the hack; at least (\d+) days/.exec(raw);
   if (age) {
-    return {
-      message: `This wallet was only ${age[1]} days old at the hack. A covered wallet must be at least ${age[2]} days old, so this loss can't be paid.`,
-      raw,
-    };
+    return `This wallet was only ${age[1]} days old at the hack. A covered wallet must be at least ${age[2]} days old, so this loss can't be paid.`;
   }
-
   const program = /PROGRAM_ERROR:(\w+)/.exec(raw);
-  if (program) return { message: PROGRAM_ERRORS[program[1]] ?? OUR_SIDE, raw };
-
-  for (const [reason, message] of Object.entries(ACTION_HINTS)) {
-    if (raw.includes(reason)) return { message, raw };
-  }
-  for (const [pattern, message] of PATTERNS) {
-    if (pattern.test(raw)) return { message, raw };
-  }
-  return {
-    message: "This didn't go through. Try again in a moment, and tell the SAFU team if it keeps happening.",
-    raw,
-  };
+  return program ? (PROGRAM_ERRORS[program[1]] ?? OUR_SIDE) : undefined;
 }
+
+export const toFriendlyError = makeFriendlyError({ own: OWN_MESSAGES, special, hints: ACTION_HINTS, patterns: PATTERNS });
