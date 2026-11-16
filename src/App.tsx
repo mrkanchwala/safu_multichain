@@ -6,6 +6,8 @@ import { Whitepaper } from "./shell/components/Whitepaper";
 import { Protocols } from "./shell/components/Protocols";
 import { Faq } from "./shell/components/Faq";
 import { PoolFactsContext } from "./shell/lib/facts";
+import { SITE } from "./shell/lib/site";
+import type { FaqOverrides } from "./shell/components/Faq";
 import { scrollToFaqAnswer, viewFromHash } from "./shell/lib/links";
 import type { View } from "./shell/lib/links";
 import type { ChainAdapter, PoolTab } from "./chains/types";
@@ -45,10 +47,26 @@ function useHashView(): [View, (v: View) => void] {
   return [view, setView];
 }
 
-function ExplainerPage({ view, onBack }: { view: View; onBack: () => void }) {
+function ExplainerPage({ view, onBack, faq }: { view: View; onBack: () => void; faq?: FaqOverrides }) {
   if (view === "whitepaper") return <Whitepaper onBack={onBack} />;
   if (view === "protocols") return <Protocols onBack={onBack} />;
-  return <Faq onBack={onBack} />;
+  return <Faq onBack={onBack} overrides={faq} />;
+}
+
+/** The pool switcher (B42): one button per enabled chain, hidden when only one is enabled. Switching loads
+ *  the other pool's page (`?chain=`), so its own wallet code loads; the hash (#faq …) is kept. */
+function ChainSwitcher({ current }: { current: string }) {
+  if (SITE.chains.enabled.length < 2) return null;
+  const href = (id: string) => `?chain=${id}${window.location.hash}`;
+  return (
+    <div className="chain-switch" role="group" aria-label="Pool">
+      {SITE.chains.enabled.map((id) => (
+        <a key={id} href={href(id)} className={`chain-opt${id === current ? " active" : ""}`} aria-current={id === current}>
+          {SITE.chains.labels[id]}
+        </a>
+      ))}
+    </div>
+  );
 }
 
 function Dapp({ adapter, tab, setTab }: { adapter: ChainAdapter; tab: PoolTab; setTab: (t: PoolTab) => void }) {
@@ -76,7 +94,7 @@ export default function App({ adapter }: { adapter: ChainAdapter }) {
   // Held here, not in Dapp, so the chosen tab survives a visit to the FAQ or whitepaper.
   const [tab, setTab] = useState<PoolTab>("stake");
   const facts = adapter.useFacts();
-  const { Badge, Wallet, Hero, Numbers } = adapter;
+  const { Badge, Wallet, Hero, Numbers, ExplainerNote } = adapter;
 
   const backToApp = () => {
     history.pushState(null, "", window.location.pathname + window.location.search);
@@ -90,7 +108,13 @@ export default function App({ adapter }: { adapter: ChainAdapter }) {
       <PoolFactsContext.Provider value={facts}>
         <Badge />
         {header}
-        <ExplainerPage view={view} onBack={backToApp} />
+        {SITE.chains.enabled.length > 1 ? (
+          <div className="wrap switch-bar">
+            <ChainSwitcher current={adapter.id} />
+            {ExplainerNote && view !== "faq" ? <ExplainerNote /> : null}
+          </div>
+        ) : null}
+        <ExplainerPage view={view} onBack={backToApp} faq={adapter.faq} />
       </PoolFactsContext.Provider>
     );
   }
@@ -107,6 +131,7 @@ export default function App({ adapter }: { adapter: ChainAdapter }) {
             <br />
             <em>Automatically. No vote. No appeal.</em>
           </h1>
+          <ChainSwitcher current={adapter.id} />
           <Hero />
           <div className="hero-links">
             <a href="#faq">

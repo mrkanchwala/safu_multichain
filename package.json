@@ -8,11 +8,13 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint src",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "postbuild": "node scripts/check-dist.mjs"
   },
   "dependencies": {
     "@creit.tech/stellar-wallets-kit": "^2.6.0",
     "@reown/appkit": "1.8.21",
+    "@solana-program/compute-budget": "^0.19.0",
     "@solana/kit": "^8.3.0",
     "@stellar/stellar-sdk": "^17.4.0",
     "@wallet-standard/app": "^1.1.1",

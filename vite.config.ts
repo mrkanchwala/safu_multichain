@@ -36,11 +36,31 @@ function siteConfig() {
   if (missing.length) throw new Error(`hq/site.toml is missing: ${missing.join(', ')}`)
   const enabled = cfg.chains.enabled as string[]
   if (!enabled.includes(cfg.chains.default as string)) throw new Error('hq/site.toml: chains.default is not enabled')
-  return cfg
+  const labels = (cfg.chains.labels ?? {}) as Record<string, unknown>
+  const unlabelled = enabled.filter((c) => typeof labels[c] !== 'string')
+  if (unlabelled.length) throw new Error(`hq/site.toml: chains.labels is missing ${unlabelled.join(', ')}`)
+  // [guards] is for the build checks only (scripts/check-dist.mjs): it must never ship in the page.
+  const { guards: _guards, ...forPage } = cfg
+  return forPage
+}
+
+// The Solana pool (B42): its config + the deployed program's pinned IDL are baked in only when hq/site.toml
+// enables Solana. __CHAIN_SOLANA__ is a build constant, so with Solana off the registry's import is dead
+// code and none of the Solana pool's code or addresses reach the bundle (review A3).
+function solanaDefines(enabled: string[]) {
+  const on = enabled.includes('solana')
+  const read = (rel: string) => JSON.parse(readFileSync(new URL(rel, import.meta.url), 'utf8'))
+  return {
+    __CHAIN_SOLANA__: JSON.stringify(on),
+    __SOL_POOL__: on ? JSON.stringify(read('./config/solana.devnet.json')) : 'null',
+    __SOL_IDL__: on ? JSON.stringify(read('./src/chains/solana/idl.json')) : 'null',
+  }
 }
 
 // https://vite.dev/config/
-export default defineConfig(({ mode }) => ({
+export default defineConfig(({ mode }) => {
+  const site = siteConfig()
+  return {
   // Served from the safustaking.com domain root (since 2026-09-25;
   // the older T3 site lives at /t3). Asset URLs are
   // root-absolute (/assets/...), matching nginx's root for this dist.
@@ -50,10 +70,19 @@ export default defineConfig(({ mode }) => ({
   define: {
     'process.env.NODE_ENV': JSON.stringify(mode),
     __POOL__: JSON.stringify(poolConfig(mode)),
-    __SITE__: JSON.stringify(siteConfig()),
+    __SITE__: JSON.stringify(site),
+    ...solanaDefines(site.chains.enabled as string[]),
   },
   server: {
-    // backend/app.py (demo claim API), run separately with uvicorn.
-    proxy: Object.fromEntries(['/claim', '/covered-wallets', '/relay'].map((p) => [p, 'http://localhost:8000'])),
+    // backend/app.py (demo claim API), run separately with uvicorn. The Solana pool's API
+    // (colosseum_app.py) sits under /api/solana, as on the live site; SAFU_SOL_API points at it.
+    proxy: {
+      ...Object.fromEntries(['/claim', '/covered-wallets', '/relay'].map((p) => [p, 'http://localhost:8000'])),
+      '/api/solana': {
+        target: process.env.SAFU_SOL_API ?? 'http://localhost:8002',
+        rewrite: (p: string) => p.replace(/^\/api\/solana/, ''),
+      },
+    },
   },
-}))
+  }
+})

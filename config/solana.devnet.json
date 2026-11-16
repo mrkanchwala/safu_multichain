@@ -1,0 +1,16 @@
+{
+  "cluster": "devnet",
+  "rpcUrl": "https://api.devnet.solana.com",
+  "siteRpcPath": "/api/solana/rpc",
+  "poolCapLamports": 50000000000,
+  "computeUnitLimit": 200000,
+  "crankMinLamports": 10000000,
+  "marinade": {
+    "program": "MarBmsSgKXdrN1egZf5sqe1TMai9K1rChYNDJgjq7aD",
+    "state": "8szGkuLTAux9XMgZ2vtY39jVSowEcpBfFfD8hXSEqdGC",
+    "msolMint": "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So"
+  },
+  "apiBase": "/api/solana",
+  "explorerTx": "https://explorer.solana.com/tx/{tx}?cluster=devnet",
+  "_note": "Solana side of safustaking.com (B42, 16 Nov): the live Colosseum devnet SOL pool. Copied from safu_solana e32e0af config/pool.devnet.json; paths moved under /api/solana (nginx -> colosseum-app :8002). Program id + rule numbers come from src/chains/solana/idl.json, never from here."
+}

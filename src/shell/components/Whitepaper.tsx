@@ -15,7 +15,7 @@ const SECTIONS = [
   { id: "wp-security", label: "Security status" },
   { id: "wp-protocols", label: "For protocols" },
   { id: "wp-before", label: "Before you stake" },
-  { id: "wp-legal", label: "Legal" },
+  { id: "wp-legal", label: "Not insurance" },
 ];
 
 function Slide({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
@@ -266,12 +266,13 @@ export function Whitepaper({ onBack }: { onBack: () => void }) {
           </ul>
         </Slide>
 
-        <Slide id="wp-legal" title="Legal">
-          <p>
-            SAFU is software published by MKD Global LLC (30 N Gould St Ste R, Sheridan, WY 82801, USA). SAFU is a
-            loss-socialization protocol: stakers share losses through one pool under published rules, and nobody pays
-            a premium.
-          </p>
+        <Slide id="wp-legal" title="SAFU is not insurance">
+          <ul>
+            <li>There's no insurer and no promise from a company. The pool contract pays out by its own published rules.</li>
+            <li>You pay no premium: you stake your own money and keep earning yield on it.</li>
+            <li>No payout is guaranteed, because payouts are capped and paid only while the pool has the money.</li>
+            <li>SAFU never holds your funds. They sit in the pool contract.</li>
+          </ul>
         </Slide>
       </div>
     </DetailsLayout>

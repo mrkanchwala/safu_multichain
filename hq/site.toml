@@ -21,5 +21,15 @@ bd_intake = "https://docs.google.com/forms/d/e/1FAIpQLSefYrJjgxzJrHJe59U7BFottI7
 [chains]
 # The pools this build serves. Only enabled chains are bundled (B42 review A3: a disabled
 # chain's code and addresses must never reach the public site).
-enabled = ["stellar"]
+enabled = ["stellar", "solana"]
 default = "stellar"
+
+[chains.labels]
+# The switcher's words. Solana is the Colosseum devnet pool (B42, founder 16 Nov), so its label says so.
+stellar = "Stellar"
+solana = "Solana · test network, no real money"
+
+[guards]
+# Strings that must never appear in the built site (checked after every build by scripts/check-dist.mjs).
+# The Solana USDC pool (B10) stays hidden until grant news; this is its program id (safu_solana target/idl).
+never_ship = ["6nE296ZjUgVifngxv1Z5jWp4xvBexaBiepFHA8UVYC7X"]

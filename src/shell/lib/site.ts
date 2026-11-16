@@ -5,7 +5,7 @@ declare const __SITE__: SiteConfig;
 export interface SiteConfig {
   site: { name: string; url: string; icon: string; wallet_description: string; walletconnect_project_id: string };
   links: { feedback: string; x: string; telegram: string; github: string; bd_intake: string };
-  chains: { enabled: string[]; default: string };
+  chains: { enabled: string[]; default: string; labels: Record<string, string> };
 }
 
 export const SITE: SiteConfig = __SITE__;

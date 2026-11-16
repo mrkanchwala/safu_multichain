@@ -1,4 +1,5 @@
 {
+  "chains/solana/lib/program.ts": 3,
   "chains/stellar/components/ClaimsPanel.tsx": 4,
   "chains/stellar/lib/crosschain.ts": 3,
   "chains/stellar/lib/friendly-error.ts": 1,

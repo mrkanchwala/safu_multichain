@@ -1,5 +1,6 @@
 import type { ComponentType, ReactNode } from "react";
 import type { PoolFacts } from "../shell/lib/facts";
+import type { FaqOverrides } from "../shell/components/Faq";
 
 export type PoolTab = "stake" | "back" | "file" | "collect";
 
@@ -21,4 +22,8 @@ export interface ChainAdapter {
   Numbers: ComponentType;
   /** Facts the copy links to or quotes, read from the pool's contract. */
   useFacts: () => PoolFacts;
+  /** FAQ answers where this pool's rules differ from the default answers (null hides a question). */
+  faq?: FaqOverrides;
+  /** A line above the whitepaper and protocols pages when they describe a different pool, or nothing. */
+  ExplainerNote?: ComponentType;
 }
