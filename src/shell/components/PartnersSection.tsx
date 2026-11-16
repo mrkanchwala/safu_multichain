@@ -11,7 +11,7 @@ export function PartnersSection() {
     <section className="partners" id="partners">
       <div className="wrap">
         <h2>Backed and built with</h2>
-        <div className="sub">The teams and networks behind SAFU.</div>
+        <div className="sub">Who funds and supports SAFU, and the networks its pools run on.</div>
         <div className="partners-strip">
           {rows.map((row) => (
             <div className="partners-row" key={row.label}>

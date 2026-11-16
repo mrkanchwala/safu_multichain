@@ -636,7 +636,8 @@ section.numbers {
 section.numbers h2,
 section.coverage h2,
 section.example h2,
-section.about h2 {
+section.about h2,
+section.partners h2 {
   font-family: var(--font-display);
   font-size: 23px;
   font-weight: 700;
@@ -645,7 +646,8 @@ section.about h2 {
 section.numbers .sub,
 section.coverage .sub,
 section.example .sub,
-section.about .sub {
+section.about .sub,
+section.partners .sub {
   color: var(--text-muted);
   font-size: 13.5px;
   margin-bottom: 20px;
@@ -778,12 +780,9 @@ section.about {
 }
 
 /* Partners strip (M18): grey logos, colour on hover. */
-section.partners h2 {
-  font-family: var(--font-display);
-}
-section.partners .sub {
-  color: var(--text-muted);
-  margin-bottom: 20px;
+section.partners {
+  padding: 44px 0;
+  border-top: 1px solid var(--border);
 }
 .partners-strip {
   background: var(--bg-panel);
@@ -831,7 +830,7 @@ section.partners .sub {
 .partners-items img {
   height: 26px;
   max-width: 100%;
-  filter: grayscale(1) brightness(1.6);
+  filter: brightness(0) invert(1); /* every logo the same white, whatever its own colours */
 }
 .partners-items a:hover img {
   filter: none;
