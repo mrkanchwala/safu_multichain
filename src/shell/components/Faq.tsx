@@ -17,7 +17,7 @@ const GROUPS: { id: string; title: string; items: Item[] }[] = [
       {
         key: "what",
         q: "What is SAFU?",
-        a: "SAFU is a shared pool that pays you back if crypto is stolen from a wallet you registered. You stake into a pool, choose the wallets you want covered, and if crypto is stolen from one of them, the pool pays you automatically, by rules fixed in advance.",
+        a: "SAFU is a shared pool that pays you back if crypto is stolen from a wallet you registered. You stake into a pool and choose the wallets you want covered. If crypto is stolen from one of them, the pool pays you automatically, by rules fixed in advance.",
       },
       {
         key: "losses",
@@ -133,7 +133,7 @@ const GROUPS: { id: string; title: string; items: Item[] }[] = [
       {
         key: "back",
         q: 'What does "Back the pool" mean?',
-        a: "Backers add funds that help the pool pay large claims on time, without registering any wallets of their own. Backing matures after a short period and can then be withdrawn, and backers always get back exactly what they put in, but they can only take out money that open claims don't need.",
+        a: "Backers add funds that help the pool pay large claims on time, without registering any wallets of their own. Backing matures after a short period and can then be withdrawn. Backers always get back exactly what they put in, but only money that open claims don't need.",
       },
       {
         key: "dapp",

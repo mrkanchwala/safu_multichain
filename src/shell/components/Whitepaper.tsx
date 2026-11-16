@@ -137,8 +137,8 @@ export function Whitepaper({ onBack }: { onBack: () => void }) {
 
         <Slide id="wp-clock" title="The clock">
           <p>
-            A loss has to be claimed within the pool's claim window. A claim on a new stake is recorded and held at its
-            full amount until the stake has been in the pool long enough, and nothing is taken while it waits. Once you
+            A loss has to be claimed within the pool's claim window. A claim on a new stake is recorded at its full amount
+            and held until the stake is old enough. Nothing is taken while it waits. Once you
             approve a claim, a cooldown starts, and then the payout streams to you. A daily payout limit spreads large
             incidents out, so when many claims arrive at once they wait in a queue and are paid in order. Each pool
             shows its own windows in its app.
@@ -147,8 +147,8 @@ export function Whitepaper({ onBack }: { onBack: () => void }) {
 
         <Slide id="wp-chains" title="Across chains">
           <p>
-            You can stake from a wallet on a different chain from the pool: your stake moves to the pool's chain over a
-            standard bridge for stablecoins, and SAFU pays the fees for that inbound step. Payouts and withdrawals go back
+            You can stake from a wallet on a different chain from the pool. Your stake moves to the pool's chain over a
+            standard stablecoin bridge, and SAFU pays the fees for that step. Payouts and withdrawals go back
             to the wallet you staked from, on its own chain, where your wallet signs one receive transaction. If you leave
             that last step unfinished, it can still be completed later.
           </p>
