@@ -25,9 +25,9 @@ enabled = ["stellar", "solana"]
 default = "stellar"
 
 [chains.labels]
-# The switcher's words. Solana is the Colosseum devnet pool (B42, founder 16 Nov), so its label says so.
+# The switcher's words. Solana label = "solana.testnet" (founder 16 Nov: button text only, no banner).
 stellar = "Stellar"
-solana = "Solana · test network, no real money"
+solana = "solana.testnet"
 
 [chains.solana]
 # Which Solana cluster's pool the site serves: picks config/solana.<cluster>.json. Must match the claim API's
