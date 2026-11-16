@@ -226,7 +226,10 @@ export function StakePanel() {
         {myStake && manageOpen ? (
           <CoverFoldedStep done={protectedNow} status={status} />
         ) : !live ? (
-          <CoverLockedStep status={status} ended={!myStake && n !== null && n > 0} />
+          <CoverLockedStep
+            status={status} ended={!myStake && n !== null && n > 0}
+            hint={myStake?.forfeited ? "This stake paid a claim, so its cover has ended. A wallet that had a claim paid can't stake again." : undefined}
+          />
         ) : (
           <CoverOpenStep done={protectedNow} status={status} count={n} rows={rows}>
             {pending ? (

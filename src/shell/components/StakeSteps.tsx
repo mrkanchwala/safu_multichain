@@ -101,7 +101,8 @@ export function CoverFoldedStep({ done, status }: { done: boolean; status: { tex
   );
 }
 
-export function CoverLockedStep({ status, ended }: { status: { text: string; cls: string }; ended: boolean }) {
+/** `hint` replaces the default line (e.g. a stake that paid a claim and can't be renewed). */
+export function CoverLockedStep({ status, ended, hint }: { status: { text: string; cls: string }; ended: boolean; hint?: string }) {
   return (
     <div className="step locked">
       <div className="step-h">
@@ -109,7 +110,7 @@ export function CoverLockedStep({ status, ended }: { status: { text: string; cls
         <span className="step-r">{status.text}</span>
       </div>
       <div className="step-hint">
-        {ended ? "Cover ended when you withdrew. Stake again to bring it back." : "Stake first, then add the wallets you want covered."}
+        {hint ?? (ended ? "Cover ended when you withdrew. Stake again to bring it back." : "Stake first, then add the wallets you want covered.")}
       </div>
     </div>
   );
