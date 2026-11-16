@@ -1,6 +1,6 @@
 # SAFU Staking Multichain
 
-**A stake that turns hacks into payouts.** Stake once. Get robbed. Code pays up to 15x.
+**A stake that turns hacks into payouts.** Stake once. If you're hacked, code pays up to 15x.
 
 One USDC pool on Stellar that pays you back when crypto is stolen from a wallet you registered, or when a loan in one of those wallets is wrongfully liquidated. Covered wallets can sit on Ethereum, Solana or Stellar. Payouts follow rules set in advance, and nobody votes on a claim.
 
