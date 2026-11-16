@@ -7,7 +7,7 @@ import { StakePanel } from "./components/StakePanel";
 import { WalletButton } from "./components/WalletButton";
 import { ClientProvider, useClient } from "./lib/client";
 import type { AppClient } from "./lib/client";
-import { MAX_STAKE_USDC, MIN_STAKE_USDC, POOL_CAP_USDC } from "./lib/network";
+import { useStakeBounds } from "./lib/useStakeBounds";
 import { fmtUsdc, readPoolStats } from "./lib/reads";
 import { isLive } from "./lib/soroban";
 
@@ -42,6 +42,7 @@ function FilePanel() {
 function Numbers() {
   const client = useClient<AppClient>();
   const [stats, setStats] = useState({ totalStaked: 0n, totalStakers: 0 });
+  const bounds = useStakeBounds();
 
   useEffect(() => {
     let cancelled = false;
@@ -58,7 +59,7 @@ function Numbers() {
       <div className="wrap">
         <h2>The pool</h2>
         <div className="sub">
-          Pool cap ${POOL_CAP_USDC.toLocaleString()}. Live numbers, read straight from the pool.
+          Pool cap {bounds ? `$${bounds.cap.toLocaleString()}` : "--"}. Live numbers, read straight from the pool.
         </div>
         <div className="stat-grid">
           <div className="stat-card">
@@ -70,11 +71,11 @@ function Numbers() {
             <div className="k">Stakers</div>
           </div>
           <div className="stat-card">
-            <div className="v">${MIN_STAKE_USDC}</div>
+            <div className="v">{bounds ? `$${bounds.min}` : "--"}</div>
             <div className="k">Min stake</div>
           </div>
           <div className="stat-card">
-            <div className="v">${MAX_STAKE_USDC.toLocaleString()}</div>
+            <div className="v">{bounds ? `$${bounds.max.toLocaleString()}` : "--"}</div>
             <div className="k">Max stake</div>
           </div>
         </div>

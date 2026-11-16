@@ -1,5 +1,6 @@
-import { USDC_DECIMALS } from "./network";
-import { addr, bytesn32, hexFromBytes, isLive, poolId, readContract } from "./soroban";
+import { POOL_CAP_FALLBACK_USDC, USDC_DECIMALS, stakeBoundsFor } from "./network";
+import type { StakeBounds } from "./network";
+import { addr, bytesn32, hexFromBytes, isLive, poolId, readContract, readInstanceValue } from "./soroban";
 
 // WIRED TO THE LIVE POOL, 2026-09-19 (after the pool-read fix) -- these used to be Stage 1
 // stubs returning fixed dummy values regardless of real chain state, a leftover
@@ -220,6 +221,15 @@ export function fromRaw(raw: bigint | number, decimals: number): number {
 
 export function toRaw(ui: number, decimals: number): bigint {
   return BigInt(Math.round(ui * 10 ** decimals));
+}
+
+/** Stake limits from the pool's live cap (instance storage; the contract has no getter for it). Before the
+ *  pool is deployed, the pool file's cap. Throws on a failed read: callers never stake on a guessed limit. */
+export async function readStakeBounds(): Promise<StakeBounds> {
+  if (!isLive()) return stakeBoundsFor(POOL_CAP_FALLBACK_USDC);
+  const raw = await readInstanceValue<bigint>(poolId(), "PoolCap");
+  if (raw === undefined) throw new Error("Couldn't read the pool's limits. Try again in a moment.");
+  return stakeBoundsFor(fromRaw(BigInt(raw), USDC_DECIMALS));
 }
 
 export const fmtUsdc = (raw: bigint) => fromRaw(raw, USDC_DECIMALS).toFixed(2);

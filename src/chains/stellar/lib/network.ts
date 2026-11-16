@@ -45,11 +45,15 @@ export const MIN_STAKE_BPS = 1; // 0.01% of pool cap -- $10 at a $100,000 pool c
 export const MAX_STAKE_BPS = 10; // 0.1% of pool cap -- $100 at a $100,000 pool cap
 export const STAKE_BPS_DENOMINATOR = 10_000;
 
-// Pool cap for THIS deploy -- set at initialize time (admin.rs's set_pool_cap), not a protocol
-// constant. From the pool file (testnet fast-clock: $10,000 -> $1 min / $10 max stake).
-export const POOL_CAP_USDC = POOL.pool.cap_usdc;
-export const MIN_STAKE_USDC = (POOL_CAP_USDC * MIN_STAKE_BPS) / STAKE_BPS_DENOMINATOR;
-export const MAX_STAKE_USDC = (POOL_CAP_USDC * MAX_STAKE_BPS) / STAKE_BPS_DENOMINATOR;
+// Pool cap: read live from the contract (instance storage `PoolCap`, reads.ts readStakeBounds), so the
+// Stake tab follows a set_pool_cap. The pool file's value is only the fallback before the pool is deployed.
+export const POOL_CAP_FALLBACK_USDC = POOL.pool.cap_usdc;
+
+export type StakeBounds = { cap: number; min: number; max: number };
+/** stake.rs: min/max stake = pool cap x BPS / 10_000. */
+export const stakeBoundsFor = (cap: number): StakeBounds => ({
+  cap, min: (cap * MIN_STAKE_BPS) / STAKE_BPS_DENOMINATOR, max: (cap * MAX_STAKE_BPS) / STAKE_BPS_DENOMINATOR,
+});
 
 // Mirrors types.rs's YIELD_INDEX_PRECISION exactly (A7, 2026-09-18) -- the
 // 1.0x starting value for the yield-index ratio, needed here to render

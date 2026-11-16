@@ -10,7 +10,7 @@ export function SiteFooter() {
         <div className="footer-brand">
           <p>
             <img src="/logo.png" alt="" style={{ height: 16, verticalAlign: -3, marginRight: 6 }} />
-            Built by SAFU, the same deterministic, no-vote protocol already live on Ethereum.
+            Built by SAFU: fixed rules, automatic payouts, no vote.
           </p>
           <div className="social">
             <a href={LINKS.x} aria-label="SAFU on X" title="X" {...EXT}>

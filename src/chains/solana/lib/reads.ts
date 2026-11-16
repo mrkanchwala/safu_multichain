@@ -1,6 +1,6 @@
 // Chain reads for the panels: the pool, a stake, a backing, a claim. Layouts come from the IDL.
 import { num, setting } from "./pool";
-import { backerAddress, poolAddress, readAccount, stakeAddress } from "./program";
+import { backerAddress, poolAddress, readAccount, stakeAddress, stakerWalletsAddress } from "./program";
 import type { PoolRecord } from "./program";
 
 export type { PoolRecord };
@@ -117,6 +117,14 @@ export function fmtDuration(secs: number): string {
   if (s < 7200) return `${Math.round(s / 60)} minutes`;
   if (s < 172800) return `${Math.round(s / 3600)} hours`;
   return `${Math.round(s / 86400)} days`;
+}
+
+/** How many covered wallets the program holds for this staker (StakerWallets.count; 0 before the first).
+ *  The real count for the Stake tab's status, in any browser. The registry writer puts each wallet on-chain
+ *  a moment after the API registers it, so a just-added wallet can take a few seconds to count. */
+export async function readCoveredCount(staker: string): Promise<number> {
+  const w = await readAccount<{ count: number }>("StakerWallets", await stakerWalletsAddress(staker));
+  return w ? Number(w.count) : 0;
 }
 
 // --- covered wallets (display list) --------------------------------------------------------------

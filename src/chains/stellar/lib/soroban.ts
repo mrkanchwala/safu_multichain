@@ -94,6 +94,18 @@ export const hexFromBytes = (bytes: Uint8Array): string =>
  * needs no wallet, which is why every panel read goes through it rather than
  * mirroring contract logic in TypeScript.
  */
+/** One value from a contract's instance storage, by its DataKey name (e.g. "PoolCap"); undefined if unset.
+ *  For numbers the contract stores but has no getter for. */
+export async function readInstanceValue<T = unknown>(contractId: string, name: string): Promise<T | undefined> {
+  const entry = await onRpc((s) =>
+    s.getContractData(contractId, xdr.ScVal.scvLedgerKeyContractInstance(), rpc.Durability.Persistent),
+  );
+  const storage = (entry.val as unknown as { contractData: { val: { instance: { storage?: { key: xdr.ScVal; val: xdr.ScVal }[] } } } })
+    .contractData.val.instance.storage ?? [];
+  const hit = storage.find((e) => JSON.stringify(scValToNative(e.key)) === JSON.stringify([name]));
+  return hit ? (scValToNative(hit.val) as T) : undefined;
+}
+
 export async function readContract<T = unknown>(
   contractId: string,
   method: string,

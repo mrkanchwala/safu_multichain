@@ -50,6 +50,8 @@ export const poolAddress = () => pda([bytes("SEED_POOL")]);
 export const vaultAddress = async () => pda([bytes("SEED_VAULT"), key(await poolAddress())]);
 export const stakeAddress = async (staker: string) => pda([bytes("SEED_STAKE"), key(await poolAddress()), key(staker)]);
 export const backerAddress = async (backer: string) => pda([bytes("SEED_BACKER"), key(await poolAddress()), key(backer)]);
+export const stakerWalletsAddress = async (staker: string) =>
+  pda([bytes("SEED_STAKER_WALLETS"), key(await poolAddress()), key(staker)]);
 
 // --- reads ----------------------------------------------------------------------------------------
 

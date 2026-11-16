@@ -1,3 +1,4 @@
+// Same for every pool and chain (founder 16 Nov): no chain or asset names.
 export function AboutSection() {
   return (
     <section className="about" id="about">
@@ -15,10 +16,11 @@ export function AboutSection() {
             read before anything goes wrong.
           </p>
           <p>
-            <b>How it pays.</b> You put USDC into one shared pool on Stellar and register up to three wallets you care
-            about, on Ethereum, Solana or Stellar. If crypto is stolen from one of them through phishing, a bad approval
-            or a stolen key, or a loan in it is liquidated at a price that wasn't real, you file a claim and fixed rules work out the payout: up to 15 times your stake depending on the
-            wallet's tier, and never more than you actually lost. It's paid in USDC, back to the wallet you staked from. Today SAFU pays back crypto stolen from wallets.
+            <b>How it pays.</b> You stake into a shared pool and register the wallets you care about, on any chain
+            the pool covers. If crypto is stolen from one of them through phishing, a bad approval or a stolen key, or
+            a loan in it is liquidated at a price that wasn't real, you file a claim and fixed rules work out the
+            payout. It's automatic: up to 15 times your stake depending on the wallet's tier, and never more than you
+            actually lost, paid back to the wallet you staked from. Today SAFU pays back crypto stolen from wallets.
             Cover for thefts from protocols comes next.
           </p>
           <p>

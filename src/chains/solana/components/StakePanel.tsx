@@ -5,11 +5,15 @@ import { addCoveredWallet, confirmCoveredWallet } from "../lib/claimApi";
 import type { CoverChain, CoveredWalletResponse } from "../lib/claimApi";
 import { num, setting } from "../lib/pool";
 import { unstakeFeeBps } from "../lib/program";
-import { fmtSol, parseSol, readCoveredWallets, readMyStake, refreshSoon, rememberCoveredWallet, stakeBounds, withdrawCheck } from "../lib/reads";
+import { fmtSol, parseSol, readCoveredCount, readCoveredWallets, readMyStake, refreshSoon, rememberCoveredWallet, stakeBounds, withdrawCheck } from "../lib/reads";
 import type { CoveredWallet, MyStake } from "../lib/reads";
 import { usePool } from "../lib/usePool";
 import { toFriendlyError } from "../lib/friendly-error";
 import { TxStatus } from "./TxStatus";
+import {
+  AddAnotherLink, AddWalletForm, CoverFoldedStep, CoverLockedStep, CoverOpenStep, ProofBox, StakeDoneStep, StakeManageStep,
+  StakeOpenStep, StepStats, WalletMsg, coverRows, coverStatus, shortAddr,
+} from "../../../shell/components/StakeSteps";
 
 // Stake tab. SOL goes into the pool, which deploys most of it to Marinade (mSOL) for yield. Payouts
 // (withdrawal, yield, claim payouts) go back to the staking wallet. Covered wallets are separate
@@ -51,6 +55,23 @@ export function StakePanel() {
   const [pending, setPending] = useState<CoveredWalletResponse | null>(null);
   const [walletMsg, setWalletMsg] = useState<string | null>(null);
   const [walletBusy, setWalletBusy] = useState(false);
+  // The program's own count (any browser); null = still checking or the read failed, which never shows green.
+  const [coveredCount, setCoveredCount] = useState<number | null>(null);
+  const [manageOpen, setManageOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setCoveredCount(null);
+    if (staker) {
+      readCoveredCount(staker)
+        .then((c) => !cancelled && setCoveredCount(c))
+        .catch(() => !cancelled && setCoveredCount(null));
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [staker, refreshKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -95,6 +116,8 @@ export function StakePanel() {
     setPending(null);
     setNewWallet("");
     setWalletMsg(r.onchain && r.onchain !== "written" ? "Registered. The on-chain copy will follow shortly." : "Registered.");
+    setAddOpen(false);
+    done();
   }
 
   async function addWallet() {
@@ -134,168 +157,101 @@ export function StakePanel() {
     }
   }
 
+  const n = coveredCount;
+  const protectedNow = live && n !== null && n > 0;
+  const full = n !== null && n >= MAX_COVERED_WALLETS;
+  const status = coverStatus(live, n, MAX_COVERED_WALLETS);
+  const { rows } = coverRows(
+    coveredWallets.map((w) => ({ key: `${w.chain ?? "solana"}-${w.wallet}`, label: chainLabel(w.chain), addr: shortAddr(w.wallet) })),
+    n,
+  );
+
   return (
     <div className="panel">
       <div>
-        <div className="field-group">
-          <div className="field-label">
-            <span>Stake</span>
-            <span>{bounds ? `${fmtSol(bounds.min, 2)}–${fmtSol(bounds.max, 2)} SOL` : " "}</span>
-          </div>
-          <div className="field-input">
-            <input placeholder="0" value={stakeAmount} onChange={(e) => setStakeAmount(e.target.value)} inputMode="decimal" aria-label="Stake amount in SOL" />
-            <span className="unit">SOL</span>
-          </div>
-        </div>
-        <button className="primary-action" disabled={!staker || !amountValid || !!myStake || stakeAction.isRunning} onClick={() => stakeAction.dispatch()}>
-          {stakeAction.isRunning ? "Staking..." : "Stake"}
-        </button>
-        <TxStatus action={stakeAction} />
-        <div className="ramp-disclosure" style={{ marginTop: 8 }}>
-          Payouts go back to this same wallet. Stake from a separate wallet you're comfortable connecting
-          here, and cover the wallets that hold your money below, without ever connecting them.
-        </div>
-
-        <div className="field-group" style={{ marginTop: 20 }}>
-          <div className="field-label">
-            <span>Your stake</span>
-            <span>&nbsp;</span>
-          </div>
-          {!myStake ? (
-            <div className="side-stat">
-              <div className="k">Status</div>
-              <div className="v">No active stake</div>
-            </div>
-          ) : (
-            <>
-              <div className="side-stat">
-                <div className="k">Principal (coverage is based on this)</div>
-                <div className="v">{fmtSol(myStake.amount)} SOL</div>
-              </div>
-              <div className="side-stat">
-                <div className="k">Yield earned</div>
-                <div className="v">{fmtSol(myStake.yieldOwed, 6)} SOL</div>
-              </div>
-              {myStake.forfeited ? (
-                <div className="side-stat">
-                  <div className="k">Status</div>
-                  <div className="v" style={{ fontFamily: "var(--font-body)", fontSize: 14 }}>Used to pay a claim</div>
+        {!myStake ? (
+          <StakeOpenStep
+            range={bounds ? `${fmtSol(bounds.min, 2)}–${fmtSol(bounds.max, 2)} SOL` : " "}
+            amount={stakeAmount} setAmount={setStakeAmount} unit="SOL"
+            canStake={!!staker && amountValid} running={stakeAction.isRunning}
+            label="Stake" onStake={() => stakeAction.dispatch()} status={<TxStatus action={stakeAction} />}
+          />
+        ) : !manageOpen ? (
+          <StakeDoneStep
+            title={myStake.forfeited ? "Stake used to pay a claim" : `Staked ${fmtSol(myStake.amount)} SOL`}
+            onManage={() => setManageOpen(true)}
+          />
+        ) : (
+          <StakeManageStep
+            onClose={() => setManageOpen(false)}
+            rows={[
+              { k: "Staked", v: `${fmtSol(myStake.amount)} SOL` },
+              { k: "Yield earned", v: `${fmtSol(myStake.yieldOwed, 6)} SOL` },
+              ...(myStake.forfeited ? [{ k: "Status", v: "Used to pay a claim" }] : []),
+            ]}
+          >
+            {live ? (
+              <>
+                <div className="field-group" style={{ marginTop: 8 }}>
+                  <div className="field-label">
+                    <span>Withdraw</span>
+                    <span>blank = all of it</span>
+                  </div>
+                  <div className="field-input">
+                    <input placeholder={fmtSol(myStake.amount)} value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} inputMode="decimal" aria-label="Amount to withdraw in SOL" />
+                    <span className="unit">SOL</span>
+                  </div>
+                  {withdrawAmount.trim() !== "" && withdrawProblem ? <div className="ramp-disclosure">{withdrawProblem}</div> : null}
                 </div>
-              ) : null}
-            </>
-          )}
-        </div>
-        {live ? (
-          <div className="field-group">
-            <div className="field-label">
-              <span>Withdraw</span>
-              <span>blank = all of it</span>
-            </div>
-            <div className="field-input">
-              <input placeholder={fmtSol(myStake.amount)} value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} inputMode="decimal" aria-label="Amount to withdraw in SOL" />
-              <span className="unit">SOL</span>
-            </div>
-            {withdrawAmount.trim() !== "" && withdrawProblem ? <div className="ramp-disclosure">{withdrawProblem}</div> : null}
-          </div>
-        ) : null}
-        <button className="secondary-action" style={{ width: "100%" }} disabled={!live || !!withdrawProblem || withdrawAction.isRunning} onClick={() => withdrawAction.dispatch()}>
-          {withdrawAction.isRunning ? "Withdrawing..." : withdrawAmount.trim() === "" ? "Withdraw all + yield" : "Withdraw this + all yield"}
-        </button>
-        {live ? (
-          <div className="ramp-disclosure" style={{ marginTop: 8 }}>
-            You can take out part of your stake; your coverage shrinks with it. Money open claims still need
-            stays in the pool until they're paid, so a withdrawal can wait. It's never lost.
-          </div>
-        ) : null}
-        <TxStatus action={withdrawAction} />
-        {live && myStake.yieldOwed > 0n ? (
-          <button className="secondary-action" style={{ width: "100%", marginTop: 8 }} disabled={takeYieldAction.isRunning} onClick={() => takeYieldAction.dispatch()}>
-            {takeYieldAction.isRunning ? "Sending..." : `Take ${fmtSol(myStake.yieldOwed, 6)} SOL yield, keep my stake`}
-          </button>
-        ) : null}
-        <TxStatus action={takeYieldAction} />
-        {live ? <FeeNote bps={feeBps} /> : null}
-
-        <div className="field-group" style={{ marginTop: 20 }}>
-          <div className="field-label">
-            <span>Covered wallets</span>
-            <span>{coveredWallets.length}/{MAX_COVERED_WALLETS}</span>
-          </div>
-          <div className="ramp-disclosure">
-            Register a wallet before crypto is stolen from it, because a claim can only name a wallet already on this list.
-            You can cover {WALLETS_TEXT}, Solana or Ethereum in any mix, not your staking wallet. To prove a
-            wallet is yours, it sends a tiny amount to itself on its own chain. A covered wallet can't be removed
-            later, and a loss on Ethereum is paid in SOL at the SOL price when the theft was detected.
-          </div>
-          {coveredWallets.map((w) => (
-            <div className="side-stat" key={`${w.chain ?? "solana"}-${w.wallet}`}>
-              <div className="k">{chainLabel(w.chain)}</div>
-              <div className="v" style={{ fontFamily: "var(--font-body)", fontSize: 13 }}>{w.wallet}</div>
-            </div>
-          ))}
-
-          {pending ? (
-            <div className="side-stat" style={{ marginTop: 10 }}>
-              <div className="k">Prove you own this {chainLabel(pending.chain)} wallet</div>
-              <div className="v" style={{ fontFamily: "var(--font-body)", fontSize: 13 }}>
-                From <b>{pending.wallet}</b>, send exactly <b>{pending.amount} {pending.asset}</b> to the same
-                address (to itself). Then press Sent.
-                {pending.expires_at ? ` Expires ${new Date(pending.expires_at * 1000).toLocaleTimeString()}.` : ""}
-              </div>
-              <button className="secondary-action" style={{ width: "100%", marginTop: 8 }} disabled={walletBusy} onClick={confirmSent}>
-                {walletBusy ? "Checking..." : "Sent"}
-              </button>
-              <button className="secondary-action" style={{ width: "100%", marginTop: 8 }} disabled={walletBusy} onClick={() => setPending(null)}>
-                Cancel
-              </button>
-            </div>
-          ) : coveredWallets.length < MAX_COVERED_WALLETS ? (
-            <>
-              <div className="ramp-toggle" role="group" aria-label="Chain of the wallet to cover" style={{ marginTop: 10, marginBottom: 8 }}>
-                {CHAINS.map((c) => (
-                  <button key={c.id} className={`ramp-toggle-btn${newChain === c.id ? " active" : ""}`} aria-pressed={newChain === c.id}
-                    onClick={() => (setNewChain(c.id), setWalletMsg(null))}>
-                    {c.label}
+                {myStake.yieldOwed > 0n ? (
+                  <button className="secondary-action" style={{ width: "100%", marginTop: 8 }} disabled={takeYieldAction.isRunning} onClick={() => takeYieldAction.dispatch()}>
+                    {takeYieldAction.isRunning ? "Sending..." : `Take ${fmtSol(myStake.yieldOwed, 6)} SOL yield, keep my stake`}
                   </button>
-                ))}
-              </div>
-              <div className="field-input">
-                <input placeholder={CHAINS.find((c) => c.id === newChain)!.placeholder} value={newWallet}
-                  onChange={(e) => setNewWallet(e.target.value)} aria-label="Wallet to cover" />
-              </div>
-              <button className="secondary-action" style={{ width: "100%" }} disabled={walletBusy} onClick={addWallet}>
-                {walletBusy ? "Checking..." : "Add covered wallet"}
-              </button>
-            </>
-          ) : null}
-          {walletMsg ? (
-            <div className="tx-status" style={{ marginTop: 8 }}>
-              <div>{walletMsg}</div>
-            </div>
-          ) : null}
-        </div>
+                ) : null}
+                <TxStatus action={takeYieldAction} />
+                <button className="secondary-action" style={{ width: "100%", marginTop: 8 }} disabled={!!withdrawProblem || withdrawAction.isRunning} onClick={() => withdrawAction.dispatch()}>
+                  {withdrawAction.isRunning ? "Withdrawing..." : withdrawAmount.trim() === "" ? "Withdraw all + yield" : "Withdraw this + all yield"}
+                </button>
+                <TxStatus action={withdrawAction} />
+                <FeeNote bps={feeBps} />
+                <div className="step-warn">
+                  Withdrawing all of it ends cover for your wallets; a part shrinks your cover with it. Money open claims still
+                  need stays in the pool until they're paid.
+                </div>
+              </>
+            ) : null}
+          </StakeManageStep>
+        )}
+
+        {myStake && manageOpen ? (
+          <CoverFoldedStep done={protectedNow} status={status} />
+        ) : !live ? (
+          <CoverLockedStep status={status} ended={!myStake && n !== null && n > 0} />
+        ) : (
+          <CoverOpenStep done={protectedNow} status={status} count={n} rows={rows}>
+            {pending ? (
+              <ProofBox chain={chainLabel(pending.chain)} wallet={pending.wallet} amount={pending.amount} asset={pending.asset}
+                expiresAt={pending.expires_at} busy={walletBusy} onSent={confirmSent} onCancel={() => setPending(null)} />
+            ) : full || n === null ? null : n === 0 || addOpen ? (
+              <AddWalletForm chains={CHAINS} chain={newChain} setChain={(c) => (setNewChain(c), setWalletMsg(null))}
+                value={newWallet} setValue={setNewWallet} placeholder={CHAINS.find((c) => c.id === newChain)!.placeholder}
+                busy={walletBusy} onAdd={addWallet} max={MAX_COVERED_WALLETS} where="on Solana or Ethereum" />
+            ) : (
+              <AddAnotherLink onClick={() => setAddOpen(true)} />
+            )}
+            <div className="step-hint">A loss on Ethereum is paid in SOL at the SOL price when the theft was detected.</div>
+            <WalletMsg text={walletMsg} />
+          </CoverOpenStep>
+        )}
       </div>
 
       <div>
-        <div className="side-stat">
-          <div className="k">Pool cap</div>
-          <div className="v">{pool ? fmtSol(setting(pool, "POOL_CAP"), 0) : "--"} SOL</div>
-        </div>
-        <div className="side-stat">
-          <div className="k">Total staked</div>
-          <div className="v">{pool ? fmtSol(pool.total_staked, 2) : "--"} SOL</div>
-        </div>
-        <div className="side-stat">
-          <div className="k">Stakers</div>
-          <div className="v">{pool ? pool.total_stakers.toString() : "--"}</div>
-        </div>
-        <div className="side-stat">
-          <div className="k">Coverage ceilings</div>
-          <div className="v" style={{ fontFamily: "var(--font-body)", fontSize: 13 }}>
-            Up to {RATIOS[0].toString()}x (Tier A) &middot; up to {RATIOS[1].toString()}x (Tier B) &middot; up to{" "}
-            {RATIOS[2].toString()}x (Tier C) of your principal, never more.
-          </div>
-        </div>
+        <StepStats items={[
+          { k: "Pool cap", v: `${pool ? fmtSol(setting(pool, "POOL_CAP"), 0) : "--"} SOL` },
+          { k: "Total staked", v: `${pool ? fmtSol(pool.total_staked, 2) : "--"} SOL` },
+          { k: "Stakers", v: pool ? pool.total_stakers.toString() : "--" },
+          { k: "Cover", v: `Up to ${RATIOS[0].toString()}x` },
+        ]} />
       </div>
     </div>
   );

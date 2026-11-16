@@ -6,7 +6,11 @@ import { claimStakerYield, stake, withdrawStake } from "../lib/actions";
 import { addCoveredWallet, confirmCoveredWallet, countCoveredWallets, listMyCoveredWallets } from "../lib/claimApi";
 import { walletChainMismatch } from "../lib/wallet-chain";
 import type { CoveredWalletResponse, CoveredWalletTail } from "../lib/claimApi";
-import { FAQ_ANSWER, faqAnswerHref } from "../../../shell/lib/links";
+import {
+  AddAnotherLink, AddWalletForm, CopyButton, CoverFoldedStep, CoverLockedStep, CoverOpenStep, ProofBox, StakeDoneStep,
+  StakeManageStep, StakeOpenStep, StepStats, WalletMsg, coverRows, coverStatus, shortAddr,
+} from "../../../shell/components/StakeSteps";
+import type { CoverRow } from "../../../shell/components/StakeSteps";
 import {
   evmBurnToAdapter,
   evmUsdcBalance,
@@ -16,9 +20,13 @@ import {
   solanaBurnToAdapter,
   solanaUsdcBalance,
 } from "../lib/crosschain";
-import { fmtExact, fmtUsdc, fmtYield, readCoveredWallets, readMyBacking, readMyStake, readPoolStats, readYieldIndex, rememberCoveredWallet } from "../lib/reads";
+import {
+  fmtExact, fmtUsdc, fmtYield, readCoveredWallets, readMyBacking, readMyStake, readPoolStats, readStakeBounds, readYieldIndex,
+  rememberCoveredWallet,
+} from "../lib/reads";
 import type { CoveredWallet, MyStake } from "../lib/reads";
-import { CHAINS, MAX_STAKE_USDC, MIN_BRIDGEABLE_RAW, MIN_STAKE_USDC, POOL_CAP_USDC, YIELD_INDEX_PRECISION } from "../lib/network";
+import { CHAINS, MIN_BRIDGEABLE_RAW, YIELD_INDEX_PRECISION } from "../lib/network";
+import { useStakeBounds } from "../lib/useStakeBounds";
 import type { ChainId } from "../lib/network";
 import { useStaker } from "../lib/useStaker";
 import { useTick } from "../../../shell/lib/useTick";
@@ -51,6 +59,7 @@ export function StakePanel() {
   const [homeUsdc, setHomeUsdc] = useState<bigint | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const tick = useTick();
+  const bounds = useStakeBounds();
 
   const [stakeAmount, setStakeAmount] = useState("");
   const [progress, setProgress] = useState<string | null>(null);
@@ -113,7 +122,7 @@ export function StakePanel() {
     };
   }, [client, staker, refreshKey, tick]);
 
-  const amountValid = Number(stakeAmount) >= MIN_STAKE_USDC && Number(stakeAmount) <= MAX_STAKE_USDC;
+  const amountValid = !!bounds && Number(stakeAmount) >= bounds.min && Number(stakeAmount) <= bounds.max;
 
   const stakeAction = useAction(async (signal) => {
     if (!client.address) throw new Error("Connect a wallet first.");
@@ -134,7 +143,9 @@ export function StakePanel() {
       const kind = client.kind as "evm" | "solana";
       const usdc6 = BigInt(Math.round(Number(stakeAmount) * 1e6));
       // Circle's fee comes out of the burn, so it is sent on top: the typed amount is what gets staked.
-      const burn6 = burnForStake(usdc6, BigInt(MIN_STAKE_USDC * 1e6), BigInt(MAX_STAKE_USDC * 1e6));
+      // Fresh limits for the send itself: never burn on a cached or guessed number.
+      const live = await readStakeBounds();
+      const burn6 = burnForStake(usdc6, BigInt(Math.round(live.min * 1e6)), BigInt(Math.round(live.max * 1e6)));
       const sending = String(Number(burn6) / 1e6);
       if (homeUsdc !== null && burn6 > homeUsdc) {
         throw new Error(`You don't have enough USDC in this wallet. Staking ${stakeAmount} USDC sends ${sending}, including Circle's fee.`);
@@ -258,113 +269,51 @@ export function StakePanel() {
   const staked = myStake !== null;
   const n = coveredCount;
   const protectedNow = staked && n !== null && n > 0;
-  const coverEnded = !staked && n !== null && n > 0;
   const full = n !== null && n >= MAX_COVERED_WALLETS;
+  const status = coverStatus(staked, n, MAX_COVERED_WALLETS);
 
-  // Rows: wallets this browser added (full address known), then the server's last-4 list for the
-  // rest, then plain "Wallet N" rows for any the count has that neither of those can name.
-  const rows: { key: string; label: string; addr: string }[] = coveredWallets.map((w, i) => ({
+  // Wallets this browser added (full address known), then the server's last-4 list for the rest.
+  const known: CoverRow[] = coveredWallets.map((w, i) => ({
     key: `l-${w.chain}-${w.wallet}-${i}`, label: chainLabel(w.chain), addr: shortAddr(w.wallet),
   }));
   for (const t of tails ?? []) {
     if (!coveredWallets.some((w) => w.chain === t.chain && w.wallet.endsWith(t.tail))) {
-      rows.push({ key: `t-${t.chain}-${t.tail}`, label: chainLabel(t.chain), addr: `…${t.tail}` });
+      known.push({ key: `t-${t.chain}-${t.tail}`, label: chainLabel(t.chain), addr: `…${t.tail}` });
     }
   }
-  // Never more rows than the server counts: a stale cache must not show "Covered" under 0/3.
-  if (n !== null) rows.length = Math.min(rows.length, n);
-  const unnamed = n !== null ? Math.max(0, n - rows.length) : 0;
-  for (let i = 0; i < unnamed; i++) rows.push({ key: `u-${i}`, label: `Wallet ${rows.length + 1}`, addr: "" });
-
-  let s2Right: { text: string; cls: string };
-  if (!staked) s2Right = { text: n !== null ? `${n}/${MAX_COVERED_WALLETS}` : `0/${MAX_COVERED_WALLETS}`, cls: "" };
-  else if (n === null) s2Right = { text: "Checking…", cls: "" };
-  else if (n === 0) s2Right = { text: `0/${MAX_COVERED_WALLETS} · Not protected yet`, cls: "warn" };
-  else s2Right = { text: `${n}/${MAX_COVERED_WALLETS} · Protected`, cls: "ok" };
-
-  const addForm = (
-    <>
-      <div className="ramp-toggle" style={{ marginTop: 10, marginBottom: 8 }}>
-        {CHAINS.map((c) => (
-          <button key={c.id} className={`ramp-toggle-btn${newChain === c.id ? " active" : ""}`} onClick={() => setNewChain(c.id)}>
-            {c.label}
-          </button>
-        ))}
-      </div>
-      <div className="field-input">
-        <input className="cover-addr" placeholder="Wallet address on that chain" value={newWallet} onChange={(e) => setNewWallet(e.target.value)} />
-      </div>
-      <button className="secondary-action" style={{ width: "100%" }} disabled={walletBusy} onClick={addWallet}>
-        {walletBusy ? "Checking..." : "Add covered wallet"}
-      </button>
-      <div className="step-hint">
-        Up to {MAX_COVERED_WALLETS} wallets on any chain. Each one sends a tiny amount to itself to prove it's yours.
-        Add them before anything happens.{" "}
-        <a href={faqAnswerHref(FAQ_ANSWER.addCovered)}>What's a covered wallet?</a>
-      </div>
-    </>
-  );
+  const { rows, unnamed } = coverRows(known, n);
 
   return (
     <div className="panel">
       <div>
-        {/* 1 Stake: open until staked, then one line; Manage stake reopens it. */}
         {!staked ? (
-          <div className="step active">
-            <div className="step-h">
-              <span className="step-n">1</span>Stake
-              <span className="step-r">${MIN_STAKE_USDC}–${MAX_STAKE_USDC.toLocaleString()}</span>
-            </div>
-            <div className="field-input" style={{ marginTop: 12 }}>
-              <input placeholder="0" value={stakeAmount} onChange={(e) => setStakeAmount(e.target.value)} inputMode="decimal" />
-              <span className="unit">USDC</span>
-            </div>
-            <button
-              className="primary-action"
-              disabled={!client.address || !amountValid || stakeAction.isRunning}
-              onClick={() => stakeAction.dispatch()}
-            >
-              {stakeAction.isRunning ? "Staking..." : crossChain ? "Stake via Circle" : "Stake"}
-            </button>
-            {progress ? <div className="ramp-disclosure" style={{ marginTop: 8 }}>{progress}</div> : null}
-            <TxStatus action={stakeAction} />
-            <div className="step-hint">
-              Use a fresh wallet you keep safe. It gets your payouts but isn't covered itself.{" "}
-              <a href={faqAnswerHref(FAQ_ANSWER.whichWallet)}>Which wallet?</a>
-            </div>
+          <StakeOpenStep
+            range={bounds ? `$${bounds.min}–$${bounds.max.toLocaleString()}` : " "}
+            amount={stakeAmount} setAmount={setStakeAmount} unit="USDC"
+            canStake={!!client.address && amountValid} running={stakeAction.isRunning}
+            label={crossChain ? "Stake via Circle" : "Stake"} onStake={() => stakeAction.dispatch()}
+            status={<>{progress ? <div className="ramp-disclosure" style={{ marginTop: 8 }}>{progress}</div> : null}<TxStatus action={stakeAction} /></>}
+          >
             {crossChain ? (
               <div className="step-hint">
                 Your USDC crosses to Stellar on Circle's bridge and your own safu-account stakes it.
                 {homeUsdc !== null ? ` USDC in your wallet: ${(Number(homeUsdc) / 1e6).toFixed(2)}.` : ""}
               </div>
             ) : null}
-          </div>
+          </StakeOpenStep>
         ) : !manageOpen ? (
-          <div className="step done">
-            <div className="step-h">
-              <span className="step-n">✓</span>Staked {fmtUsdc(myStake.amount)} USDC
-              <button className="step-link" onClick={() => setManageOpen(true)}>Manage stake</button>
-            </div>
-          </div>
+          <StakeDoneStep title={`Staked ${fmtUsdc(myStake.amount)} USDC`} onManage={() => setManageOpen(true)} />
         ) : (
-          <div className="step active">
-            <div className="step-h">
-              <span className="step-n">1</span>Your stake
-              <button className="step-link" onClick={() => setManageOpen(false)}>Close ✕</button>
-            </div>
-            <div className="step-rows">
-              <div className="step-row"><span className="k">Staked</span><span className="v">{fmtUsdc(myStake.amount)} USDC</span></div>
-              <div className="step-row">
-                <span className="k">Withdrawable now</span>
-                <span className="v">{fmtExact(myStake.withdrawable)} USDC (+{yieldStripPct(myStake.withdrawable, myStake.amount)}%)</span>
-              </div>
-              {staker && crossChain ? (
-                <div className="step-row">
-                  <span className="k">Your safu-account (Stellar)</span>
-                  <span className="v addr-copy"><span title={staker}>{shortAddr(staker)}</span><CopyButton text={staker} /></span>
-                </div>
-              ) : null}
-            </div>
+          <StakeManageStep
+            onClose={() => setManageOpen(false)}
+            rows={[
+              { k: "Staked", v: `${fmtUsdc(myStake.amount)} USDC` },
+              { k: "Withdrawable now", v: `${fmtExact(myStake.withdrawable)} USDC (+${yieldStripPct(myStake.withdrawable, myStake.amount)}%)` },
+              ...(staker && crossChain
+                ? [{ k: "Your safu-account (Stellar)", v: <span className="addr-copy"><span title={staker}>{shortAddr(staker)}</span><CopyButton text={staker} /></span> }]
+                : []),
+            ]}
+          >
             {myStake.yieldOwed >= (crossChain ? MIN_BRIDGEABLE_RAW : 1n) ? (
               <button className="secondary-action" style={{ width: "100%", marginTop: 8 }} disabled={takeYieldAction.isRunning}
                 onClick={() => takeYieldAction.dispatch()}>
@@ -379,42 +328,15 @@ export function StakePanel() {
             {progress ? <div className="ramp-disclosure" style={{ marginTop: 8 }}>{progress}</div> : null}
             <TxStatus action={withdrawAction} />
             <div className="step-warn">Withdrawing ends cover for all your wallets.</div>
-          </div>
+          </StakeManageStep>
         )}
 
-        {/* 2 Cover your wallets: locked until staked; folds to one line while Manage stake is open. */}
         {staked && manageOpen ? (
-          <div className={`step${protectedNow ? " done" : ""}`}>
-            <div className="step-h">
-              <span className="step-n">{protectedNow ? "✓" : "2"}</span>Cover your wallets
-              <span className={`step-r ${s2Right.cls}`}>{s2Right.text}</span>
-            </div>
-          </div>
+          <CoverFoldedStep done={protectedNow} status={status} />
         ) : !staked ? (
-          <div className="step locked">
-            <div className="step-h">
-              <span className="step-n">2</span>Cover your wallets
-              <span className="step-r">{s2Right.text}</span>
-            </div>
-            <div className="step-hint">
-              {coverEnded ? "Cover ended when you withdrew. Stake again to bring it back." : "Stake first, then add the wallets you want covered."}
-            </div>
-          </div>
+          <CoverLockedStep status={status} ended={n !== null && n > 0} />
         ) : (
-          <div className={`step ${protectedNow ? "done" : "active"}`}>
-            <div className="step-h">
-              <span className="step-n">{protectedNow ? "✓" : "2"}</span>Cover your wallets
-              <span className={`step-r ${s2Right.cls}`}>{s2Right.text}</span>
-            </div>
-            {n === 0 ? <div className="step-warn-box">Add a wallet below and confirm it's yours.</div> : null}
-
-            {rows.map((r) => (
-              <div className="step-wallet" key={r.key}>
-                <span><span className="c">{r.label}</span>{r.addr ? <>&nbsp; {r.addr}</> : null}</span>
-                {/* A cached row while the count can't be read: never green (B19 edge case). */}
-                <span className={n === null ? "s checking" : "s"}>{n === null ? "Checking…" : "Covered ✓"}</span>
-              </div>
-            ))}
+          <CoverOpenStep done={protectedNow} status={status} count={n} rows={rows}>
             {unnamed > 0 ? (
               <div className="step-hint">
                 <button className="step-link inline" disabled={tailsBusy} onClick={showAddresses}>
@@ -423,84 +345,29 @@ export function StakePanel() {
               </div>
             ) : null}
             {tailsMsg ? <div className="step-hint">{tailsMsg}</div> : null}
-
             {pending ? (
-              <div className="step-pending">
-                <div className="k">Confirm this {chainLabel(pending.chain)} wallet is yours</div>
-                Open <b>{shortAddr(pending.wallet)}</b> in your wallet app and send exactly <b>{pending.amount} {pending.asset}</b> to that same address, then press Sent. A send from any other wallet won't count.
-                {pending.expires_at ? ` Expires ${new Date(pending.expires_at * 1000).toLocaleTimeString()}.` : ""}
-                <button className="secondary-action" style={{ width: "100%", marginTop: 8 }} disabled={walletBusy} onClick={confirmSent}>
-                  {walletBusy ? "Checking..." : "Sent"}
-                </button>
-                <button className="secondary-action" style={{ width: "100%", marginTop: 8 }} disabled={walletBusy}
-                  onClick={() => setPending(null)}>
-                  Cancel
-                </button>
-              </div>
+              <ProofBox chain={chainLabel(pending.chain)} wallet={pending.wallet} amount={pending.amount} asset={pending.asset}
+                expiresAt={pending.expires_at} busy={walletBusy} onSent={confirmSent} onCancel={() => setPending(null)} />
             ) : full || n === null ? null : n === 0 || addOpen ? (
-              addForm
+              <AddWalletForm chains={CHAINS} chain={newChain} setChain={setNewChain} value={newWallet} setValue={setNewWallet}
+                placeholder="Wallet address on that chain" busy={walletBusy} onAdd={addWallet} max={MAX_COVERED_WALLETS} where="on any chain" />
             ) : (
-              <div className="step-hint">
-                <button className="step-link inline" onClick={() => setAddOpen(true)}>Add another wallet</button>
-              </div>
+              <AddAnotherLink onClick={() => setAddOpen(true)} />
             )}
-            {walletMsg ? (
-              <div className="tx-status" style={{ marginTop: 8 }}>
-                <div>{walletMsg}</div>
-              </div>
-            ) : null}
-          </div>
+            <WalletMsg text={walletMsg} />
+          </CoverOpenStep>
         )}
       </div>
 
       <div>
-        <div className="step-stats">
-          <div className="side-stat">
-            <div className="k">Pool cap</div>
-            <div className="v">${POOL_CAP_USDC.toLocaleString()}</div>
-          </div>
-          <div className="side-stat">
-            <div className="k">Total staked</div>
-            <div className="v">{fmtUsdc(poolStats.totalStaked)} USDC</div>
-          </div>
-          <div className="side-stat">
-            <div className="k">Stakers</div>
-            <div className="v">{poolStats.totalStakers}</div>
-          </div>
-          <div className="side-stat">
-            <div className="k">Yield so far</div>
-            <div className="v">+{((Number(yieldIndex) / Number(YIELD_INDEX_PRECISION) - 1) * 100).toFixed(2)}%</div>
-          </div>
-        </div>
+        <StepStats items={[
+          { k: "Pool cap", v: bounds ? `$${bounds.cap.toLocaleString()}` : "--" },
+          { k: "Total staked", v: `${fmtUsdc(poolStats.totalStaked)} USDC` },
+          { k: "Stakers", v: poolStats.totalStakers },
+          { k: "Yield so far", v: `+${((Number(yieldIndex) / Number(YIELD_INDEX_PRECISION) - 1) * 100).toFixed(2)}%` },
+        ]} />
       </div>
     </div>
-  );
-}
-
-function shortAddr(a: string): string {
-  return a.length > 10 ? `${a.slice(0, 4)}…${a.slice(-4)}` : a;
-}
-
-// The safu-account is shown shortened (a full 56-char address breaks the phone layout, B18),
-// so this copies the full address. Only for the safu-account: covered wallets are never exposed.
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  useEffect(() => {
-    if (!copied) return;
-    const t = setTimeout(() => setCopied(false), 1500);
-    return () => clearTimeout(t);
-  }, [copied]);
-  const copy = () => navigator.clipboard?.writeText(text).then(() => setCopied(true), () => {});
-  return (
-    <button type="button" className={copied ? "copy-btn copied" : "copy-btn"} onClick={copy}
-      aria-label={copied ? "Copied" : "Copy full safu-account address"} title={copied ? "Copied" : "Copy address"}>
-      {copied ? (
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
-      ) : (
-        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3" /></svg>
-      )}
-      {copied ? <span className="copy-label">Copied</span> : null}
-    </button>
   );
 }
 

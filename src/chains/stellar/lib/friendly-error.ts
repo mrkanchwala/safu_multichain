@@ -15,7 +15,6 @@
  * bottom, never to the raw string. A missing entry here is a worse message, not a leaked code.
  */
 import { DAILY_LIMIT, OUR_SIDE, TRY_LATER, makeFriendlyError } from "../../../shell/lib/friendly-error";
-import { MAX_STAKE_USDC, MIN_STAKE_USDC } from "./network";
 
 export type { FriendlyError } from "../../../shell/lib/friendly-error";
 
@@ -30,7 +29,7 @@ const IN_WAITING_PERIOD = "Your claim is still in its 90-day waiting period. Not
  *  left out too: the safu-account contract reuses those numbers for its own errors. */
 const CONTRACT_ERRORS: Record<number, string> = {
   20: "Enter an amount above zero.",
-  21: `A stake has to be between $${MIN_STAKE_USDC} and $${MAX_STAKE_USDC}.`,
+  21: "That amount is outside the pool's stake limits. The Stake tab shows them.",
   22: "You already have a stake in this pool. Withdraw it first if you want to stake a different amount.",
   23: "The pool is full right now, so it can't take a new stake.",
   28: "This stake was used to pay a claim, so there's nothing left to withdraw.",
