@@ -44,16 +44,18 @@ function siteConfig() {
   return forPage
 }
 
-// The Solana pool (B42): config/solana.devnet.json + the deployed program's pinned IDL (config/solana.idl.json,
+// The Solana pool (B42): config/solana.<cluster>.json (hq/site.toml [chains.solana]) + the deployed program's pinned IDL (config/solana.idl.json,
 // the same two files its claim API reads) are baked in only when hq/site.toml
 // enables Solana. __CHAIN_SOLANA__ is a build constant, so with Solana off the registry's import is dead
 // code and none of the Solana pool's code or addresses reach the bundle (review A3).
-function solanaDefines(enabled: string[]) {
-  const on = enabled.includes('solana')
+function solanaDefines(chains: { enabled: string[]; solana?: { cluster?: string } }) {
+  const on = chains.enabled.includes('solana')
+  const cluster = chains.solana?.cluster
+  if (on && !cluster) throw new Error('hq/site.toml: [chains.solana] cluster is missing')
   const read = (rel: string) => JSON.parse(readFileSync(new URL(rel, import.meta.url), 'utf8'))
   return {
     __CHAIN_SOLANA__: JSON.stringify(on),
-    __SOL_POOL__: on ? JSON.stringify(read('./config/solana.devnet.json')) : 'null',
+    __SOL_POOL__: on ? JSON.stringify(read(`./config/solana.${cluster}.json`)) : 'null',
     __SOL_IDL__: on ? JSON.stringify(read('./config/solana.idl.json')) : 'null',
   }
 }
@@ -72,7 +74,7 @@ export default defineConfig(({ mode }) => {
     'process.env.NODE_ENV': JSON.stringify(mode),
     __POOL__: JSON.stringify(poolConfig(mode)),
     __SITE__: JSON.stringify(site),
-    ...solanaDefines(site.chains.enabled as string[]),
+    ...solanaDefines(site.chains as { enabled: string[]; solana?: { cluster?: string } }),
   },
   server: {
     // backend/app.py (demo claim API), run separately with uvicorn. The Solana pool's API

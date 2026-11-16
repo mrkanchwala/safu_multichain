@@ -29,6 +29,11 @@ default = "stellar"
 stellar = "Stellar"
 solana = "Solana · test network, no real money"
 
+[chains.solana]
+# Which Solana cluster's pool the site serves: picks config/solana.<cluster>.json. Must match the claim API's
+# SAFU_SOLANA_CLUSTER (deploy_colosseum.sh checks the server's). devnet = the Colosseum SOL pool.
+cluster = "devnet"
+
 [guards]
 # Strings that must never appear in the built site (checked after every build by scripts/check-dist.mjs).
 # The Solana USDC pool (B10) stays hidden until grant news; this is its program id (safu_solana target/idl).
