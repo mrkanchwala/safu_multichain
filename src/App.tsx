@@ -51,8 +51,7 @@ function ExplainerPage({ view, onBack }: { view: View; onBack: () => void }) {
   return <Faq onBack={onBack} />;
 }
 
-function Dapp({ adapter }: { adapter: ChainAdapter }) {
-  const [tab, setTab] = useState<PoolTab>("stake");
+function Dapp({ adapter, tab, setTab }: { adapter: ChainAdapter; tab: PoolTab; setTab: (t: PoolTab) => void }) {
   const Panel = adapter.panels[tab];
   return (
     <section className="dapp">
@@ -74,6 +73,8 @@ function Dapp({ adapter }: { adapter: ChainAdapter }) {
 
 export default function App({ adapter }: { adapter: ChainAdapter }) {
   const [view, setView] = useHashView();
+  // Held here, not in Dapp, so the chosen tab survives a visit to the FAQ or whitepaper.
+  const [tab, setTab] = useState<PoolTab>("stake");
   const facts = adapter.useFacts();
   const { Badge, Wallet, Hero, Numbers } = adapter;
 
@@ -118,7 +119,7 @@ export default function App({ adapter }: { adapter: ChainAdapter }) {
         </div>
       </section>
 
-      <Dapp adapter={adapter} />
+      <Dapp adapter={adapter} tab={tab} setTab={setTab} />
 
       <Numbers />
 
