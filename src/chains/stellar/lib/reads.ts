@@ -232,6 +232,17 @@ export async function readStakeBounds(): Promise<StakeBounds> {
   return stakeBoundsFor(fromRaw(BigInt(raw), USDC_DECIMALS));
 }
 
+// One read per page for the display (numbers section + Stake tab share it, CIE 16 Nov). A failed read is
+// dropped so the next call reads again. The stake send itself always calls readStakeBounds() fresh.
+let shownBounds: Promise<StakeBounds> | null = null;
+export function readStakeBoundsShared(): Promise<StakeBounds> {
+  shownBounds ??= readStakeBounds().catch((e) => {
+    shownBounds = null;
+    throw e;
+  });
+  return shownBounds;
+}
+
 export const fmtUsdc = (raw: bigint) => fromRaw(raw, USDC_DECIMALS).toFixed(2);
 
 /** Yield is often under a cent, which two decimals would show as 0.00. Below a cent this keeps

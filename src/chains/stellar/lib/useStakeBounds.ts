@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { readStakeBounds } from "./reads";
+import { readStakeBoundsShared } from "./reads";
 import type { StakeBounds } from "./network";
 
 /** Wait before re-reading after a failed read (every RPC unreachable). */
@@ -13,7 +13,7 @@ export function useStakeBounds(): StakeBounds | null {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const load = () =>
-      readStakeBounds().then(
+      readStakeBoundsShared().then(
         (b) => !cancelled && setBounds(b),
         () => {
           if (!cancelled) timer = setTimeout(load, RETRY_MS);
