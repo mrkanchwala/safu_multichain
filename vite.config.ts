@@ -24,7 +24,8 @@ function poolConfig(mode: string) {
 // Site HQ (B42): hq/site.toml, the site's own values. Every key the site reads must be present,
 // and the default chain must be an enabled one; anything else fails the build.
 const SITE_KEYS = {
-  site: ['name', 'url', 'icon', 'wallet_description', 'walletconnect_project_id'],
+  site: ['name', 'url', 'icon', 'walletconnect_project_id'],
+  hero: ['headline', 'accent', 'tagline'],
   links: ['feedback', 'x', 'telegram', 'github', 'bd_intake'],
   chains: ['enabled', 'default'],
 } as const

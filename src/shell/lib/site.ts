@@ -3,7 +3,8 @@
 declare const __SITE__: SiteConfig;
 
 export interface SiteConfig {
-  site: { name: string; url: string; icon: string; wallet_description: string; walletconnect_project_id: string };
+  site: { name: string; url: string; icon: string; walletconnect_project_id: string };
+  hero: { headline: string; accent: string; tagline: string };
   links: { feedback: string; x: string; telegram: string; github: string; bd_intake: string };
   chains: { enabled: string[]; default: string; labels: Record<string, string> };
   /** Shown partners only (vite.config.ts drops `show = false`), in hq/site.toml order. */
@@ -23,7 +24,7 @@ export const SITE: SiteConfig = __SITE__;
 /** What a wallet shows about the site when it connects (WalletConnect and the Stellar kit). */
 export const WALLET_METADATA = {
   name: SITE.site.name,
-  description: SITE.site.wallet_description,
+  description: SITE.hero.tagline,
   url: SITE.site.url,
   icons: [SITE.site.icon],
 };

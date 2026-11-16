@@ -120,10 +120,11 @@ export default function App({ adapter }: { adapter: ChainAdapter }) {
       <section className="hero">
         <div className="wrap">
           <h1>
-            SAFU pays you back when your crypto is stolen.
+            {SITE.hero.headline}
             <br />
-            <em>Automatically. No vote. No appeal.</em>
+            <em>{SITE.hero.accent}</em>
           </h1>
+          <p className="hero-tagline">{SITE.hero.tagline}</p>
           <ChainSwitcher current={adapter.id} />
           <Hero />
           <div className="hero-links">

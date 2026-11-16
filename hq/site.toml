@@ -7,9 +7,14 @@
 name = "SAFU"
 url = "https://safustaking.com"
 icon = "https://safustaking.com/favicon.svg"
-wallet_description = "Stake into a SAFU pool and get covered."
 # WalletConnect project, allowlisted to the domain above (not a secret: it ships in the page).
 walletconnect_project_id = "3824772bb6c01d55a924dac308a3cb3e"
+
+# Locked positioning lines (2026-11-16). tagline also feeds the wallet-connect description.
+[hero]
+headline = "Stake once. Get robbed."
+accent = "Code pays up to 15x."
+tagline = "A stake that turns hacks into payouts."
 
 [links]
 feedback = "https://docs.google.com/forms/d/1qD9IrIkfs39Wupaw5y-zvCS46Ppq4JQiIsRgV9D3s80/viewform"
