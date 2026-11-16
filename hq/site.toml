@@ -43,3 +43,103 @@ never_ship = ["6nE296ZjUgVifngxv1Z5jWp4xvBexaBiepFHA8UVYC7X"]
 # only on purpose, in the same commit as the code that needs it.
 max_entry_kb = 300
 max_chunk_kb = 600
+
+# Partners strip (M18, founder 16 Nov), shown on the main page under About, in this order.
+# Only `show = true` entries reach the built site (vite.config.ts drops the rest), so a partner
+# waiting on an OK can sit here switched off. Every link is rel="nofollow" (founder: keep our SEO).
+# logo = a file under public/partners/ ("" = name as text). logo_text = words shown after the logo.
+[[partners]]
+row = "Funded by"
+name = "Stellar Community Fund"
+url = "https://communityfund.stellar.org"
+logo = "/partners/stellar.png"
+logo_text = "Community Fund"
+show = true
+
+[[partners]]
+row = "Supported by"
+name = "Helius"
+url = "https://www.helius.dev"
+logo = "/partners/helius.svg"
+logo_text = ""
+show = true
+
+[[partners]]
+row = "Supported by"
+name = "Superteam Türkiye"
+url = "https://tr.superteam.fun"
+logo = ""
+logo_text = ""
+show = false # waiting on Superteam TR's OK
+
+[[partners]]
+row = "Built on"
+name = "Stellar"
+url = "https://stellar.org"
+logo = ""
+logo_text = ""
+show = true
+
+[[partners]]
+row = "Built on"
+name = "Solana"
+url = "https://solana.com"
+logo = ""
+logo_text = ""
+show = true
+
+[[partners]]
+row = "Built on"
+name = "Ethereum"
+url = "https://ethereum.org"
+logo = ""
+logo_text = ""
+show = true
+
+[[partners]]
+row = "Built on"
+name = "Circle CCTP"
+url = "https://www.circle.com/cross-chain-transfer-protocol"
+logo = ""
+logo_text = ""
+show = true
+
+[[partners]]
+row = "Built on"
+name = "Blend"
+url = "https://www.blend.capital"
+logo = ""
+logo_text = ""
+show = true
+
+[[partners]]
+row = "Built on"
+name = "Kamino"
+url = "https://kamino.com"
+logo = ""
+logo_text = ""
+show = true
+
+[[partners]]
+row = "Audited by"
+name = "Hashlock"
+url = "https://hashlock.com"
+logo = ""
+logo_text = ""
+show = false # only once the audit partner is officially locked (B20); logo from hashlock.com/brand Drive
+
+[[partners]]
+row = "As seen in"
+name = "BeInCrypto"
+url = "https://beincrypto.com"
+logo = ""
+logo_text = ""
+show = false # only after the BIC LOI (F9) is signed and the piece is published
+
+[[partners]]
+row = "As seen in"
+name = "W3V"
+url = "https://web3voyager.com"
+logo = ""
+logo_text = ""
+show = false # only after W3V publishes about SAFU

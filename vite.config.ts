@@ -29,6 +29,7 @@ const SITE_KEYS = {
   chains: ['enabled', 'default'],
 } as const
 // Which chains have an adapter is checked by src/chains/registry.test.ts (one list: the registry).
+const PARTNER_KEYS = ['row', 'name', 'url', 'logo', 'logo_text', 'show'] as const
 
 function siteConfig() {
   const cfg = parseToml(readFileSync(new URL('./hq/site.toml', import.meta.url), 'utf8')) as Record<string, Record<string, unknown>>
@@ -39,9 +40,15 @@ function siteConfig() {
   const labels = (cfg.chains.labels ?? {}) as Record<string, unknown>
   const unlabelled = enabled.filter((c) => typeof labels[c] !== 'string')
   if (unlabelled.length) throw new Error(`hq/site.toml: chains.labels is missing ${unlabelled.join(', ')}`)
+  // [[partners]] (M18): every entry needs these keys; only shown ones ship, so a partner still waiting
+  // on an OK never appears in the page or its bundle.
+  const partners = (cfg.partners ?? []) as unknown as Record<string, unknown>[]
+  const badPartners = partners.filter((p) => PARTNER_KEYS.some((k) => p[k] == null)).map((p) => String(p.name ?? '?'))
+  if (badPartners.length) throw new Error(`hq/site.toml: [[partners]] missing keys in ${badPartners.join(', ')}`)
   // [guards] is for the build checks only (scripts/check-dist.mjs): it must never ship in the page.
   const { guards: _guards, ...forPage } = cfg
-  return forPage
+  const shown = partners.filter((p) => p.show === true) as unknown as Record<string, unknown>
+  return { ...forPage, partners: shown } as Record<string, Record<string, unknown>>
 }
 
 // The Solana pool (B42): config/solana.<cluster>.json (hq/site.toml [chains.solana]) + the deployed program's pinned IDL (config/solana.idl.json,

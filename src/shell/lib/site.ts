@@ -6,6 +6,16 @@ export interface SiteConfig {
   site: { name: string; url: string; icon: string; wallet_description: string; walletconnect_project_id: string };
   links: { feedback: string; x: string; telegram: string; github: string; bd_intake: string };
   chains: { enabled: string[]; default: string; labels: Record<string, string> };
+  /** Shown partners only (vite.config.ts drops `show = false`), in hq/site.toml order. */
+  partners: Partner[];
+}
+
+export interface Partner {
+  row: string;
+  name: string;
+  url: string;
+  logo: string;
+  logo_text: string;
 }
 
 export const SITE: SiteConfig = __SITE__;

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { SiteHeader } from "./shell/components/SiteHeader";
 import { SiteFooter } from "./shell/components/SiteFooter";
 import { AboutSection } from "./shell/components/AboutSection";
+import { PartnersSection } from "./shell/components/PartnersSection";
 import { Whitepaper } from "./shell/components/Whitepaper";
 import { Protocols } from "./shell/components/Protocols";
 import { Faq } from "./shell/components/Faq";
@@ -141,6 +142,8 @@ export default function App({ adapter }: { adapter: ChainAdapter }) {
       <Numbers />
 
       <AboutSection />
+
+      <PartnersSection />
 
       <SiteFooter />
     </>
