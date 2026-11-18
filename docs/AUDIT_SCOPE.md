@@ -4,21 +4,23 @@ Prepared 2026-10-20 for the audit quote. This replaces the earlier scope built o
 `mrkanchwala/safu-soroban` (2,443 lines, the Tranche 3 pool): that pool is wound down and is not
 the audit target. The target is the new pool in this repository.
 
-**Commit:** tag `audit-freeze-2026-10-20` (`85b2be5`) on `main`. This commit is deployed on Stellar
-testnet; addresses and WASM hashes are in [TESTNET.md](TESTNET.md).
+**Commit:** tag `audit-freeze-2026-11-18` (`9f910ef`) on `main`: a clean-up of `audit-freeze-2026-10-20`
+(`85b2be5`) with no behaviour change (every change is listed in the commit message). Testnet still runs
+`audit-freeze-2026-10-20`; its addresses and WASM hashes are in [TESTNET.md](TESTNET.md). Both are
+redeployed once, after the audit.
 
 ## 1. In scope: Stellar (Soroban, Rust, soroban-sdk 27.0.0, `wasm32v1-none`)
 
 | Contract | Path | Lines (source, no tests/comments/blank) | What it does |
 |---|---|---|---|
-| protection-pool | `contracts/protection-pool/src/` | 4,589 | Stake, back, claims and the claim line, payout streams, settings, governance and upgrades, DeFindex/Blend vault, yield and points |
+| protection-pool | `contracts/protection-pool/src/` | 4,569 | Stake, back, claims and the claim line, payout streams, settings, governance and upgrades, DeFindex/Blend vault, yield and points |
 | safu-account | `contracts/safu-account/src/` | 405 | Per-user Stellar account controlled by an Ethereum or Solana key (custom `__check_auth`) |
 | cctp-common | `contracts/cctp-common/src/` | 296 | Shared Circle CCTP v2 message parsing |
 | cctp-adapter | `contracts/cctp-adapter/src/` | 187 | Stake or back from Ethereum and Solana over CCTP v2 |
 | covered-registry | `contracts/covered-registry/src/` | 135 | Which wallets each stake covers (up to 3, bound for good) |
-| **Total** | | **5,612** | |
+| **Total** | | **5,592** | |
 
-Line counts exclude `src/test/`, `fuzz/` and comment/blank lines. The pool WASM is 130,732 bytes against
+Line counts exclude `src/test/`, `fuzz/` and comment/blank lines. The pool WASM is 130,037 bytes against
 the network maximum of 131,072.
 
 ## 2. Out of scope
