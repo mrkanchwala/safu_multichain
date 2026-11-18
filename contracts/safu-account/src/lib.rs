@@ -22,8 +22,8 @@
 //!   home.
 //! - Mode (`DepositMode`, fixed at creation by the adapter that deployed it):
 //!   a Stake account stakes arriving USDC, a Back account backs the pool with
-//!   it. Backer withdrawals go through the pool's notice period and return
-//!   to this account, then home, like everything else.
+//!   it. Backer withdrawals drip out daily (the pool's backer drip) and
+//!   return to this account, then home, like everything else.
 //!
 //! Owner signatures:
 //! - EVM: `personal_sign` of the 32-byte Soroban auth payload, i.e.
@@ -59,7 +59,7 @@ pub(crate) const EIP191_PREFIX_32: &[u8] = b"\x19Ethereum Signed Message:\n32";
 pub(crate) const EVM_V_OFFSET: u8 = 27;
 /// Pool functions the owner may authorise directly (all other pool calls go
 /// through this account's own functions, with the account as invoker).
-pub(crate) const POOL_DIRECT_FNS: [&str; 2] = ["approve_claim", "revoke_approval"];
+pub(crate) const POOL_DIRECT_FNS: [&str; 1] = ["approve_claim"];
 
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]

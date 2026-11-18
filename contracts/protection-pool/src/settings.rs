@@ -24,10 +24,12 @@ use soroban_sdk::{contractevent, contracttype, Address, Env};
 use crate::error::PoolError;
 use crate::storage;
 use crate::types::{
+    ADMIT_HIGH_BPS, ADMIT_LOW_BPS, ADMIT_MID_BPS, BACKER_NOTICE_SECONDS, PAUSE_GAP_SECONDS,
+    PAUSE_MAX_SECONDS, PAYOUT_HIGH_BPS, PAYOUT_LOW_BPS, PAYOUT_MID_BPS,
     APPROVE_WINDOW_SECONDS, BACKER_MATURITY_SECONDS, CLAIM_WINDOW_SECONDS,
     COLLECTION_INACTIVITY_SECONDS, COOLDOWN_LEDGERS, DRIP_MAX_SECONDS, DRIP_MIN_SECONDS, LEDGERS_PER_DAY, MAX_STAKE_BPS,
     MIN_STAKE_BPS, SECONDS_PER_DAY, TIER_A_RATIO, TIER_B_RATIO, TIER_C_RATIO, TIME_GATE_LEDGERS,
-    VESTING_LEDGERS, YIELD_SPLIT_BACKER_BPS, YIELD_SPLIT_BPS_DENOMINATOR, YIELD_SPLIT_STAKER_BPS,
+    VESTING_LEDGERS, YIELD_SPLIT_BACKER_BPS, BPS_DENOMINATOR, YIELD_SPLIT_STAKER_BPS,
 };
 
 /// Delay between co-signer approval and the earliest execution.
@@ -112,7 +114,7 @@ pub struct PendingSetting {
 // Hard bounds. Changing any of these means a new contract.
 const STAKE_BPS_MIN: i128 = 1; // 0.01% of cap
 const STAKE_BPS_MAX: i128 = 125; // 1.25% of cap (T3's max)
-const YIELD_BPS_MAX: i128 = YIELD_SPLIT_BPS_DENOMINATOR; // 100%, shared by both yield settings
+const YIELD_BPS_MAX: i128 = BPS_DENOMINATOR; // 100%, shared by both yield settings
 const COOLDOWN_MIN: i128 = 7 * LEDGERS_PER_DAY as i128;
 const COOLDOWN_MAX: i128 = 30 * LEDGERS_PER_DAY as i128;
 const VESTING_MIN: i128 = 30 * LEDGERS_PER_DAY as i128;
@@ -150,17 +152,17 @@ fn default_value(env: &Env, key: SettingKey) -> i128 {
         SettingKey::StakerYieldBps => YIELD_SPLIT_STAKER_BPS,
         SettingKey::CooldownLedgers => COOLDOWN_LEDGERS as i128,
         SettingKey::VestingLedgers => VESTING_LEDGERS as i128,
-        SettingKey::AdmitLowBps => 2_500,
-        SettingKey::AdmitMidBps => 1_000,
-        SettingKey::AdmitHighBps => 300,
-        SettingKey::PayoutLowBps => 500,
-        SettingKey::PayoutMidBps => 300,
-        SettingKey::PayoutHighBps => 100,
-        SettingKey::BackerNoticeSeconds => 30 * SECONDS_PER_DAY as i128,
+        SettingKey::AdmitLowBps => ADMIT_LOW_BPS,
+        SettingKey::AdmitMidBps => ADMIT_MID_BPS,
+        SettingKey::AdmitHighBps => ADMIT_HIGH_BPS,
+        SettingKey::PayoutLowBps => PAYOUT_LOW_BPS,
+        SettingKey::PayoutMidBps => PAYOUT_MID_BPS,
+        SettingKey::PayoutHighBps => PAYOUT_HIGH_BPS,
+        SettingKey::BackerNoticeSeconds => BACKER_NOTICE_SECONDS as i128,
         SettingKey::PoolCap => storage::get_pool_cap(env),
         SettingKey::BackerYieldBps => YIELD_SPLIT_BACKER_BPS,
-        SettingKey::PauseMaxSecs => crate::admin::PAUSE_MAX_SECONDS as i128,
-        SettingKey::PauseGapSecs => PAUSE_GAP_MIN,
+        SettingKey::PauseMaxSecs => PAUSE_MAX_SECONDS as i128,
+        SettingKey::PauseGapSecs => PAUSE_GAP_SECONDS as i128,
         SettingKey::TierARatio => TIER_A_RATIO,
         SettingKey::TierBRatio => TIER_B_RATIO,
         SettingKey::TierCRatio => TIER_C_RATIO,

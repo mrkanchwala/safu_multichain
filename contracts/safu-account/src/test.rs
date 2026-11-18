@@ -212,7 +212,7 @@ fn owner_signature_cannot_authorise_other_pool_calls() {
     // Direct withdraw / set_beneficiary on the pool would let a signed payload
     // route money somewhere other than home.
     for f in [
-        "withdraw", "set_beneficiary", "emergency_exit", "claim_stream", "stake",
+        "withdraw", "revoke_approval", "set_beneficiary", "emergency_exit", "claim_stream", "stake",
         "back", "request_backer_withdrawal", "cancel_backer_withdrawal", "complete_backer_withdrawal",
         // r3: yield goes home only through the account's own *_home functions.
         "claim_yield", "claim_backer_yield",

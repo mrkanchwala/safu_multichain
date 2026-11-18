@@ -426,7 +426,7 @@ impl ProtectionPool {
 
     /// NEW 2026-07-22 (Rule A), staker-authorized. Burns the wallet's
     /// entire lifetime points balance, forfeits the stake, starts
-    /// cooldown/vesting. Must be called within `APPROVE_WINDOW_LEDGERS` of
+    /// cooldown/vesting. Must be called within the `ApproveWindowSecs` setting of
     /// the claim entering `AwaitingApproval`.
     pub fn approve_claim(env: Env, claim_id: BytesN<32>) -> Result<(), PoolError> {
         with_upkeep(&env, claim::approve_claim(&env, &claim_id))
@@ -440,7 +440,7 @@ impl ProtectionPool {
     }
 
     /// NEW 2026-07-22 (Rule B sweep), permissionless. Releases whatever's
-    /// left uncollected if the staker goes `COLLECTION_INACTIVITY_LEDGERS`
+    /// left uncollected if the staker goes the `InactivitySecs` setting
     /// with zero `claim_stream` activity.
     pub fn expire_stale_claim(env: Env, claim_id: BytesN<32>) -> Result<(), PoolError> {
         with_upkeep(&env, claim::expire_stale_claim(&env, &claim_id))

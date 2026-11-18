@@ -60,9 +60,8 @@ use soroban_sdk::{
 use crate::error::PoolError;
 use crate::storage;
 use crate::types::{
-    AUTO_PUSH_MIN_BPS, BPS_DENOMINATOR, DEPLOY_BPS_DENOMINATOR, HARVEST_MAX_GROWTH_BPS_PER_DAY,
-    HARVEST_SLIPPAGE_BPS, MAX_REBALANCE_SLIPPAGE_BPS, MAX_ROUNDING_DRAW, SECONDS_PER_DAY, YIELD_INDEX_PRECISION,
-    YIELD_SPLIT_BPS_DENOMINATOR,
+    AUTO_PUSH_MIN_BPS, BPS_DENOMINATOR, HARVEST_MAX_GROWTH_BPS_PER_DAY, HARVEST_SLIPPAGE_BPS,
+    MAX_REBALANCE_SLIPPAGE_BPS, MAX_ROUNDING_DRAW, SECONDS_PER_DAY, YIELD_INDEX_PRECISION,
 };
 
 // -----------------------------------------------------------------------
@@ -242,13 +241,58 @@ pub struct PushBelowFloor {
 /// therefore appears as extractable yield. Harmless, it cannot affect
 /// `total_staked` and so cannot affect solvency, but worth knowing.
 pub fn liquid_balance(env: &Env) -> i128 {
-    let token = TokenClient::new(env, &storage::get_asset_token(env));
-    token.balance(&env.current_contract_address())
+    asset(env).balance(&env.current_contract_address())
+}
+
+/// Most the vault position may be: `deploy_bps` of capacity.
+fn deploy_ceiling(env: &Env) -> i128 {
+    storage::get_capacity(env) * storage::get_deploy_bps(env) / BPS_DENOMINATOR
+}
+
+/// `amount` less `slippage_bps`: the least a vault call may return.
+fn less_slippage(amount: i128, slippage_bps: i128) -> i128 {
+    amount * (BPS_DENOMINATOR - slippage_bps) / BPS_DENOMINATOR
+}
+
+/// The most growth a harvest may book after `elapsed` seconds: `HARVEST_MAX_GROWTH_BPS_PER_DAY`
+/// of book value per day (CSO M2), so a share value pushed up for one transaction books at most
+/// that much.
+fn harvest_growth_limit(deployed_asset: i128, elapsed: i128) -> i128 {
+    deployed_asset * HARVEST_MAX_GROWTH_BPS_PER_DAY * elapsed / (BPS_DENOMINATOR * SECONDS_PER_DAY as i128)
+}
+
+/// Deposits `amount` into the vault (single asset, so one-element vectors; the minimum equals the
+/// amount: a partial deposit would desynchronise the share-delta accounting). Invests at once
+/// rather than leaving it as vault idle funds. Returns the shares gained.
+fn deposit_to_vault(env: &Env, vault_addr: &Address, amount: i128) -> i128 {
+    let vault = VaultClient::new(env, vault_addr);
+    let shares_before = vault.balance(&env.current_contract_address());
+    let mut desired = Vec::new(env);
+    desired.push_back(amount);
+    let mut mins = Vec::new(env);
+    mins.push_back(amount);
+    authorize_deposit(env, vault_addr, &desired, &mins, amount);
+    vault.deposit(&desired, &mins, &env.current_contract_address(), &true);
+    vault.balance(&env.current_contract_address()) - shares_before
+}
+
+/// The pool's asset (its SAC, set at `initialize`).
+fn asset(env: &Env) -> TokenClient<'_> {
+    TokenClient::new(env, &storage::get_asset_token(env))
+}
+
+/// Pays `amount` of the pool's asset from the contract to `to`.
+pub(crate) fn pay(env: &Env, to: &Address, amount: i128) {
+    asset(env).transfer(&env.current_contract_address(), to, &amount);
+}
+
+/// Takes `amount` of the pool's asset from `from` (who has authorised it) into the contract.
+pub(crate) fn receive(env: &Env, from: &Address, amount: i128) {
+    asset(env).transfer(from, env.current_contract_address(), &amount);
 }
 
 /// Fail with a typed `InsufficientLiquidity` rather than letting the SAC
-/// transfer trap opaquely. Called immediately before every outbound
-/// transfer in `stake.rs` and `claim.rs`.
+/// transfer trap opaquely. The last step of `pull_for_payment`.
 pub fn require_liquidity(env: &Env, amount: i128) -> Result<(), PoolError> {
     if free_liquid(env) < amount {
         return Err(PoolError::InsufficientLiquidity);
@@ -288,8 +332,8 @@ fn pull_cash(env: &Env, amount: i128) {
     if liquid < amount {
         let shortfall = amount - liquid;
         let buffer = storage::get_capacity(env)
-            * (DEPLOY_BPS_DENOMINATOR - storage::get_deploy_bps(env))
-            / DEPLOY_BPS_DENOMINATOR;
+            * (BPS_DENOMINATOR - storage::get_deploy_bps(env))
+            / BPS_DENOMINATOR;
         if !try_pull(env, shortfall + buffer.max(0)) {
             try_pull(env, shortfall);
         }
@@ -322,8 +366,7 @@ pub fn fund_rounding_reserve(env: &Env, from: &Address, amount: i128) -> Result<
     if amount <= 0 {
         return Err(PoolError::AmountNotPositive);
     }
-    let token = TokenClient::new(env, &storage::get_asset_token(env));
-    token.transfer(from, env.current_contract_address(), &amount);
+    receive(env, from, amount);
     storage::set_rounding_reserve(env, storage::get_rounding_reserve(env) + amount);
     storage::bump_instance_ttl(env);
     RoundingReserveFunded { from: from.clone(), amount }.publish(env);
@@ -346,7 +389,7 @@ fn try_pull(env: &Env, target: i128) -> bool {
     let shares = ((target * deployed_shares + deployed_asset - 1) / deployed_asset).min(deployed_shares);
     let expected = deployed_asset * shares / deployed_shares;
     let mut mins = Vec::new(env);
-    mins.push_back(expected * (BPS_DENOMINATOR - MAX_REBALANCE_SLIPPAGE_BPS) / BPS_DENOMINATOR);
+    mins.push_back(less_slippage(expected, MAX_REBALANCE_SLIPPAGE_BPS));
 
     let liquid_before = liquid_balance(env);
     authorize_withdraw(env, &vault_addr, shares, &mins);
@@ -379,7 +422,7 @@ pub fn push_idle(env: &Env) {
     }
     let capacity = storage::get_capacity(env);
     let idle = (free_liquid(env) - storage::get_total_allocated(env)).max(0);
-    let room = (capacity * storage::get_deploy_bps(env) / DEPLOY_BPS_DENOMINATOR - deployed_asset).max(0);
+    let room = (deploy_ceiling(env) - deployed_asset).max(0);
     let amount = idle.min(room);
     if amount <= 0 || amount < capacity * AUTO_PUSH_MIN_BPS / BPS_DENOMINATOR {
         return;
@@ -488,12 +531,8 @@ pub fn deployment_ratio_bps(env: &Env) -> i128 {
     if capacity <= 0 {
         return 0;
     }
-    storage::get_total_deployed_asset(env) * DEPLOY_BPS_DENOMINATOR / capacity
+    storage::get_total_deployed_asset(env) * BPS_DENOMINATOR / capacity
 }
-
-// -----------------------------------------------------------------------
-// Admin configuration
-// -----------------------------------------------------------------------
 
 // -----------------------------------------------------------------------
 // Cross-contract authorization
@@ -654,8 +693,7 @@ pub fn deploy_to_vault(
     // Ceiling: never deploy more than deploy_bps of capacity (v1: staker
     // principal + matured backer money).
     let deployed_asset = storage::get_total_deployed_asset(env);
-    let ceiling = storage::get_capacity(env) * storage::get_deploy_bps(env) / DEPLOY_BPS_DENOMINATOR;
-    if deployed_asset + amount > ceiling {
+    if deployed_asset + amount > deploy_ceiling(env) {
         return Err(PoolError::DeployExceedsCeiling);
     }
 
@@ -666,27 +704,7 @@ pub fn deploy_to_vault(
         return Err(PoolError::DeployBreachesAllocation);
     }
 
-    let vault = VaultClient::new(env, &vault_addr);
-    let shares_before = vault.balance(&env.current_contract_address());
-
-    // Single-asset vault (XLM only), so both vectors are one element.
-    // amounts_min == amounts_desired: this bound is on what leaves US, and
-    // a partial deposit would desynchronise the delta accounting below.
-    let mut desired = Vec::new(env);
-    desired.push_back(amount);
-    let mut mins = Vec::new(env);
-    mins.push_back(amount);
-
-    authorize_deposit(env, &vault_addr, &desired, &mins, amount);
-
-    vault.deposit(
-        &desired,
-        &mins,
-        &env.current_contract_address(),
-        &true, // invest immediately rather than sitting as vault idle_funds
-    );
-
-    let shares_gained = vault.balance(&env.current_contract_address()) - shares_before;
+    let shares_gained = deposit_to_vault(env, &vault_addr, amount);
     if shares_gained < min_shares_out {
         return Err(PoolError::MinSharesNotMet);
     }
@@ -737,8 +755,7 @@ pub fn auto_deploy_liquidity(env: &Env) -> Result<i128, PoolError> {
         return Ok(0);
     }
 
-    let ceiling = storage::get_capacity(env) * storage::get_deploy_bps(env) / DEPLOY_BPS_DENOMINATOR;
-    let room = (ceiling - deployed_asset).max(0);
+    let room = (deploy_ceiling(env) - deployed_asset).max(0);
     if room == 0 {
         return Ok(0);
     }
@@ -759,27 +776,9 @@ pub fn auto_deploy_liquidity(env: &Env) -> Result<i128, PoolError> {
     // Reference rate from the contract's own last-known deposits, the
     // only price data available on-chain (see doc comment above).
     let expected_shares = amount * deployed_shares / deployed_asset;
-    let min_shares_out =
-        expected_shares * (BPS_DENOMINATOR - MAX_REBALANCE_SLIPPAGE_BPS) / BPS_DENOMINATOR;
+    let min_shares_out = less_slippage(expected_shares, MAX_REBALANCE_SLIPPAGE_BPS);
 
-    let vault = VaultClient::new(env, &vault_addr);
-    let shares_before = vault.balance(&env.current_contract_address());
-
-    let mut desired = Vec::new(env);
-    desired.push_back(amount);
-    let mut mins = Vec::new(env);
-    mins.push_back(amount);
-
-    authorize_deposit(env, &vault_addr, &desired, &mins, amount);
-
-    vault.deposit(
-        &desired,
-        &mins,
-        &env.current_contract_address(),
-        &true,
-    );
-
-    let shares_gained = vault.balance(&env.current_contract_address()) - shares_before;
+    let shares_gained = deposit_to_vault(env, &vault_addr, amount);
     if shares_gained < min_shares_out {
         return Err(PoolError::MinSharesNotMet);
     }
@@ -928,9 +927,7 @@ pub fn ensure_liquidity(env: &Env) -> Result<i128, PoolError> {
     //    an admin `provide_liquidity`": i.e. it needed a human. Now the
     //    same `deploy_bps` number governs both directions and it
     //    self-corrects.
-    let ceiling = storage::get_capacity(env) * storage::get_deploy_bps(env)
-        / DEPLOY_BPS_DENOMINATOR;
-    let over_ceiling = (deployed_asset - ceiling).max(0);
+    let over_ceiling = (deployed_asset - deploy_ceiling(env)).max(0);
 
     // Whichever need is larger: satisfying the bigger one satisfies both.
     let shortfall = claims_shortfall.max(over_ceiling);
@@ -952,7 +949,7 @@ pub fn ensure_liquidity(env: &Env) -> Result<i128, PoolError> {
     // out entirely when a partial rescue is still possible.
     let shares_needed = (shortfall * deployed_shares / deployed_asset).min(deployed_shares);
     let expected_asset = deployed_asset * shares_needed / deployed_shares;
-    let min_asset_out = expected_asset * (BPS_DENOMINATOR - MAX_REBALANCE_SLIPPAGE_BPS) / BPS_DENOMINATOR;
+    let min_asset_out = less_slippage(expected_asset, MAX_REBALANCE_SLIPPAGE_BPS);
 
     let vault_addr = storage::get_vault(env).ok_or(PoolError::VaultNotSet)?;
     let (asset_received, _principal) = redeem(env, &vault_addr, shares_needed, min_asset_out)?;
@@ -998,7 +995,7 @@ pub(crate) fn index_bumps(env: &Env, amount: i128) -> (i128, i128) {
             return 0;
         }
         // Multiply before dividing so the split loses at most one unit.
-        let part = amount * total * crate::settings::get(env, key) / (capacity * YIELD_SPLIT_BPS_DENOMINATOR);
+        let part = amount * total * crate::settings::get(env, key) / (capacity * BPS_DENOMINATOR);
         part * YIELD_INDEX_PRECISION / total
     };
     (
@@ -1078,9 +1075,7 @@ pub fn harvest(env: &Env) -> i128 {
         return 0;
     }
     let elapsed = now.saturating_sub(last) as i128;
-    let limit = deployed_asset * HARVEST_MAX_GROWTH_BPS_PER_DAY * elapsed
-        / (BPS_DENOMINATOR * SECONDS_PER_DAY as i128);
-    let growth = growth.min(limit);
+    let growth = growth.min(harvest_growth_limit(deployed_asset, elapsed));
     // Floor: never redeem more shares than the growth is worth.
     let shares = growth * deployed_shares / value;
     if shares <= 0 {
@@ -1088,7 +1083,7 @@ pub fn harvest(env: &Env) -> i128 {
     }
     let expected = value * shares / deployed_shares;
     let mut mins = Vec::new(env);
-    mins.push_back(expected * (BPS_DENOMINATOR - HARVEST_SLIPPAGE_BPS) / BPS_DENOMINATOR);
+    mins.push_back(less_slippage(expected, HARVEST_SLIPPAGE_BPS));
 
     let liquid_before = liquid_balance(env);
     authorize_withdraw(env, &vault_addr, shares, &mins);
@@ -1123,9 +1118,7 @@ pub(crate) fn harvestable(env: &Env) -> i128 {
     };
     let growth = values.get(0).unwrap_or(0) - deployed_asset;
     let elapsed = env.ledger().timestamp().saturating_sub(last) as i128;
-    let limit = deployed_asset * HARVEST_MAX_GROWTH_BPS_PER_DAY * elapsed
-        / (BPS_DENOMINATOR * SECONDS_PER_DAY as i128);
-    growth.min(limit).max(0)
+    growth.min(harvest_growth_limit(deployed_asset, elapsed)).max(0)
 }
 
 /// Yield `owner` could collect right now, as staker and as
@@ -1258,7 +1251,6 @@ pub fn withdraw_yield(env: &Env, amount: i128) -> Result<(), PoolError> {
     }
     .publish(env);
 
-    let token = TokenClient::new(env, &storage::get_asset_token(env));
-    token.transfer(&env.current_contract_address(), &treasury, &amount);
+    pay(env, &treasury, amount);
     Ok(())
 }

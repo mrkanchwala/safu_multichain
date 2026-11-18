@@ -14,8 +14,7 @@ use std::{println, string::{String, ToString}, thread, time::Duration, vec::Vec}
 
 use crate::error::PoolError;
 use crate::types::{
-    BPS_DENOMINATOR, LEDGERS_PER_DAY, MAX_STAKE_BPS, MIN_STAKE_BPS, STAKE_BPS_DENOMINATOR,
-    TIME_GATE_LEDGERS,
+    BPS_DENOMINATOR, LEDGERS_PER_DAY, MAX_STAKE_BPS, MIN_STAKE_BPS, TIME_GATE_LEDGERS,
 };
 use crate::{ProtectionPool, ProtectionPoolClient};
 
@@ -27,8 +26,8 @@ pub const POOL_CAP: i128 = 100_000_000_000;
 /// a duplicate magic number here is exactly what let these drift out of sync
 /// with `types.rs` when the ratio changed 2026-09-19 (33 tests broke on
 /// `StakeOutOfRange` before this fix landed).
-pub const MIN_STAKE: i128 = POOL_CAP * MIN_STAKE_BPS / STAKE_BPS_DENOMINATOR;
-pub const MAX_STAKE: i128 = POOL_CAP * MAX_STAKE_BPS / STAKE_BPS_DENOMINATOR;
+pub const MIN_STAKE: i128 = POOL_CAP * MIN_STAKE_BPS / BPS_DENOMINATOR;
+pub const MAX_STAKE: i128 = POOL_CAP * MAX_STAKE_BPS / BPS_DENOMINATOR;
 /// Comfortably within [MIN_STAKE, MAX_STAKE]: the default stake size
 /// used by tests that don't care about boundary behavior.
 pub const MID_STAKE: i128 = (MIN_STAKE + MAX_STAKE) / 2;
@@ -449,7 +448,7 @@ pub fn fmt_amount(stroops: i128) -> String {
 pub const DEMO_POOL_CAP: i128 = 6_000_000_000_000;
 
 pub fn max_stake(pool_cap: i128) -> i128 {
-    pool_cap * MAX_STAKE_BPS / STAKE_BPS_DENOMINATOR
+    pool_cap * MAX_STAKE_BPS / BPS_DENOMINATOR
 }
 
 pub fn print_solvency(s: &Setup<'_>, label: &str) {

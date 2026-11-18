@@ -7,8 +7,7 @@
 //!
 //! Doc corrected 2026-08-17 (7a audit, Finding 6): this header still claimed
 //! "no yield venue" after D2 landed. Tranche 2 DOES add yield, and its
-//! constants live in this file (`MAX_DEPLOY_BPS`, `DEPLOY_BPS_DENOMINATOR`,
-//! see the D2 block below). What remains true is that V8's *per-staker*
+//! constants live in this file (`MAX_DEPLOY_BPS`, see the D2 block below). What remains true is that V8's *per-staker*
 //! deployment tranche is still deliberately absent, this contract holds one
 //! pooled position and bounds deployment by admin policy instead, which is
 //! why V8's inline 100%-deploy could not be ported. D1's oracle-signature
@@ -35,14 +34,12 @@ pub const SECONDS_PER_DAY: u64 = 86_400;
 /// expressed in real seconds (compared against `env.ledger().timestamp()`
 /// and the oracle-supplied `hack_timestamp`, both Unix seconds).
 pub const CLAIM_WINDOW_SECONDS: u64 = 30 * SECONDS_PER_DAY;
-/// Shared percentage-math denominator (tier cap, stress cap, payout
-/// outflow bps), same value as STAKE_BPS_DENOMINATOR/TIER_BPS_DENOMINATOR
-/// below, kept as its own constant since those two are domain-specific.
+/// Basis points in 100%: the one denominator for every bps value in the pool.
 pub const BPS_DENOMINATOR: i128 = 10_000;
 
 /// 90-day time gate before a stake is claim-eligible (V8: CLAIM_MIN_DAYS).
-/// Production value, restored from T3 for the v1 build (design decision
-/// 2026-09-22). Fixed forever: not one of the adjustable settings.
+/// Default of the adjustable `TimeGateLedgers` setting; each stake keeps the
+/// value it staked under.
 pub const TIME_GATE_LEDGERS: u32 = 90 * LEDGERS_PER_DAY;
 /// Cooldown between claim activation and first payout stream. Production
 /// default from T3; becomes an adjustable, bounded setting in v1.
@@ -139,6 +136,34 @@ pub const SUSPEND_MAX_SECONDS: u64 = 30 * SECONDS_PER_DAY;
 pub const STORAGE_VERSION: u32 = 1;
 
 // -----------------------------------------------------------------------
+// Daily caps: utilisation bands and their setting defaults
+// -----------------------------------------------------------------------
+
+/// Utilisation (open claims / capacity, bps) below this is the low band.
+pub const UTIL_LOW_BPS: i128 = 2_000;
+/// Below this (and at least `UTIL_LOW_BPS`) is the mid band; the rest is high.
+pub const UTIL_MID_BPS: i128 = 5_000;
+/// Defaults of the `Admit*Bps` settings: new-claim entitlement admitted per day, bps of capacity.
+pub const ADMIT_LOW_BPS: i128 = 2_500;
+pub const ADMIT_MID_BPS: i128 = 1_000;
+pub const ADMIT_HIGH_BPS: i128 = 300;
+/// Defaults of the `Payout*Bps` settings: claim payouts per day, bps of the payout base.
+pub const PAYOUT_LOW_BPS: i128 = 500;
+pub const PAYOUT_MID_BPS: i128 = 300;
+pub const PAYOUT_HIGH_BPS: i128 = 100;
+/// Payout rate when the payout base is zero.
+pub const PAYOUT_EMPTY_POOL_BPS: i128 = 100;
+/// The oracle may submit `max(1, total_stakers / ORACLE_DAILY_LIMIT_DIVISOR)` claims a day.
+pub const ORACLE_DAILY_LIMIT_DIVISOR: u32 = 10;
+/// Default of the `BackerNoticeSeconds` setting.
+pub const BACKER_NOTICE_SECONDS: u64 = 30 * SECONDS_PER_DAY;
+/// Default of the `PauseMaxSecs` setting: a pause ends on its own after this long, so it can never
+/// freeze staker money for good, even if keys are lost.
+pub const PAUSE_MAX_SECONDS: u64 = 30 * SECONDS_PER_DAY;
+/// Default of the `PauseGapSecs` setting: a new pause starts only this long after the last ended.
+pub const PAUSE_GAP_SECONDS: u64 = 30 * SECONDS_PER_DAY;
+
+// -----------------------------------------------------------------------
 // D2 (Tranche 2), DeFindex vault yield deployment.
 //
 // V8 deploys 100% of every stake into Lido inline inside `stakeETH`
@@ -170,15 +195,10 @@ pub const STORAGE_VERSION: u32 = 1;
 /// cannot configure the pool into V8's 100%-deployed posture even
 /// deliberately. Operational recommendation for T2 is 5_000 (50%); this
 /// constant is the bound, not the setting.
+/// `deploy_bps` and the vault address both start unset, so every yield path is fail-closed on a
+/// fresh deploy until an admin deliberately turns deployment on.
 pub const MAX_DEPLOY_BPS: i128 = 8_000;
 
-/// `deploy_bps` and the vault address both start unset, so every yield
-/// path is fail-closed on a fresh deploy: `deploy_bps` reads 0 and
-/// `set_vault` has not run, meaning the pool behaves exactly as it did in
-/// Tranche 1 until an admin deliberately turns deployment on. This is why
-/// D2 requires NO change to `initialize`'s signature, unlike D1, which
-/// had to add `oracle_pubkey`.
-pub const DEPLOY_BPS_DENOMINATOR: i128 = 10_000;
 
 /// T3 (2026-08-24): max slippage `ensure_liquidity`/`auto_deploy_liquidity`
 /// will accept on their own contract-computed redemption/deposit, nothing
@@ -219,11 +239,11 @@ pub const MAX_ROUNDING_DRAW: i128 = 10_000;
 // still caps the protection to 1.25%".
 /// v1 (2026-09-22): DEFAULT of the adjustable `StakerYieldBps` setting.
 /// Design decision: 100% of yield on staker capital goes to stakers.
-pub const YIELD_SPLIT_STAKER_BPS: i128 = YIELD_SPLIT_BPS_DENOMINATOR;
+pub const YIELD_SPLIT_STAKER_BPS: i128 = BPS_DENOMINATOR;
 /// r3 (2026-09-29): DEFAULT of the adjustable `BackerYieldBps` setting.
 /// 100% of yield on matured backer money goes to backers. Money still in
 /// its 7-day wait is not in `TotalBacked`, so it earns nothing.
-pub const YIELD_SPLIT_BACKER_BPS: i128 = YIELD_SPLIT_BPS_DENOMINATOR;
+pub const YIELD_SPLIT_BACKER_BPS: i128 = BPS_DENOMINATOR;
 /// r3: slippage floor for a harvest. Tighter than the rebalance floor
 /// because a harvest books every unit it receives as yield: shares that come
 /// back short would leave the remaining position below its book value.
@@ -235,7 +255,6 @@ pub const HARVEST_SLIPPAGE_BPS: i128 = 10;
 /// what a harvest can book as yield. Real growth above the limit is not
 /// lost: it stays in the vault and a later harvest takes it.
 pub const HARVEST_MAX_GROWTH_BPS_PER_DAY: i128 = 10;
-pub const YIELD_SPLIT_BPS_DENOMINATOR: i128 = 10_000;
 
 /// Fixed-point scale for `YieldIndex`. Chosen with headroom against i128
 /// overflow: realistic stroop amounts (<=1e15) times this precision
@@ -263,13 +282,12 @@ pub const YIELD_INDEX_PRECISION: i128 = 1_000_000_000_000;
 
 pub const MIN_STAKE_BPS: i128 = 1; // 0.01% of pool cap -- $10 at a $100,000 pool cap
 pub const MAX_STAKE_BPS: i128 = 10; // 0.1% of pool cap -- $100 at a $100,000 pool cap
-pub const STAKE_BPS_DENOMINATOR: i128 = 10_000;
 
 // -----------------------------------------------------------------------
 // Tier / coverage
 // -----------------------------------------------------------------------
 
-/// Coverage = stake × tier_ratio × TIER_COVERAGE_BPS / 10_000. Corrected
+/// Coverage = stake × tier_ratio × TIER_COVERAGE_BPS / BPS_DENOMINATOR. Corrected
 /// 2026-07-14 (full source read): V8 keeps ratio and coverage-percentage
 /// as TWO separate knobs (`_tierCap`), not one flat multiplier, an admin
 /// can lower TIER_COVERAGE_BPS pool-wide without touching the ratios. An
@@ -279,8 +297,7 @@ pub const STAKE_BPS_DENOMINATOR: i128 = 10_000;
 pub const TIER_A_RATIO: i128 = 15;
 pub const TIER_B_RATIO: i128 = 10;
 pub const TIER_C_RATIO: i128 = 5;
-pub const TIER_COVERAGE_BPS: i128 = 10_000; // 100% of ratio, admin-adjustable
-pub const TIER_BPS_DENOMINATOR: i128 = 10_000;
+pub const TIER_COVERAGE_BPS: i128 = BPS_DENOMINATOR; // 100% of ratio, fixed
 
 // -----------------------------------------------------------------------
 // Claim state machine: full 6 states, ported from V8's Claim.status.
@@ -517,6 +534,40 @@ pub struct Claim {
     /// what it is still owed, so calling early in the day buys nothing.
     pub share_day: u32,
     pub share_left: i128,
+}
+
+impl Claim {
+    /// A new claim: what it is for and its status; every clock, window and payout at zero.
+    /// Callers set the rest with struct update syntax, so the field list lives here once.
+    pub fn new(
+        wallet: &Address,
+        tx_hash: &BytesN<32>,
+        hack_timestamp: u64,
+        entitlement: i128,
+        stake: i128,
+        tier: u32,
+        status: ClaimStatus,
+    ) -> Claim {
+        Claim {
+            wallet: wallet.clone(),
+            tx_hash: tx_hash.clone(),
+            hack_timestamp,
+            entitlement,
+            streamed: 0,
+            stake,
+            cooldown_ends_ledger: 0,
+            vesting_ends_ledger: 0,
+            total_staked_snapshot: 0,
+            tier,
+            status,
+            clock_start: 0,
+            blocked_at_clock_start: 0,
+            window_secs: 0,
+            queue_seq: 0,
+            share_day: 0,
+            share_left: 0,
+        }
+    }
 }
 
 // -----------------------------------------------------------------------

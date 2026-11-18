@@ -336,6 +336,24 @@ fn apply(env: &Env, change: &GovChange) {
 // Standard path: propose -> second role approves -> 7 days -> execute
 // -----------------------------------------------------------------------
 
+/// A new proposal with the proposer's own approval recorded and no other votes.
+fn new_proposal(change: &GovChange, proposer: &Address, role: Role, solo: bool, eta: u64) -> GovProposal {
+    let mut p = GovProposal {
+        change: change.clone(),
+        proposer: proposer.clone(),
+        solo,
+        admin_approver: None,
+        co_signer_approver: None,
+        guardian_approver: None,
+        admin_canceller: None,
+        co_signer_canceller: None,
+        guardian_canceller: None,
+        eta,
+    };
+    *approver_slot(&mut p, role) = Some(proposer.clone());
+    p
+}
+
 /// Any role proposes; its own approval is recorded unless the change
 /// replaces that role. One pending change per kind: cancel it first to
 /// propose a different one.
@@ -353,19 +371,7 @@ pub fn propose_change(env: &Env, caller: &Address, change: GovChange) -> Result<
     }
     validate(env, &change)?;
 
-    let mut p = GovProposal {
-        change: change.clone(),
-        proposer: caller.clone(),
-        solo: false,
-        admin_approver: None,
-        co_signer_approver: None,
-        guardian_approver: None,
-        admin_canceller: None,
-        co_signer_canceller: None,
-        guardian_canceller: None,
-        eta: 0,
-    };
-    *approver_slot(&mut p, role) = Some(caller.clone());
+    let p = new_proposal(&change, caller, role, false, 0);
     storage::set_gov_pending(env, kind, &p);
     storage::bump_instance_ttl(env);
     GovProposed { kind, change, proposer: caller.clone(), solo: false, eta: 0 }.publish(env);
@@ -431,19 +437,7 @@ pub fn propose_recovery(env: &Env, caller: &Address, change: GovChange) -> Resul
     validate(env, &change)?;
 
     let eta = env.ledger().timestamp() + RECOVERY_DELAY_SECONDS;
-    let mut p = GovProposal {
-        change: change.clone(),
-        proposer: caller.clone(),
-        solo: true,
-        admin_approver: None,
-        co_signer_approver: None,
-        guardian_approver: None,
-        admin_canceller: None,
-        co_signer_canceller: None,
-        guardian_canceller: None,
-        eta,
-    };
-    *approver_slot(&mut p, role) = Some(caller.clone());
+    let p = new_proposal(&change, caller, role, true, eta);
     storage::set_gov_pending(env, kind, &p);
     storage::bump_instance_ttl(env);
     GovProposed { kind, change, proposer: caller.clone(), solo: true, eta }.publish(env);

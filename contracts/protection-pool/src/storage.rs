@@ -334,7 +334,7 @@ pub fn set_total_stakers(env: &Env, value: u32) {
 }
 
 /// Paused until this timestamp (0 = not paused). A pause always ends on its
-/// own (admin.rs `PAUSE_MAX_SECONDS`), so it can never freeze the pool for
+/// own (`PauseMaxSecs` setting), so it can never freeze the pool for
 /// good even if every key is lost while paused.
 pub fn get_paused_until(env: &Env) -> u64 {
     env.storage().instance().get(&DataKey::PausedUntil).unwrap_or(0)

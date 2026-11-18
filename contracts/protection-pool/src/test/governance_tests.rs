@@ -8,7 +8,7 @@ use soroban_sdk::testutils::Address as _;
 use soroban_sdk::Address;
 
 use super::common::*;
-use crate::admin::PAUSE_MAX_SECONDS;
+use crate::types::PAUSE_MAX_SECONDS;
 use crate::error::PoolError;
 use crate::governance::{GOV_DELAY_SECONDS, RECOVERY_DELAY_SECONDS};
 use crate::{GovChange, GovKind};

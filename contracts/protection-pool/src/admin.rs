@@ -1,5 +1,5 @@
-//! Admin: one-time init + oracle/coSigner rotation. Ported from V8's
-//! constructor + `setOracle`/`setCoSigner`. The 2-of-2 override
+//! Admin: one-time init, pause, suspension. Role and oracle changes go through
+//! governance (`governance.rs`). The 2-of-2 override
 //! request/approval flow lives in claim.rs instead (Task 3), it operates
 //! on Claim/OverrideRequest records and is conceptually part of the
 //! claims subsystem, not admin config.
@@ -19,12 +19,6 @@ use crate::types::{ClaimStatus, StakeRecord, STORAGE_VERSION, SUSPEND_MAX_SECOND
 
 // Pre-audit hardening (2026-09-23, M2): admin actions emit events, so stakers,
 // monitors and the keeper see every one (T3's Repudiate.2 finding).
-
-/// A pause ends on its own after this long (default of `PauseMaxSecs`). So a
-/// pause can never freeze staker money for good, even if keys are lost.
-/// 2026-10-16: it can't be renewed back to back either; the next pause
-/// waits `PauseGapSecs` after this one ends.
-pub const PAUSE_MAX_SECONDS: u64 = 30 * crate::types::SECONDS_PER_DAY;
 
 #[contractevent]
 pub struct Paused {
@@ -266,10 +260,8 @@ pub fn is_suspended(env: &Env, record: &StakeRecord) -> bool {
     record.suspended && env.ledger().timestamp() < record.suspended_until
 }
 
-/// CHANGED 2026-07-22 (eng review blocker #1): takes an optional
-/// `claim_id` so admin can reset whichever new deadline clock (Rule A's
-/// `approve_deadline_ledger` or Rule B's `last_collected_ledger`) was
-/// running against this wallet's claim while suspended, otherwise a
+/// Takes an optional `claim_id` so admin can restart the claim's running
+/// clock (approve window or collection window) for this wallet's claim, otherwise a
 /// staker could lose their entitlement to Rule A/B expiry purely because
 /// admin froze them, through no fault of their own. Resets the relevant
 /// clock to "now" (extends the full window fresh) rather than trying to

@@ -36,7 +36,7 @@
 //! withdrawal still work (rule 3 still applies), so a pause can never be used
 //! to hold backer money.
 
-use soroban_sdk::{contractevent, token::TokenClient, vec, Address, Env};
+use soroban_sdk::{contractevent, vec, Address, Env};
 
 use crate::error::PoolError;
 use crate::settings::{self, SettingKey};
@@ -100,10 +100,6 @@ fn empty_record(env: &Env) -> BackerRecord {
         points_index_at: crate::points::index(env, crate::points::BACKER),
         points: 0,
     }
-}
-
-fn today(env: &Env) -> u32 {
-    (env.ledger().timestamp() / SECONDS_PER_DAY) as u32
 }
 
 /// r3: settles yield earned on the counted balance since the last
@@ -193,8 +189,7 @@ pub fn back(env: &Env, backer: &Address, amount: i128) -> Result<(), PoolError> 
     add_backing(env, backer, amount)?;
 
     // Interaction last (CEI): backer to contract.
-    let token = TokenClient::new(env, &storage::get_asset_token(env));
-    token.transfer(backer, env.current_contract_address(), &amount);
+    crate::vault::receive(env, backer, amount);
     // v1: put idle cash above the buffer into the vault. Never fails the deposit.
     crate::vault::push_idle(env);
     Ok(())
@@ -264,7 +259,7 @@ pub(crate) fn drip_days(env: &Env, util_bps: i128) -> i128 {
 /// day's free capital, live free capital for rule 3). Sets the record's
 /// day share in memory when the day has turned.
 fn limits(env: &Env, record: &mut BackerRecord, store: bool) -> (i128, i128, i128, i128) {
-    let day = today(env);
+    let day = crate::claim::current_day(env);
     let (snap_free, snap_open, util) = drip_snap(env, day, store);
     let elapsed = ((env.ledger().timestamp() - record.withdraw_started_at) / SECONDS_PER_DAY) as i128;
     let unlocked = (record.withdraw_amount * (elapsed + 1) / drip_days(env, util)).min(record.withdraw_amount);
@@ -315,7 +310,7 @@ pub fn request_withdrawal(env: &Env, backer: &Address, amount: i128) -> Result<u
     }
 
     let now = env.ledger().timestamp();
-    let (_, _, util) = drip_snap(env, today(env), true);
+    let (_, _, util) = drip_snap(env, crate::claim::current_day(env), true);
     let ready_at = now + (drip_days(env, util) as u64 - 1) * SECONDS_PER_DAY;
     record.withdraw_amount = amount;
     record.withdraw_paid = 0;
@@ -397,8 +392,7 @@ pub fn complete_withdrawal(env: &Env, backer: &Address) -> Result<i128, PoolErro
         crate::vault::YieldPaid { owner: backer.clone(), to: backer.clone(), amount: paid_yield }.publish(env);
     }
 
-    let token = TokenClient::new(env, &storage::get_asset_token(env));
-    token.transfer(&env.current_contract_address(), backer, &(pay + paid_yield));
+    crate::vault::pay(env, backer, pay + paid_yield);
     Ok(pay)
 }
 
@@ -437,13 +431,12 @@ pub fn claim_yield(env: &Env, backer: &Address) -> Result<i128, PoolError> {
     }
     crate::vault::YieldPaid { owner: backer.clone(), to: backer.clone(), amount: paid }.publish(env);
 
-    let token = TokenClient::new(env, &storage::get_asset_token(env));
-    token.transfer(&env.current_contract_address(), backer, &paid);
+    crate::vault::pay(env, backer, paid);
     Ok(paid)
 }
 
-/// r3: view of a backer's unpaid yield, including what has accrued since
-/// the record was last touched. Read-only.
+/// A backer's points, including what has accrued since the record was last
+/// touched. Read-only.
 pub fn points_view(env: &Env, backer: &Address) -> i128 {
     match storage::get_backer(env, backer) {
         Some(mut record) => {

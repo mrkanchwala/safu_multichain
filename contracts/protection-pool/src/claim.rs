@@ -40,7 +40,6 @@
 //! approve_override/execute_override's caller-supplied `tier` argument.
 
 use soroban_sdk::{contractevent, Address, Bytes, BytesN, Env, Symbol};
-use soroban_sdk::token::TokenClient;
 use soroban_sdk::xdr::ToXdr;
 
 use crate::admin::is_suspended;
@@ -48,8 +47,9 @@ use crate::error::PoolError;
 use crate::stake;
 use crate::storage;
 use crate::types::{
-    Claim, ClaimStatus, OverrideRequest, StakeRecord, BPS_DENOMINATOR, SECONDS_PER_LEDGER,
-    MAX_APPROVAL_WINDOW_SECONDS, PENALTY_LOCK_LEDGERS, TIER_BPS_DENOMINATOR, TIER_COVERAGE_BPS,
+    Claim, ClaimStatus, OverrideRequest, StakeRecord, BPS_DENOMINATOR, MAX_APPROVAL_WINDOW_SECONDS,
+    ORACLE_DAILY_LIMIT_DIVISOR, PAYOUT_EMPTY_POOL_BPS, PENALTY_LOCK_LEDGERS, SECONDS_PER_LEDGER,
+    TIER_COVERAGE_BPS, UTIL_LOW_BPS, UTIL_MID_BPS,
 };
 
 /// Domain separator for the oracle approval payload, deliberately NOT
@@ -211,7 +211,7 @@ fn check_tier(tier: u32) -> Result<(), PoolError> {
 /// coverage-bps), not one flat multiplier. Errors on an invalid tier.
 pub fn tier_cap(env: &Env, stake_record: &StakeRecord, tier: u32) -> Result<i128, PoolError> {
     Ok(stake_record.amount * tier_ratio(env, stake_record, tier)? * TIER_COVERAGE_BPS
-        / TIER_BPS_DENOMINATOR)
+        / BPS_DENOMINATOR)
 }
 
 /// Admission-side daily cap on new-claim entitlement. Separate counter
@@ -225,13 +225,10 @@ pub fn stress_cap(env: &Env) -> i128 {
     let total_allocated = storage::get_total_allocated(env);
     let utilization_bps = total_allocated * BPS_DENOMINATOR / capacity;
     use crate::settings::{get as setting, SettingKey};
-    let rate_bps = if utilization_bps < 2_000 {
-        setting(env, SettingKey::AdmitLowBps)
-    } else if utilization_bps < 5_000 {
-        setting(env, SettingKey::AdmitMidBps)
-    } else {
-        setting(env, SettingKey::AdmitHighBps)
-    };
+    let rate_bps = setting(
+        env,
+        band(utilization_bps, SettingKey::AdmitLowBps, SettingKey::AdmitMidBps, SettingKey::AdmitHighBps),
+    );
     capacity * rate_bps / BPS_DENOMINATOR
 }
 
@@ -241,21 +238,59 @@ pub fn stress_cap(env: &Env) -> i128 {
 /// protects depends on that exact base, not on this function).
 pub fn dynamic_outflow_bps(env: &Env, base: i128) -> i128 {
     if base == 0 {
-        return 100;
+        return PAYOUT_EMPTY_POOL_BPS;
     }
     let total_allocated = storage::get_total_allocated(env);
     let utilization_bps = total_allocated * BPS_DENOMINATOR / base;
     use crate::settings::{get as setting, SettingKey};
-    if utilization_bps < 2_000 {
-        setting(env, SettingKey::PayoutLowBps)
-    } else if utilization_bps < 5_000 {
-        setting(env, SettingKey::PayoutMidBps)
+    setting(
+        env,
+        band(utilization_bps, SettingKey::PayoutLowBps, SettingKey::PayoutMidBps, SettingKey::PayoutHighBps),
+    )
+}
+
+/// The setting of the utilisation band `utilization_bps` falls in.
+fn band(
+    utilization_bps: i128,
+    low: crate::settings::SettingKey,
+    mid: crate::settings::SettingKey,
+    high: crate::settings::SettingKey,
+) -> crate::settings::SettingKey {
+    if utilization_bps < UTIL_LOW_BPS {
+        low
+    } else if utilization_bps < UTIL_MID_BPS {
+        mid
     } else {
-        setting(env, SettingKey::PayoutHighBps)
+        high
     }
 }
 
-fn current_day(env: &Env) -> u32 {
+/// Cooldown and vesting from now, at the settings in force now (the claim keeps them), and the
+/// inactivity clock. That clock anchors at cooldown END, not at activation: the mandatory cooldown
+/// (when claim_stream is blocked) must never count against the staker as inactivity.
+fn start_payout_clocks(env: &Env, claim: &mut Claim) {
+    use crate::settings::{get as setting, SettingKey};
+    let now_ledger = env.ledger().sequence();
+    claim.cooldown_ends_ledger = now_ledger + setting(env, SettingKey::CooldownLedgers) as u32;
+    claim.vesting_ends_ledger =
+        claim.cooldown_ends_ledger + setting(env, SettingKey::VestingLedgers) as u32;
+    start_cooldown_end_clock(env, claim, now_ledger);
+}
+
+/// An oracle approval's deadline has not passed and is at most `MAX_APPROVAL_WINDOW_SECONDS` out.
+/// The bound is what makes the revocation TTL provably outlive it (types.rs). V8 `:414`.
+fn check_deadline(env: &Env, deadline: u64) -> Result<(), PoolError> {
+    let now_ts = env.ledger().timestamp();
+    if now_ts > deadline {
+        return Err(PoolError::SignatureExpired);
+    }
+    if deadline > now_ts + MAX_APPROVAL_WINDOW_SECONDS {
+        return Err(PoolError::SignatureDeadlineTooFar);
+    }
+    Ok(())
+}
+
+pub(crate) fn current_day(env: &Env) -> u32 {
     (env.ledger().timestamp() / crate::types::SECONDS_PER_DAY) as u32
 }
 
@@ -621,19 +656,8 @@ fn verify_oracle_signature(
     deadline: u64,
     signature: &BytesN<64>,
 ) -> Result<(), PoolError> {
-    let now_ts = env.ledger().timestamp();
-
-    // 1. Deadline still open. V8 `:414`.
-    if now_ts > deadline {
-        return Err(PoolError::SignatureExpired);
-    }
-    // 2. Deadline within the bounded window. No V8 equivalent, V8's
-    //    revocation mapping is permanent, so it never needed a deadline
-    //    bound. Ours lives in temporary storage, and bounding the deadline
-    //    is what makes the revocation TTL provably outlive it (types.rs).
-    if deadline > now_ts + MAX_APPROVAL_WINDOW_SECONDS {
-        return Err(PoolError::SignatureDeadlineTooFar);
-    }
+    // 1-2. Deadline open and bounded.
+    check_deadline(env, deadline)?;
     // 3. Attestation key configured. Fail-closed and typed, rather than
     //    unwrapping into a trap indistinguishable from a bad signature.
     let pubkey = storage::get_oracle_pubkey(env).ok_or(PoolError::OraclePubKeyNotSet)?;
@@ -719,15 +743,8 @@ fn activate_claim(env: &Env, stake_record: &mut StakeRecord, claim: &mut Claim) 
     storage::set_total_staked(env, total_staked - stake_amount);
     storage::set_total_stakers(env, storage::get_total_stakers(env).saturating_sub(1));
 
-    let now_ledger = env.ledger().sequence();
     claim.stake = stake_amount;
-    claim.cooldown_ends_ledger = now_ledger + crate::settings::get(env, crate::settings::SettingKey::CooldownLedgers) as u32;
-    claim.vesting_ends_ledger = claim.cooldown_ends_ledger + crate::settings::get(env, crate::settings::SettingKey::VestingLedgers) as u32;
-    // Rule B's inactivity clock anchors at cooldown END, not at this
-    // activation moment: eng review blocker #2: the mandatory 7-day
-    // cooldown (during which claim_stream is blocked entirely) must never
-    // count against the staker as inactivity.
-    start_cooldown_end_clock(env, claim, now_ledger);
+    start_payout_clocks(env, claim);
     claim.status = ClaimStatus::Active;
 
     lifetime_balance
@@ -779,25 +796,15 @@ fn admit_claim(
     let gate_met =
         now_ledger.saturating_sub(stake_record.staked_at_ledger) >= stake_record.time_gate_ledgers;
 
-    let mut claim = Claim {
-        wallet: wallet.clone(),
-        tx_hash: tx_hash.clone(),
+    let mut claim = Claim::new(
+        wallet,
+        tx_hash,
         hack_timestamp,
         entitlement,
-        streamed: 0,
-        stake: stake_record.amount,
-        cooldown_ends_ledger: 0,
-        vesting_ends_ledger: 0,
-        total_staked_snapshot: 0,
+        stake_record.amount,
         tier,
-        status: ClaimStatus::PendingTime,
-        clock_start: 0,
-        blocked_at_clock_start: 0,
-        window_secs: 0,
-        queue_seq: 0,
-        share_day: 0,
-        share_left: 0,
-    };
+        ClaimStatus::PendingTime,
+    );
 
     // CHANGED 2026-07-22: meeting the gate no longer auto-activates
     // (forfeits/burns/starts cooldown), it moves the claim to
@@ -887,22 +894,18 @@ pub fn submit_claim(
     }
     check_tier(tier)?;
 
-    // Oracle path only: matches V8's `if (msg.sender == oracle)` at `:413`,
-    // and sits at the same point in the validation order: after the caller
-    // and basic param checks, before any stake lookup, and well before any
-    // storage write.
-    if caller == &oracle {
-        verify_oracle_signature(
-            env,
-            wallet,
-            tx_hash,
-            entitlement,
-            tier,
-            hack_timestamp,
-            deadline,
-            signature,
-        )?;
-    }
+    // After the caller and basic param checks, before any stake lookup and well
+    // before any storage write (V8 `:413`).
+    verify_oracle_signature(
+        env,
+        wallet,
+        tx_hash,
+        entitlement,
+        tier,
+        hack_timestamp,
+        deadline,
+        signature,
+    )?;
 
     let mut stake_record: StakeRecord =
         storage::get_stake(env, wallet).ok_or(PoolError::NoStake)?;
@@ -955,19 +958,12 @@ pub fn submit_claim(
     let (day_entitlement, day_count) = storage::get_daily_entitlement(env, day);
     let stress_capped = day_entitlement + entitlement > stress_cap(env);
 
-    let is_oracle_caller = caller == &oracle;
-
     // Oracle's own daily submission-count throttle. Evaluated here rather
     // than after the queue decision, because as of the 2026-08-24 scope
     // widening it is one of the three conditions that QUEUE rather than
     // reject (see the block comment below).
-    let oracle_rate_limited = if is_oracle_caller {
-        let total_stakers = storage::get_total_stakers(env);
-        let limit = (total_stakers / 10).max(1);
-        day_count >= limit
-    } else {
-        false
-    };
+    let oracle_limit = (storage::get_total_stakers(env) / ORACLE_DAILY_LIMIT_DIVISOR).max(1);
+    let oracle_rate_limited = day_count >= oracle_limit;
 
     let claim_id = compute_claim_id(env, wallet, tx_hash);
     if let Some(existing) = storage::get_claim(env, &claim_id) {
@@ -1006,23 +1002,16 @@ pub fn submit_claim(
     // even if there is room for it now. Release order is line order.
     if insolvent || stress_capped || oracle_rate_limited || queue_waiting(env) {
         let claim = Claim {
-            wallet: wallet.clone(),
-            tx_hash: tx_hash.clone(),
-            hack_timestamp,
-            entitlement,
-            streamed: 0,
-            stake: stake_record.amount,
-            cooldown_ends_ledger: 0,
-            vesting_ends_ledger: 0,
-            total_staked_snapshot: 0,
-            tier,
-            status: ClaimStatus::Reserved,
-            clock_start: 0,
-            blocked_at_clock_start: 0,
-        window_secs: 0,
             queue_seq: storage::get_queue_tail(env),
-            share_day: 0,
-            share_left: 0,
+            ..Claim::new(
+                wallet,
+                tx_hash,
+                hack_timestamp,
+                entitlement,
+                stake_record.amount,
+                tier,
+                ClaimStatus::Reserved,
+            )
         };
         // join the back of the line.
         storage::set_queue_at(env, claim.queue_seq, &claim_id);
@@ -1051,7 +1040,7 @@ pub fn submit_claim(
         tier,
         hack_timestamp,
         &mut stake_record,
-        is_oracle_caller,
+        true,
     );
 
     ClaimSubmitted {
@@ -1413,10 +1402,7 @@ pub fn claim_stream(
     if is_suspended(env, &stake_record) {
         return Err(PoolError::StakeSuspended);
     }
-    let expected_hash = env.crypto().sha256(&beneficiary.to_xdr(env)).to_bytes();
-    if expected_hash != stake_record.beneficiary_hash {
-        return Err(PoolError::WrongBeneficiary);
-    }
+    crate::stake::check_beneficiary_hash(env, &stake_record, beneficiary)?;
 
     let elapsed_end = now_ledger.min(claim.vesting_ends_ledger);
     let elapsed = elapsed_end.saturating_sub(claim.cooldown_ends_ledger) as i128;
@@ -1497,8 +1483,7 @@ pub fn claim_stream(
     }
     .publish(env);
 
-    let token = TokenClient::new(env, &storage::get_asset_token(env));
-    token.transfer(&env.current_contract_address(), beneficiary, &transfer_amount);
+    crate::vault::pay(env, beneficiary, transfer_amount);
 
     Ok(transfer_amount)
 }
@@ -1748,23 +1733,16 @@ fn execute_override(env: &Env, claim_id: &BytesN<32>, req: &OverrideRequest) -> 
     storage::set_total_allocated(env, total_allocated + req.entitlement);
 
     let mut claim = Claim {
-        wallet: req.wallet.clone(),
-        tx_hash: req.tx_hash.clone(),
-        hack_timestamp: env.ledger().timestamp(),
-        entitlement: req.entitlement,
         streamed: carried_streamed,
-        stake: original_stake_amount,
-        cooldown_ends_ledger: 0,
-        vesting_ends_ledger: 0,
-        total_staked_snapshot: 0,
-        tier: req.tier,
-        status: ClaimStatus::Active,
-        clock_start: 0,
-        blocked_at_clock_start: 0,
-        window_secs: 0,
-        queue_seq: 0,
-        share_day: 0,
-        share_left: 0,
+        ..Claim::new(
+            &req.wallet,
+            &req.tx_hash,
+            env.ledger().timestamp(),
+            req.entitlement,
+            original_stake_amount,
+            req.tier,
+            ClaimStatus::Active,
+        )
     };
 
     // The 2-of-2 override bypasses the oracle/time-gate path entirely, AND
@@ -1781,11 +1759,8 @@ fn execute_override(env: &Env, claim_id: &BytesN<32>, req: &OverrideRequest) -> 
     let points_burned = if !stake_record.withdrawn {
         activate_claim(env, &mut stake_record, &mut claim)
     } else {
-        let now_ledger = env.ledger().sequence();
-        claim.cooldown_ends_ledger = now_ledger + crate::settings::get(env, crate::settings::SettingKey::CooldownLedgers) as u32;
-        claim.vesting_ends_ledger = claim.cooldown_ends_ledger + crate::settings::get(env, crate::settings::SettingKey::VestingLedgers) as u32;
         claim.total_staked_snapshot = storage::get_capacity(env);
-        start_cooldown_end_clock(env, &mut claim, now_ledger);
+        start_payout_clocks(env, &mut claim);
         0
     };
     stake_record.active_claim_id = Some(claim_id.clone());
@@ -1891,13 +1866,7 @@ pub fn revoke_approval(
     }
     admin.require_auth();
 
-    let now_ts = env.ledger().timestamp();
-    if now_ts > deadline {
-        return Err(PoolError::SignatureExpired);
-    }
-    if deadline > now_ts + MAX_APPROVAL_WINDOW_SECONDS {
-        return Err(PoolError::SignatureDeadlineTooFar);
-    }
+    check_deadline(env, deadline)?;
 
     let payload = build_approval_payload(
         env,

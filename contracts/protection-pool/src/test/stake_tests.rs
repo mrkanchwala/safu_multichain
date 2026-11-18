@@ -6,7 +6,7 @@ use soroban_sdk::Address;
 
 use super::common::*;
 use crate::error::PoolError;
-use crate::types::{MAX_STAKE_BPS, MIN_STAKE_BPS, STAKE_BPS_DENOMINATOR};
+use crate::types::{MAX_STAKE_BPS, MIN_STAKE_BPS, BPS_DENOMINATOR};
 
 const TIER_C: u32 = 3;
 
@@ -109,8 +109,8 @@ fn stake_exceeding_pool_cap_panics() {
     let env = new_env();
     let pool_cap = POOL_CAP;
     let s = setup_with_cap(&env, pool_cap);
-    let max_for_cap = pool_cap * MAX_STAKE_BPS / STAKE_BPS_DENOMINATOR;
-    let min_for_cap = pool_cap * MIN_STAKE_BPS / STAKE_BPS_DENOMINATOR;
+    let max_for_cap = pool_cap * MAX_STAKE_BPS / BPS_DENOMINATOR;
+    let min_for_cap = pool_cap * MIN_STAKE_BPS / BPS_DENOMINATOR;
     let stakers_to_fill = pool_cap / max_for_cap;
 
     for _ in 0..stakers_to_fill {
