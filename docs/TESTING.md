@@ -1,6 +1,6 @@
 # Testing
 
-Every suite in this repository: what it proves, how to run it, and where it runs. Contract counts are from 2026-10-20 on `main`, the pool going to audit.
+Every suite in this repository: what it proves, how to run it, and where it runs. Contract counts were re-run on 2026-11-18 at tag `audit-freeze-2026-11-18`, the code going to audit.
 
 | Suite | Tests | Where it runs |
 |---|---|---|

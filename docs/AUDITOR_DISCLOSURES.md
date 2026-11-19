@@ -27,10 +27,10 @@ the last line of defence.
 - Contract tests `src/test/pool_solvency_tests.rs` ($100K cap, 1,000 stakers, 5% APY,
   50/50 split): no claims → everyone repaid with yield; 5 × $500 Tier C claims
   absorbed in full; one more → the last withdrawers wait, and one new stake repays them.
-- Simulation `scripts/sim/solvency_sim.py` (120 liquidity scenarios incl. a panic
+- Simulation `scripts/sim/solvency_sim.py`, in the private backend repository (120 liquidity scenarios incl. a panic
   stress: withdrawals ×3 and zero new stake for 60 days): zero withdrawal waits,
   zero late claim payments, 0.25–3% hacks/yr, all tier mixes, with or without seed.
-- Break point `scripts/sim/steady_state.py` (pool size held constant, only the hack
+- Break point `scripts/sim/steady_state.py`, in the private backend repository (pool size held constant, only the hack
   rate raised; 10 years):
 
   | Hacks / yr (% of stakers) | First cash shortfall |
