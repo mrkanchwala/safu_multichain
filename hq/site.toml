@@ -73,9 +73,9 @@ show = true
 row = "Supported by"
 name = "Superteam Türkiye"
 url = "https://tr.superteam.fun"
-logo = ""
+logo = "/partners/superteam-tr.svg"
 logo_text = ""
-show = false # waiting on Superteam TR's OK
+show = true # OK + logo from Tuna (SuperteamTR), 19 Nov: red "Türkiye" version
 
 [[partners]]
 row = "Built on"
