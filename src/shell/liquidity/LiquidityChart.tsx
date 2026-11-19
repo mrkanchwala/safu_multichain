@@ -6,7 +6,7 @@ import type { ChartPoint } from "./summary";
 // Two thin lines, labels at the line ends, a baseline only (F20 page, founder 19 Nov: no clutter).
 // Narrow screens get a shorter chart and a slimmer label column, drawn at true size (no scaling).
 const NARROW = 520;
-const size = (w: number) => (w < NARROW ? { HEIGHT: 220, right: 104 } : { HEIGHT: 280, right: 150 });
+const size = (w: number) => (w < NARROW ? { HEIGHT: 220, right: 104 } : { HEIGHT: 340, right: 130 });
 const LABEL_GAP = 38; // keep the two end labels from overlapping
 
 const money = (v: number) => (v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : `$${Math.round(v / 1000)}K`);

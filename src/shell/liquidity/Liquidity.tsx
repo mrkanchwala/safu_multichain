@@ -169,76 +169,82 @@ export default function Liquidity() {
             {SITE.hero.headline} Crypto stolen? Payouts are automatic, up to {HEADLINE_MULTIPLE}x their stake.
           </p>
 
-          <div className="liq-story" ref={story} aria-live="polite">
-            If{" "}
-            <Tap label={rateWord(st)} open={menu === "rate"} onToggle={toggle("rate")} story={story}>
-              <RateMenu st={st} onPick={pickYear} onCustom={(v) => setAssumption("theftPctYear", v)} />
-            </Tap>{" "}
-            of stakers are robbed each year and{" "}
-            <Tap label={whatWord(st, LIQ.switches)} open={menu === "what"} onToggle={toggle("what")} story={story}>
-              <WhatMenu st={st} onSwitch={(k, on) => setSt((p) => ({ ...p, on: { ...p.on, [k]: on } }))} />
-            </Tap>
-            , the pool pays every claim on time in
-            <div className="liq-answer">
-              <span className={`liq-big${o ? (o.failedRuns === 0 ? " ok" : " bad") : ""}`}>{o ? `${Math.round(o.onTimePct)}%` : "…"}</span>
-              <span className="liq-of">
-                of {st.a.runs} simulated runs.<span className={`liq-busy${busy ? " on" : ""}`}>running…</span>
-              </span>
-            </div>
-          </div>
-          {problems.length ? <div className="liq-fix">This setup can't run: {problems.join(" · ")}. Change it in Settings.</div> : null}
-          {result && !problems.length ? <Facts result={result} /> : null}
-          {result && !problems.length ? <FixLine result={result} deployPct={st.s.deployPct} onApply={(pct) => setSetting("deployPct", pct)} /> : null}
-
-          <div className="liq-chart-wrap">
-            <div className="liq-chart-top">
-              <div className="liq-chart-title">{LIQ.copy.chart_title}</div>
-              <div className="liq-seg">
-                <button aria-pressed={run === "typical"} onClick={() => setRun("typical")}>
-                  Typical run
-                </button>
-                <button aria-pressed={run === "worst"} onClick={() => setRun("worst")}>
-                  Worst run
-                </button>
+          <div className="liq-hero">
+            <div className="liq-hero-text">
+              <div className="liq-story" ref={story} aria-live="polite">
+                If{" "}
+                <Tap label={rateWord(st)} open={menu === "rate"} onToggle={toggle("rate")} story={story}>
+                  <RateMenu st={st} onPick={pickYear} onCustom={(v) => setAssumption("theftPctYear", v)} />
+                </Tap>{" "}
+                of stakers are robbed each year and{" "}
+                <Tap label={whatWord(st, LIQ.switches)} open={menu === "what"} onToggle={toggle("what")} story={story}>
+                  <WhatMenu st={st} onSwitch={(k, on) => setSt((p) => ({ ...p, on: { ...p.on, [k]: on } }))} />
+                </Tap>
+                , the pool pays every claim on time in
+                <div className="liq-answer">
+                  <span className={`liq-big${o ? (o.failedRuns === 0 ? " ok" : " bad") : ""}`}>{o ? `${Math.round(o.onTimePct)}%` : "…"}</span>
+                  <span className="liq-of">
+                    of {st.a.runs} simulated runs.<span className={`liq-busy${busy ? " on" : ""}`}>running…</span>
+                  </span>
+                </div>
               </div>
+              {problems.length ? <div className="liq-fix">This setup can't run: {problems.join(" · ")}. Change it in Settings.</div> : null}
+              {result && !problems.length ? <Facts result={result} /> : null}
+              {result && !problems.length ? <FixLine result={result} deployPct={st.s.deployPct} onApply={(pct) => setSetting("deployPct", pct)} /> : null}
             </div>
-            {o ? <LiquidityChart data={o[run]} bands={stressBands(st, LIQ.switches)} title={LIQ.copy.chart_title} /> : <div className="liq-chart-empty" />}
-          </div>
 
-          <div className="liq-links">
-            <button className="liq-link" onClick={() => setPanel("settings")}>
-              Settings
-            </button>
-            <button className="liq-link" onClick={() => setPanel("math")}>
-              The math
-            </button>
-          </div>
-
-          <div className="liq-story liq-story2" ref={story2}>
-            At{" "}
-            <Tap label={`${Math.round(st.a.apyPct * 10) / 10}%`} open={menu === "yield"} onToggle={toggle("yield")} story={story2}>
-              <SliderMenu keys={["apyPct"]} values={st.a} onChange={setAssumption} />
-            </Tap>{" "}
-            lending yield, with{" "}
-            <Tap label={splitWord(st.s)} open={menu === "split"} onToggle={toggle("split")} story={story2}>
-              <SliderMenu keys={["stakerYieldPct"]} values={st.s} onChange={setSetting} />
-            </Tap>
-            , SAFU earns <b>{o ? usd(o.safuPerYear) : "…"}</b> a year.
-          </div>
-          {o ? (
-            <div className="liq-facts">
-              Stakers earn <b>{usd(o.stakerYieldPerYear)}</b> a year in yield on a <b>{usd(st.s.poolCap)}</b> pool
-              (median of all runs).
+            <div className="liq-chart-wrap">
+              <div className="liq-chart-top">
+                <div className="liq-chart-title">{LIQ.copy.chart_title}</div>
+                <div className="liq-seg">
+                  <button aria-pressed={run === "typical"} onClick={() => setRun("typical")}>
+                    Typical run
+                  </button>
+                  <button aria-pressed={run === "worst"} onClick={() => setRun("worst")}>
+                    Worst run
+                  </button>
+                </div>
+              </div>
+              {o ? <LiquidityChart data={o[run]} bands={stressBands(st, LIQ.switches)} title={LIQ.copy.chart_title} /> : <div className="liq-chart-empty" />}
             </div>
-          ) : null}
+          </div>
 
-          <div className="liq-cta">
-            <button className="liq-btn" onClick={share}>
-              {shareLabel}
-            </button>
-            <a className="liq-btn primary" href="#">
-              Stake in the pool
-            </a>
+          <div className="liq-under">
+            <div className="liq-links">
+              <button className="liq-link" onClick={() => setPanel("settings")}>
+                Settings
+              </button>
+              <button className="liq-link" onClick={() => setPanel("math")}>
+                The math
+              </button>
+            </div>
+
+            <div className="liq-story liq-story2" ref={story2}>
+              At{" "}
+              <Tap label={`${Math.round(st.a.apyPct * 10) / 10}%`} open={menu === "yield"} onToggle={toggle("yield")} story={story2}>
+                <SliderMenu keys={["apyPct"]} values={st.a} onChange={setAssumption} />
+              </Tap>{" "}
+              lending yield, with{" "}
+              <Tap label={splitWord(st.s)} open={menu === "split"} onToggle={toggle("split")} story={story2}>
+                <SliderMenu keys={["stakerYieldPct"]} values={st.s} onChange={setSetting} />
+              </Tap>
+              , SAFU earns <b>{o ? usd(o.safuPerYear) : "…"}</b> a year.
+            </div>
+            {o ? (
+              <div className="liq-facts">
+                Stakers earn <b>{usd(o.stakerYieldPerYear)}</b> a year in yield on a <b>{usd(st.s.poolCap)}</b> pool
+                (median of all runs).
+              </div>
+            ) : null}
+
+            <div className="liq-cta">
+              <button className="liq-btn" onClick={share}>
+                {shareLabel}
+              </button>
+              <a className="liq-btn primary" href="#">
+                Stake in the pool
+              </a>
+            </div>
           </div>
         </div>
       </main>
