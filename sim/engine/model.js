@@ -15,10 +15,10 @@
 
 import { FIXED } from './settings.js';
 
-const DAYS_PER_YEAR = 365;
+export const DAYS_PER_YEAR = 365;
 const DAYS_PER_MONTH = 30;
-const PANIC_DAYS = 60;
-const PANIC_CHURN_X = 3;
+export const PANIC_DAYS = 60;
+export const PANIC_CHURN_X = 3;
 
 export function rng(seed) {
   let a = seed >>> 0;

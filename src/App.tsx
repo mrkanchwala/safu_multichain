@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { SiteHeader } from "./shell/components/SiteHeader";
 import { SiteFooter } from "./shell/components/SiteFooter";
 import { AboutSection } from "./shell/components/AboutSection";
@@ -11,6 +11,9 @@ import { scrollToFaqAnswer, viewFromHash } from "./shell/lib/links";
 import type { View } from "./shell/lib/links";
 import type { ChainAdapter, PoolTab } from "./chains/types";
 
+// The Liquidity tab runs the pool model in web workers: its own chunk, loaded only when opened.
+const Liquidity = lazy(() => import("./shell/liquidity/Liquidity"));
+
 // The four dapp tabs every pool has (2026-09-24); each adapter supplies the panel behind a tab.
 const TABS: { id: PoolTab; label: string }[] = [
   { id: "stake", label: "Stake" },
@@ -18,6 +21,9 @@ const TABS: { id: PoolTab; label: string }[] = [
   { id: "file", label: "File a claim" },
   { id: "collect", label: "Collect payout" },
 ];
+
+// Sections of the main page that have their own nav link (the hash stays on the main view).
+const MAIN_SECTIONS = ["about", "partners"];
 
 /** URL hash → page (#faq, #whitepaper, #protocols), so explainer pages can be linked and back works. */
 function useHashView(): [View, (v: View) => void] {
@@ -32,10 +38,11 @@ function useHashView(): [View, (v: View) => void] {
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  // New page: start at the top, except "#about", which lands on its section.
+  // New page: start at the top, except a main-page section link ("#about", "#partners"), which lands on it.
   useEffect(() => {
-    if (view === "main" && window.location.hash === "#about") {
-      document.getElementById("about")?.scrollIntoView();
+    const section = MAIN_SECTIONS.find((id) => window.location.hash === `#${id}`);
+    if (view === "main" && section) {
+      document.getElementById(section)?.scrollIntoView();
     } else if (view === "faq" && scrollToFaqAnswer(window.location.hash)) {
       // "#faq/<id>": landed on that answer
     } else {
@@ -101,6 +108,20 @@ export default function App({ adapter }: { adapter: ChainAdapter }) {
   };
 
   const header = <SiteHeader wallet={<Wallet />} view={view} />;
+
+  if (view === "liquidity") {
+    return (
+      <>
+        <Badge />
+        {header}
+        <Suspense fallback={null}>
+          <Liquidity />
+        </Suspense>
+        <PartnersSection />
+        <SiteFooter />
+      </>
+    );
+  }
 
   if (view !== "main") {
     return (

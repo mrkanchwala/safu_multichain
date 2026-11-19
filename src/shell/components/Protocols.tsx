@@ -1,5 +1,6 @@
 import { DetailsLayout } from "./DetailsLayout";
-import { LINKS } from "../lib/links";
+import { LINKS, LIQUIDITY_HASH } from "../lib/links";
+import { LIQ } from "../liquidity/config";
 
 // Whitelabel (Model 1) page for partners. Same content as safustaking.com/protocols.html,
 // rewritten for the multichain build and styled like the FAQ.
@@ -112,6 +113,9 @@ export function Protocols({ onBack }: { onBack: () => void }) {
         <p>
           We set up each whitelabel pool with the partner directly, and pricing and scope are agreed per partner.
           Reach out and we'll walk through what a pool under your name looks like.
+        </p>
+        <p className="inline-links">
+          <a href={LIQUIDITY_HASH}>{LIQ.copy.link_label}</a>
         </p>
         <a className="cta-link" href={LINKS.bdIntake} target="_blank" rel="noopener noreferrer">
           Get in touch

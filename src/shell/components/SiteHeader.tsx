@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { TelegramIcon, XIcon } from "./Icons";
-import { LINKS } from "../lib/links";
+import { LINKS, LIQUIDITY_HASH } from "../lib/links";
 import type { View } from "../lib/links";
 
 const NAV: { label: string; href: string; view?: View; external?: boolean }[] = [
   { label: "FAQ", href: "#faq", view: "faq" },
   { label: "Whitepaper", href: "#whitepaper", view: "whitepaper" },
+  { label: "Liquidity", href: LIQUIDITY_HASH, view: "liquidity" },
   { label: "About", href: "#about" },
   { label: "For protocols", href: "#protocols", view: "protocols" },
+  { label: "Partners", href: "#partners" },
   { label: "Feedback", href: LINKS.feedback, external: true },
 ];
 

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import react from '@vitejs/plugin-react'
 import { parse as parseToml } from 'smol-toml'
 import { defineConfig } from 'vite'
+import { configDefaults } from 'vitest/config'
 import { nodePolyfills } from 'vite-plugin-node-polyfills'
 
 // The pool's ONE network switch (C1, 2026-09-29): SAFU_POOL_NETWORK=testnet|mainnet picks
@@ -52,6 +53,26 @@ function siteConfig() {
   return { ...forPage, partners: shown } as Record<string, Record<string, unknown>>
 }
 
+// Liquidity tab (F20): hq/liquidity.toml, the page's copy and sourced inputs. Every key must be present.
+const LIQ_KEYS = {
+  run: ['runs', 'custom_max_pct', 'fix_step_pct', 'fix_quick_runs', 'tier_a_pct', 'tier_b_pct', 'hidden_settings', 'hidden_assumptions'],
+  copy: ['title', 'chart_title', 'settings_note', 'audit_note', 'revenue_note', 'link_label'],
+} as const
+const LIQ_ITEM_KEYS = { years: ['key', 'label', 'rate', 'tip'], switches: ['key', 'phrase', 'label', 'tip', 'on'] } as const
+
+function liquidityConfig() {
+  const cfg = parseToml(readFileSync(new URL('./hq/liquidity.toml', import.meta.url), 'utf8')) as Record<string, unknown>
+  const table = (t: string) => (cfg[t] ?? {}) as Record<string, unknown>
+  const missing = Object.entries(LIQ_KEYS).flatMap(([t, keys]) => keys.filter((k) => table(t)[k] == null).map((k) => `${t}.${k}`))
+  for (const [list, keys] of Object.entries(LIQ_ITEM_KEYS)) {
+    const items = (cfg[list] ?? []) as Record<string, unknown>[]
+    if (!items.length) missing.push(`[[${list}]]`)
+    items.forEach((it, i) => keys.filter((k) => it[k] == null).forEach((k) => missing.push(`${list}[${i}].${k}`)))
+  }
+  if (missing.length) throw new Error(`hq/liquidity.toml is missing: ${missing.join(', ')}`)
+  return cfg
+}
+
 // The Solana pool (B42): config/solana.<cluster>.json (hq/site.toml [chains.solana]) + the deployed program's pinned IDL (config/solana.idl.json,
 // the same two files its claim API reads) are baked in only when hq/site.toml
 // enables Solana. __CHAIN_SOLANA__ is a build constant, so with Solana off the registry's import is dead
@@ -76,12 +97,15 @@ export default defineConfig(({ mode }) => {
   // the older T3 site lives at /t3). Asset URLs are
   // root-absolute (/assets/...), matching nginx's root for this dist.
   base: '/',
+  // sim/engine has its own node:test suite (npm run test:engine), so vitest skips it.
+  test: { exclude: [...configDefaults.exclude, 'sim/**'] },
   // HOT Wallet's SDK expects Node's global/Buffer -- see src/lib/client.tsx.
   plugins: [react(), nodePolyfills({ include: ['buffer'], globals: { Buffer: true, global: true } })],
   define: {
     'process.env.NODE_ENV': JSON.stringify(mode),
     __POOL__: JSON.stringify(poolConfig(mode)),
     __SITE__: JSON.stringify(site),
+    __LIQ__: JSON.stringify(liquidityConfig()),
     ...solanaDefines(site.chains as { enabled: string[]; solana?: { cluster?: string } }),
   },
   server: {

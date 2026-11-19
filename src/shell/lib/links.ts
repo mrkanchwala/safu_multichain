@@ -13,12 +13,17 @@ export const LINKS = {
 // Hash routes: the FAQ and the whitepaper get their own URL so they can be shared.
 // Anything else (including "#about") renders the main page. "#how-it-works" is the
 // FAQ's old address, kept so earlier links still land on it.
-export type View = "main" | "faq" | "whitepaper" | "protocols";
+export type View = "main" | "faq" | "whitepaper" | "protocols" | "liquidity";
+
+// The Liquidity tab (F20): "#liquidity", or "#liquidity/<settings>" for a shared setup.
+export const LIQUIDITY_HASH = "#liquidity";
+export const LIQUIDITY_STATE_PREFIX = `${LIQUIDITY_HASH}/`;
 
 export function viewFromHash(hash: string): View {
   if (hash === "#faq" || hash === "#how-it-works" || hash.startsWith("#faq/")) return "faq";
   if (hash === "#whitepaper") return "whitepaper";
   if (hash === "#protocols") return "protocols";
+  if (hash === LIQUIDITY_HASH || hash.startsWith(LIQUIDITY_STATE_PREFIX)) return "liquidity";
   return "main";
 }
 

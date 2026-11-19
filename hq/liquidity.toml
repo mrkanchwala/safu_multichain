@@ -1,0 +1,64 @@
+# Liquidity tab (F20, 19 Nov): the "How the pool pays" page. Copy and the sourced inputs live here.
+# Pool rules and their bounds come from sim/engine, which mirrors the contract (drift-tested).
+# Loaded at build time by vite.config.ts as __LIQ__; a missing key fails the build.
+
+[run]
+runs = 200            # simulated runs per result (rule of three: 0 failures => true rate likely < 3/runs)
+custom_max_pct = 10   # highest custom theft rate a visitor can pick (founder 19 Nov)
+fix_step_pct = 5      # the fix line tries invested shares in steps of this size
+fix_quick_runs = 40   # runs per quick probe; the winner is re-checked at `runs`
+tier_a_pct = 20       # wallet mix: most wallets are tier B (founder 19 Nov)
+tier_b_pct = 60
+# Settings the page never shows: they don't change payouts, or only through backer money (founder 19 Nov).
+hidden_settings = ["backerMaturityDays", "dripMinDays", "dripMaxDays", "stakerYieldPct", "backerYieldPct"]
+hidden_assumptions = ["backerPct", "backerExitDay", "runs", "panicDay", "burstDay", "burstPct", "freezeDay", "freezeDays", "theftPctYear"]
+
+[copy]
+title = "How the pool pays"
+chart_title = "Money in the pool and money owed on claims, day by day"
+settings_note = "The pool's real settings and limits. Each one changes only with two keys and a 7-day wait."
+audit_note = "Rules match the pool's contract code (frozen for audit on 18 Nov 2026). Theft rates and lending yield are guesses about the future, so they are sliders, and no number here is a promise."
+revenue_note = "SAFU keeps the yield not shared out."
+link_label = "See how the pool pays →"
+
+# Theft-rate presets: people robbed in a year ÷ active crypto users that year (F20 research, 19 Nov).
+[[years]]
+key = "2025"
+label = "2025"
+rate = 0.15
+tip = "~80,000 people robbed out of 40–70M active users (Chainalysis, a16z)."
+
+[[years]]
+key = "2024"
+label = "2024"
+rate = 0.7
+tip = "~332,000 wallets drained out of 30–60M users (Scam Sniffer, a16z). Counts wallets, so it runs high."
+
+[[years]]
+key = "worst"
+label = "Worst case"
+rate = 1.1
+tip = "The top of the 2024 range."
+
+# What-if switches: each sets engine assumptions while on. Events land mid-run, once the pool has filled.
+# {name} in label/tip = that value from `on`, or the engine's panic constants (panicDays, panicX).
+[[switches]]
+key = "freeze"
+phrase = "the lending venue freezes"
+label = "Lending venue freezes for {freezeDays} days"
+tip = "Invested money is stuck for {freezeDays} days and earns nothing."
+on = { freezeDay = 215, freezeDays = 14 }
+
+[[switches]]
+key = "burst"
+phrase = "a mass theft hits"
+label = "Mass theft in one day"
+tip = "{burstPct}% of stakers robbed the same day, as in a wallet bug."
+on = { burstDay = 200, burstPct = 5 }
+
+[[switches]]
+key = "panic"
+phrase = "stakers rush out"
+label = "Stakers rush out"
+tip = "For {panicDays} days, {panicX} times as many stakers leave and nobody new joins."
+on = { panicDay = 210 }

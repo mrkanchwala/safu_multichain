@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint src",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "vitest run && npm run test:engine",
+    "test:engine": "node --test sim/engine/test/*.test.js",
     "postbuild": "node scripts/check-dist.mjs"
   },
   "dependencies": {

@@ -1,4 +1,6 @@
 import { DetailsLayout } from "./DetailsLayout";
+import { LIQUIDITY_HASH } from "../lib/links";
+import { LIQ } from "../liquidity/config";
 
 // v1 whitepaper, the same for every pool and chain (founder 16 Nov): no chain, asset or vendor names.
 // The ETH-era one stays on safustaking.com/whitepaper.html.
@@ -206,6 +208,9 @@ export function Whitepaper({ onBack }: { onBack: () => void }) {
             matures after a short period and can then be withdrawn. Backers always get back exactly what they put in,
             but they can only take out money that open claims don't need. Backers can come in from other chains too.
           </p>
+          <p className="inline-links">
+            <a href={LIQUIDITY_HASH}>{LIQ.copy.link_label}</a>
+          </p>
         </Slide>
 
         <Slide id="wp-yield" title="Yield">
@@ -213,6 +218,9 @@ export function Whitepaper({ onBack }: { onBack: () => void }) {
             The pool keeps some cash on hand and can lend the rest on an established lending market, moving money back
             automatically when a withdrawal or payout needs it. By default the yield on your own stake goes to you, and
             backers get the yield on their matured backing.
+          </p>
+          <p className="inline-links">
+            <a href={LIQUIDITY_HASH}>{LIQ.copy.link_label}</a>
           </p>
         </Slide>
 
