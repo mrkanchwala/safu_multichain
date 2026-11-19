@@ -20,7 +20,8 @@
 .liq-under .liq-links { margin-top: 0; }
 .liq-story2 { margin-top: 28px; font-size: clamp(20px, 2.2vw, 26px); }
 .liq-story2 b { font-weight: 700; }
-.liq-tap { display: inline; color: var(--text); background: none; border: 0; padding: 0; font: inherit; cursor: pointer; border-bottom: 2px dotted var(--brand-primary); }
+.liq-tap { color: var(--text); cursor: pointer; text-decoration: underline dotted var(--brand-primary) 2px; text-underline-offset: 6px; }
+.liq-tap:focus-visible { outline: 2px solid var(--brand-primary); outline-offset: 2px; border-radius: 2px; }
 .liq-tap:hover, .liq-tap[aria-expanded="true"] { color: var(--brand-primary); }
 .liq-answer { display: flex; align-items: baseline; gap: 18px; margin-top: 18px; flex-wrap: wrap; }
 .liq-big { font-family: var(--font-display); font-weight: 700; font-size: clamp(80px, 11vw, 140px); line-height: 0.9; letter-spacing: -0.02em; transition: color 0.3s; }

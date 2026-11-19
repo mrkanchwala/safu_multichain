@@ -17,7 +17,7 @@ export function Tap(props: {
   story: RefObject<HTMLDivElement | null>;
   children: ReactNode;
 }) {
-  const btn = useRef<HTMLButtonElement>(null);
+  const btn = useRef<HTMLSpanElement>(null);
   const [pos, setPos] = useState({ left: 0, top: 0 });
   useLayoutEffect(() => {
     const box = props.story.current?.getBoundingClientRect();
@@ -27,17 +27,26 @@ export function Tap(props: {
   }, [props.open, props.story]);
   return (
     <>
-      <button
+      {/* A span, not a button: a button is one unbreakable box, so a long label broke the sentence (19 Nov). */}
+      <span
         ref={btn}
+        role="button"
+        tabIndex={0}
         className="liq-tap"
         aria-expanded={props.open}
         onClick={(e) => {
           e.stopPropagation();
           props.onToggle();
         }}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter" && e.key !== " ") return;
+          e.preventDefault();
+          e.stopPropagation();
+          props.onToggle();
+        }}
       >
         {props.label}
-      </button>
+      </span>
       {props.open ? (
         <div className="liq-pop" style={pos} onClick={(e) => e.stopPropagation()}>
           {props.children}
